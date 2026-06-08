@@ -1,3 +1,4 @@
+// @deprecated — contenu intégré dans /dashboard/studio-ia (onglet "Mon profil IA"). Conservé pour rétrocompatibilité des URLs.
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -100,13 +101,13 @@ export default function ProfilIAPage() {
 
   return (
     <div className="app-layout">
-      <Sidebar profil={profil} activeHref="/dashboard/profil-ia" />
+      <Sidebar profil={profil} activeHref="/dashboard/profil-ia" onLogout={async () => { await supabase.auth.signOut(); router.push('/login') }} />
 
       <div className="main-content">
         <div className="topbar">
           <div>
-            <div className="topbar-title">Mon profil IA</div>
-            <div className="topbar-sub">Personnalise comment KlassIA génère tes contenus</div>
+            <div className="topbar-title">IA Enseignant</div>
+            <div className="topbar-sub">Ton profil pédagogique · KlassIA+ adapte chaque génération à ton style</div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {saved && (
@@ -130,10 +131,10 @@ export default function ProfilIAPage() {
             <div style={{ fontSize: '32px' }}>🧠</div>
             <div>
               <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--violet)', marginBottom: '4px' }}>
-                Mémoire pédagogique de KlassIA
+                Mémoire pédagogique de KlassIA+
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-2)' }}>
-                Ces préférences sont utilisées automatiquement par le Studio IA pour personnaliser chaque génération à ton style d'enseignement. Plus tu complètes ce profil, plus les résultats seront pertinents.
+                Ces préférences sont utilisées automatiquement par KlassIA+ pour personnaliser chaque génération à ton style d'enseignement. Plus tu complètes ce profil, plus les résultats seront pertinents.
               </div>
             </div>
           </div>
@@ -269,7 +270,7 @@ export default function ProfilIAPage() {
             <div className="card">
               <h3 style={{ marginBottom: '4px' }}>Éléments inclus automatiquement</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-3)', marginBottom: '14px' }}>
-                KlassIA inclura ces sections dans chaque génération
+                KlassIA+ inclura ces sections dans chaque génération
               </p>
               <Toggle
                 val={form.inclure_differentiation}
@@ -301,7 +302,7 @@ export default function ProfilIAPage() {
             <div className="card" style={{ background: 'var(--violet-light)', border: '1px solid rgba(107,63,160,0.15)' }}>
               <h3 style={{ marginBottom: '4px', color: 'var(--violet)' }}>✦ Instructions personnalisées</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-2)', marginBottom: '14px' }}>
-                Donne des instructions spécifiques à KlassIA sur ta façon d'enseigner, tes élèves, ton école ou toute autre info contextuelle.
+                Donne des instructions spécifiques à KlassIA+ sur ta façon d'enseigner, tes élèves, ton école ou toute autre info contextuelle.
               </p>
               <textarea
                 value={form.instructions_perso}

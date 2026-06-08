@@ -1,3 +1,4 @@
+// @deprecated — contenu intégré dans /dashboard/studio-ia (onglet "Historique"). Conservé pour rétrocompatibilité des URLs.
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -29,6 +30,11 @@ export default function HistoriquePage() {
   const [copied, setCopied] = useState(false)
   const supabase = createClient()
   const router = useRouter()
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -91,7 +97,7 @@ export default function HistoriquePage() {
 
   return (
     <div className="app-layout">
-      <Sidebar profil={profil} activeHref="/dashboard/historique" />
+      <Sidebar profil={profil} activeHref="/dashboard/historique" onLogout={handleLogout} />
 
       <div className="main-content">
         <div className="topbar">
@@ -101,8 +107,8 @@ export default function HistoriquePage() {
               {generations.length} génération{generations.length !== 1 ? 's' : ''} · {generations.filter(g => g.sauvegarde).length} sauvegardée{generations.filter(g => g.sauvegarde).length !== 1 ? 's' : ''}
             </div>
           </div>
-          <button className="btn-violet btn-sm" onClick={() => router.push('/dashboard/studio')}>
-            ✦ Nouvelle génération
+          <button className="btn-violet btn-sm" onClick={() => router.push('/dashboard/profil-ia')}>
+            ✦ IA Enseignant
           </button>
         </div>
 
@@ -113,10 +119,10 @@ export default function HistoriquePage() {
               <div style={{ fontSize: '56px', marginBottom: '14px', opacity: 0.4 }}>✦</div>
               <h3 style={{ marginBottom: '8px' }}>Aucune génération encore</h3>
               <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '20px' }}>
-                Utilise le Studio IA pour générer tes premières fiches, quiz et évaluations
+                Utilise l'IA Enseignant pour générer tes premières fiches, quiz et évaluations
               </p>
-              <button className="btn-violet" onClick={() => router.push('/dashboard/studio')}>
-                ✦ Ouvrir le Studio IA
+              <button className="btn-violet" onClick={() => router.push('/dashboard/profil-ia')}>
+                ✦ Ouvrir IA Enseignant
               </button>
             </div>
           ) : (
@@ -315,8 +321,8 @@ export default function HistoriquePage() {
                       <button onClick={() => handleCopy(selectionne.contenu_genere)} className="btn-ghost btn-sm">
                         📋 Copier le texte
                       </button>
-                      <button onClick={() => router.push('/dashboard/studio')} className="btn-violet btn-sm">
-                        ✦ Régénérer
+                      <button onClick={() => router.push('/dashboard/profil-ia')} className="btn-violet btn-sm">
+                        ✦ IA Enseignant
                       </button>
                     </div>
                   </div>

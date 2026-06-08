@@ -7,8 +7,8 @@ export async function POST(request: Request) {
 
     const pres = new PptxGenJS()
     pres.layout = 'LAYOUT_16x9'
-    pres.author = 'KlassIA'
-    pres.title = lecon.titre || 'Leçon KlassIA'
+    pres.author = 'KlassIA+'
+    pres.title = lecon.titre || 'Leçon KlassIA+'
 
     const C = {
       navy: '0A1628', blue: '1B3F6E', blue2: '2D5FA0',
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         const y = 1.2 + i * 0.9
         s.addText(`${i + 1}. ${obj}`, { x: 4.4, y: y + 0.1, w: 4.7, h: 0.35, fontSize: 12, color: C.dark })
       })
-      s.addText(`${enseignant?.prenom || ''} ${enseignant?.nom || ''} · ${enseignant?.ecole || ''} · KlassIA`, { x: 4.4, y: 5.22, w: 5.3, h: 0.28, fontSize: 9, color: C.muted, align: 'right' })
+      s.addText(`${enseignant?.prenom || ''} ${enseignant?.nom || ''} · ${enseignant?.ecole || ''} · KlassIA+`, { x: 4.4, y: 5.22, w: 5.3, h: 0.28, fontSize: 9, color: C.muted, align: 'right' })
     }
 
     // ── SLIDE 2 AVANT ──
@@ -123,16 +123,16 @@ export async function POST(request: Request) {
       ;(lecon.objectifs || []).slice(0, 3).forEach((obj: string, i: number) => {
         s.addText(`${i + 1}. ${obj}`, { x: 0.3, y: 2.1 + i * 0.9, w: 3.8, h: 0.7, fontSize: 12, color: C.white, lineSpacingMultiple: 1.3 })
       })
-      s.addText('✦ Généré par KlassIA', { x: 5.0, y: 0.5, w: 4.7, h: 0.4, fontSize: 11, bold: true, color: C.violet })
+      s.addText('✦ Généré par KlassIA+ — klassia.app', { x: 5.0, y: 0.5, w: 4.7, h: 0.4, fontSize: 11, bold: true, color: C.violet })
       s.addText('Prochaine leçon', { x: 5.0, y: 1.1, w: 4.7, h: 0.35, fontSize: 13, bold: true, color: C.blue })
       s.addText("Continue à pratiquer les notions vues aujourd'hui.", { x: 5.0, y: 1.5, w: 4.7, h: 1.0, fontSize: 12, color: C.gray, lineSpacingMultiple: 1.4 })
-      s.addText(`${classe?.nom || ''} · ${enseignant?.ecole || ''} · KlassIA`, { x: 5.0, y: 5.22, w: 4.7, h: 0.28, fontSize: 9, color: C.muted, align: 'right' })
+      s.addText(`${classe?.nom || ''} · ${enseignant?.ecole || ''} · KlassIA+`, { x: 5.0, y: 5.22, w: 4.7, h: 0.28, fontSize: 9, color: C.muted, align: 'right' })
     }
 
     // ── EXPORT ──
     const buffer = await pres.write({ outputType: 'nodebuffer' }) as Buffer
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         'Content-Disposition': `attachment; filename="KlassIA_${(lecon.titre || 'lecon').replace(/\s+/g, '_')}.pptx"`,

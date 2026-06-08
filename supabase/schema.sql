@@ -292,16 +292,24 @@ CREATE POLICY "admin_read_liste_attente" ON liste_attente
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.utilisateurs (user_id, email, prenom, nom, ecole, type_compte, langue)
+  INSERT INTO public.utilisateurs (
+    user_id, email, prenom, nom, ecole,
+    type_compte, langue, onboarding_complete
+  )
   VALUES (
     NEW.id,
     NEW.email,
-    NEW.raw_user_meta_data ->> 'prenom',
-    NEW.raw_user_meta_data ->> 'nom',
-    NEW.raw_user_meta_data ->> 'ecole',
-    COALESCE(NEW.raw_user_meta_data ->> 'type_compte', 'enseignant'),
-    COALESCE(NEW.raw_user_meta_data ->> 'langue', 'fr')
-  );
+    COALESCE(NEW.raw_user_meta_data ->> 'prenom', ''),
+    COALESCE(NEW.raw_user_meta_data ->> 'nom', ''),
+    COALESCE(NEW.raw_user_meta_data ->> 'ecole', ''),
+    'enseignant',
+    'fr',
+    false
+  )
+  ON CONFLICT (user_id) DO NOTHING;
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Ne jamais bloquer l'inscription, même si l'insert échoue
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -311,10 +319,24 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Exécute ces ALTER TABLE si la table utilisateurs existe déjà
 -- ============================================================
 
-ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS ville          TEXT;
-ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS province       TEXT DEFAULT 'Québec';
-ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS telephone      TEXT;
-ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS profil_ia      JSONB DEFAULT '{}';
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS ville               TEXT;
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS province            TEXT DEFAULT 'Québec';
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS telephone           TEXT;
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS profil_ia           JSONB DEFAULT '{}';
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT false;
+
+-- Fix lecons statut constraint to include all 7 statuses used by the app
+ALTER TABLE lecons DROP CONSTRAINT IF EXISTS lecons_statut_check;
+ALTER TABLE lecons ADD CONSTRAINT lecons_statut_check
+  CHECK (statut IN ('brouillon', 'prete', 'en_cours', 'enseignee', 'complete', 'a_revoir', 'archivee'));
+
+-- Add statut column to communications if missing
+ALTER TABLE communications ADD COLUMN IF NOT EXISTS statut TEXT DEFAULT 'brouillon';
+
+-- Fix type_compte constraint to allow all signup options
+ALTER TABLE utilisateurs DROP CONSTRAINT IF EXISTS utilisateurs_type_compte_check;
+ALTER TABLE utilisateurs ADD CONSTRAINT utilisateurs_type_compte_check
+  CHECK (type_compte IN ('enseignant', 'direction', 'admin', 'etudiant', 'institution'));
 
 -- Fix cours_semaine jour constraint to accept full French day names
 ALTER TABLE cours_semaine DROP CONSTRAINT IF EXISTS cours_semaine_jour_check;
@@ -334,3 +356,63 @@ ALTER TABLE communications ADD CONSTRAINT communications_type_check
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ============================================================
+-- GRANTS EXPLICITES (requis depuis mai 2026 pour les nouveaux projets
+-- et obligatoire pour tous à partir d'octobre 2026)
+-- Ces grants permettent à PostgREST / supabase-js d'accéder aux tables.
+-- Les politiques RLS ci-dessus contrôlent qui voit quoi à l'intérieur.
+-- ============================================================
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+
+-- Tables accessibles uniquement aux utilisateurs connectés
+GRANT SELECT, INSERT, UPDATE, DELETE ON utilisateurs     TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON classes           TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON programme_annuel  TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON unites            TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON lecons            TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON generations_ia    TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON cours_semaine     TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ressources        TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON communications    TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON notes_agenda      TO authenticated;
+
+-- Sondages : lecture publique (pour afficher la question via code QR)
+--            + gestion complète pour l'enseignant connecté
+GRANT SELECT                          ON sondages         TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON sondages          TO authenticated;
+
+-- Réponses : insertion publique (élèves répondent sans compte)
+--            + lecture pour l'enseignant connecté
+GRANT INSERT                          ON reponses_sondage TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON reponses_sondage  TO authenticated;
+
+-- Liste d'attente : inscription publique, lecture pour les admins connectés
+GRANT INSERT                          ON liste_attente    TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON liste_attente     TO authenticated;
+
+-- ============================================================
+-- STORAGE — Bucket "ressources" pour la Bibliothèque
+-- À créer manuellement dans Supabase Dashboard → Storage → New bucket
+-- Nom : ressources | Accès : Private (pas public)
+-- ============================================================
+
+-- Politique : chaque enseignant lit/écrit seulement dans son propre dossier
+-- (chemin : {user_id}/nom-du-fichier)
+
+-- Permet à l'utilisateur connecté de lire ses propres fichiers
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('ressources', 'ressources', false);
+
+-- RLS policies for storage.objects (run after creating the bucket)
+-- CREATE POLICY "Owner reads own files" ON storage.objects
+--   FOR SELECT TO authenticated
+--   USING (bucket_id = 'ressources' AND (storage.foldername(name))[1] = (SELECT id::text FROM utilisateurs WHERE user_id = auth.uid()));
+
+-- CREATE POLICY "Owner uploads own files" ON storage.objects
+--   FOR INSERT TO authenticated
+--   WITH CHECK (bucket_id = 'ressources' AND (storage.foldername(name))[1] = (SELECT id::text FROM utilisateurs WHERE user_id = auth.uid()));
+
+-- CREATE POLICY "Owner deletes own files" ON storage.objects
+--   FOR DELETE TO authenticated
+--   USING (bucket_id = 'ressources' AND (storage.foldername(name))[1] = (SELECT id::text FROM utilisateurs WHERE user_id = auth.uid()));

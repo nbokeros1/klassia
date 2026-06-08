@@ -1,425 +1,605 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import LoadingScreen from '@/components/LoadingScreen'
 
-function UploadCurriculum({ classeId, onSuccess }: {
-  classeId: string
-  onSuccess: (programme: any) => void
-}) {
+// ─── Config dossiers & fichiers ───────────────────────────────────────────────
+
+const DOSSIER_CFG: Record<string, { icon: string; couleur: string; nom: string }> = {
+  preparation:            { icon: '📚', couleur: '#7F77DD', nom: 'Préparation'          },
+  curriculum:             { icon: '📋', couleur: '#7F77DD', nom: 'Curriculum'           },
+  plan_annuel:            { icon: '📅', couleur: '#7F77DD', nom: 'Plan annuel'          },
+  plans_lecons:           { icon: '📝', couleur: '#7F77DD', nom: 'Plans de leçons'      },
+  lecons:                 { icon: '✨', couleur: '#EF9F27', nom: 'Leçons'               },
+  lecon:                  { icon: '📖', couleur: '#EF9F27', nom: 'Leçon'                },
+  sequence:               { icon: '📁', couleur: '#A78BFA', nom: 'Séquence'             },
+  evaluations_sommatives: { icon: '📊', couleur: '#F87171', nom: 'Évaluations'          },
+  eleves:                 { icon: '👥', couleur: '#34D399', nom: 'Élèves'               },
+  ressources:             { icon: '📚', couleur: '#60A5FA', nom: 'Ressources'           },
+  administration:         { icon: '🗂️', couleur: '#94A3B8', nom: 'Administration'       },
+  parents:                { icon: '👨‍👩‍👧', couleur: '#F472B6', nom: 'Parents'              },
+  evenements:             { icon: '🎉', couleur: '#FB923C', nom: 'Événements'           },
+  custom:                 { icon: '📁', couleur: '#94A3B8', nom: 'Dossier'              },
+}
+
+const FICHIER_CFG: Record<string, { icon: string; couleur: string }> = {
+  plan_lecon:     { icon: '📝', couleur: '#60A5FA' },
+  lecon_complete: { icon: '📖', couleur: '#A78BFA' },
+  activite:       { icon: '🎯', couleur: '#34D399' },
+  devoir:         { icon: '🏠', couleur: '#F472B6' },
+  quiz:           { icon: '🎮', couleur: '#EF9F27' },
+  evaluation:     { icon: '📊', couleur: '#F87171' },
+  curriculum:     { icon: '📋', couleur: '#3B82F6' },
+  ressource:      { icon: '📚', couleur: '#94A3B8' },
+  document:       { icon: '📄', couleur: '#94A3B8' },
+  image:          { icon: '🖼️', couleur: '#8B5CF6' },
+  audio:          { icon: '🎵', couleur: '#10B981' },
+  video:          { icon: '🎬', couleur: '#EF4444' },
+  lien:           { icon: '🔗', couleur: '#0EA5E9' },
+  gabarit:        { icon: '📐', couleur: '#F59E0B' },
+  autre:          { icon: '📄', couleur: '#64748B' },
+}
+
+const STATUT_CFG: Record<string, { label: string; color: string }> = {
+  brouillon: { label: 'Brouillon', color: '#94A3B8' },
+  valide:    { label: 'Validé',    color: '#60A5FA'  },
+  enseigne:  { label: 'Enseigné',  color: '#A78BFA'  },
+  archive:   { label: 'Archivé',   color: '#475569'  },
+  prete:     { label: 'Prête',     color: '#34D399'  },
+  en_cours:  { label: 'En cours',  color: '#FBC34A'  },
+  enseignee: { label: 'Enseignée', color: '#A78BFA'  },
+  complete:  { label: 'Terminée',  color: '#34D399'  },
+  a_revoir:  { label: 'À revoir',  color: '#F87171'  },
+}
+
+// Root dossiers in display order (8 fixed)
+const ROOT_TYPES = ['preparation', 'lecons', 'evaluations_sommatives', 'eleves', 'ressources', 'administration', 'parents', 'evenements']
+
+// Sub-folders of "preparation"
+const PREP_TYPES = ['curriculum', 'plan_annuel', 'plans_lecons']
+
+// ─── Types navigation ─────────────────────────────────────────────────────────
+
+type Nav =
+  | { level: 'racine' }
+  | { level: 'dossier';      d: any }
+  | { level: 'sous_dossier'; parent: any; d: any }
+
+type UploadModal = { dossierId: string; file: File; nom: string; classeUnique: boolean; indexerIA: boolean }
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function ClassePage() {
+  const router  = useRouter()
+  const params  = useParams()
+  const id      = params?.id as string
+  const supabase = createClient()
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [profil,    setProfil]    = useState<any>(null)
+  const [classe,    setClasse]    = useState<any>(null)
+  const [dossiers,  setDossiers]  = useState<any[]>([])
+  const [fichiers,  setFichiers]  = useState<any[]>([])
+  const [lecons,    setLecons]    = useState<any[]>([])
+  const [loading,   setLoading]   = useState(true)
+
+  const [nav,       setNav]       = useState<Nav>({ level: 'racine' })
+  const [apercu,    setApercu]    = useState<any | null>(null)
+  const [upload,    setUpload]    = useState<UploadModal | null>(null)
+  const [menuId,    setMenuId]    = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [status, setStatus] = useState('')
-  const [progress, setProgress] = useState(0)
-  const supabase = createClient()
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setProgress(10)
-    setStatus('Lecture du fichier...')
-    const reader = new FileReader()
-    reader.onload = async (ev) => {
-      const contenu = ev.target?.result as string
-      setProgress(30)
-      setStatus('Analyse par KlassIA en cours...')
-      await supabase.from('classes').update({ curriculum_charge: true }).eq('id', classeId)
-      setProgress(60)
-      try {
-        const res = await fetch('/api/ia/curriculum', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            classe_id: classeId,
-            contenu_curriculum: contenu?.substring(0, 8000) || '',
-            nom_fichier: file.name,
-          }),
-        })
-        const data = await res.json()
-        setProgress(100)
-        if (data.success) {
-          setStatus('Programme annuel généré avec succès !')
-          onSuccess(data.programme)
-        } else {
-          setStatus('Curriculum chargé — connecte la clé IA pour générer le programme')
-          onSuccess(null)
-        }
-      } catch {
-        setStatus('Curriculum chargé !')
-        onSuccess(null)
-      }
-      setUploading(false)
-    }
-    reader.readAsText(file)
-  }
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const activeDossierId = useRef<string>('')
 
-  return (
-    <div>
-      <label className="upload-zone" style={{ display: 'block', cursor: uploading ? 'not-allowed' : 'pointer' }}>
-        <input type="file" accept=".pdf,.doc,.docx,.txt"
-          onChange={handleUpload} disabled={uploading}
-          style={{ display: 'none' }} />
-        {!uploading ? (
-          <>
-            <div style={{ fontSize: '52px', marginBottom: '14px' }}>📄</div>
-            <h3 style={{ marginBottom: '8px', color: 'var(--text-1)' }}>Upload ton curriculum officiel</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '20px', maxWidth: '420px', margin: '0 auto 20px' }}>
-              PDF, Word ou texte — KlassIA analyse et génère automatiquement ton syllabus, programme annuel et plans de leçon
-            </p>
-            <span className="btn-primary">📁 Choisir un fichier</span>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize: '40px', marginBottom: '14px' }}>✦</div>
-            <h3 style={{ marginBottom: '8px', color: 'var(--violet)' }}>Analyse en cours...</h3>
-            <div style={{ width: '200px', height: '4px', background: 'var(--border)', borderRadius: '99px', margin: '12px auto' }}>
-              <div style={{ height: '100%', background: 'var(--violet)', borderRadius: '99px', transition: 'width 0.5s', width: `${progress}%` }} />
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-3)' }}>{status}</p>
-          </>
-        )}
-      </label>
-      {status && !uploading && (
-        <div className={`alert ${status.includes('succès') ? 'alert-success' : 'alert-info'}`} style={{ marginTop: '16px' }}>
-          <span>{status.includes('succès') ? '✓' : 'ℹ'}</span>{status}
-        </div>
-      )}
-      <div style={{ background: 'var(--violet-light)', border: '1px solid rgba(107,63,160,0.15)', borderRadius: 'var(--radius-lg)', padding: '18px', marginTop: '20px' }}>
-        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--violet)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '12px' }}>
-          ✦ Ce que KlassIA va générer
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          {['📚 Syllabus structuré par unités', '📅 Programme annuel sur 36 semaines', '📄 Plans de leçon AVANT/PENDANT/APRÈS', '🎯 Objectifs alignés sur le curriculum', '🧩 Stratégies de différenciation', '📊 Grilles d\'évaluation'].map((item, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-2)' }}>
-              <span style={{ color: 'var(--violet)' }}>✓</span>{item}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function LeconsList({ classeId, router }: { classeId: string, router: any }) {
-  const [lecons, setLecons] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const supabase = createClient()
-
-  useEffect(() => {
-    const charger = async () => {
-      const { data, error } = await supabase
-        .from('lecons')
-        .select('*')
-        .eq('classe_id', classeId)
-        .order('numero', { ascending: true })
-      if (!error) setLecons(data || [])
-      setLoading(false)
-    }
-    charger()
-  }, [classeId])
-
-  if (loading) return (
-    <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-3)' }}>
-      Chargement des leçons...
-    </div>
-  )
-
-  if (lecons.length === 0) return (
-    <div className="card" style={{ textAlign: 'center', padding: '64px 24px' }}>
-      <div style={{ fontSize: '48px', marginBottom: '14px' }}>📄</div>
-      <h3 style={{ marginBottom: '8px' }}>Aucune leçon encore</h3>
-      <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '24px' }}>
-        Génère d'abord un curriculum ou utilise le Studio IA
-      </p>
-      <button className="btn-violet" onClick={() => router.push('/dashboard/studio')}>
-        ✦ Générer ma première leçon
-      </button>
-    </div>
-  )
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {lecons.map((lecon) => (
-        <div key={lecon.id}
-          onClick={() => router.push(`/dashboard/classes/${classeId}/lecons/${lecon.id}`)}
-          style={{
-            background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)', padding: '14px 18px',
-            display: 'flex', alignItems: 'center', gap: '14px',
-            cursor: 'pointer', transition: 'all 0.15s',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-            e.currentTarget.style.borderColor = 'var(--border-mid)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.boxShadow = 'none'
-            e.currentTarget.style.borderColor = 'var(--border)'
-          }}
-        >
-          <div style={{
-            width: '32px', height: '32px', borderRadius: '8px',
-            background: 'rgba(124,58,237,0.15)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-            fontSize: '11px', fontWeight: 700, color: '#A78BFA', flexShrink: 0,
-          }}>
-            {lecon.numero}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-1)', marginBottom: '2px' }}>
-              {lecon.titre}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>
-              {lecon.sujet || 'Leçon'} · {lecon.duree_minutes} min
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span className={`badge ${lecon.statut === 'complete' ? 'badge-green' : lecon.statut === 'en_cours' ? 'badge-blue' : 'badge-amber'}`}>
-              {lecon.statut === 'complete' ? '✓ Complète' : lecon.statut === 'en_cours' ? 'En cours' : 'À faire'}
-            </span>
-            <span style={{ color: 'var(--text-4)', fontSize: '16px' }}>›</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-export default function ClasseDetailPage() {
-  const [classe, setClasse] = useState<any>(null)
-  const [profil, setProfil] = useState<any>(null)
-  const [programme, setProgramme] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [onglet, setOnglet] = useState('programme')
-  const supabase = createClient()
-  const router = useRouter()
-  const params = useParams()
-  const classeId = params.id as string
-
+  // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/login'); return }
-      const user = session.user
-      const { data: profil } = await supabase.from('utilisateurs').select('*').eq('user_id', user.id).single()
-      setProfil(profil)
-      const { data: classe } = await supabase.from('classes').select('*').eq('id', classeId).single()
-      setClasse(classe)
-      const { data: prog } = await supabase.from('programme_annuel').select('*').eq('classe_id', classeId).order('created_at', { ascending: false }).limit(1).single()
-      if (prog) setProgramme(prog)
+      const { data: p } = await supabase.from('utilisateurs').select('*').eq('user_id', session.user.id).single()
+      if (!p) return
+      setProfil(p)
+
+      const [{ data: cls }, { data: dos }, { data: lec }] = await Promise.all([
+        supabase.from('classes').select('*').eq('id', id).single(),
+        supabase.from('dossiers_systeme').select('*').eq('classe_id', id).is('parent_id', null).order('ordre'),
+        supabase.from('lecons').select('id,titre,sujet,statut,type_document,duree_minutes,numero,updated_at').eq('classe_id', id).order('numero'),
+      ])
+      setClasse(cls)
+      setDossiers(dos || [])
+      setLecons(lec || [])
       setLoading(false)
     }
     init()
-  }, [classeId])
+  }, [id])
+
+  // ── Fetch fichiers for a dossier ──────────────────────────────────────────
+  const loadFichiers = async (dossierId: string) => {
+    const { data } = await supabase.from('fichiers_dossier').select('*').eq('dossier_id', dossierId).order('created_at', { ascending: false })
+    setFichiers(data || [])
+  }
+
+  // ── Navigation ────────────────────────────────────────────────────────────
+  const openDossier = async (d: any) => {
+    setNav({ level: 'dossier', d })
+    if (d.type !== 'preparation' && d.type !== 'lecons') {
+      activeDossierId.current = d.id
+      loadFichiers(d.id)
+    }
+  }
+
+  const openSousDossier = async (parent: any, d: any) => {
+    setNav({ level: 'sous_dossier', parent, d })
+    activeDossierId.current = d.id
+    loadFichiers(d.id)
+  }
+
+  const goBack = () => {
+    if (nav.level === 'sous_dossier') setNav({ level: 'dossier', d: nav.parent })
+    else setNav({ level: 'racine' })
+  }
+
+  // ── Upload ────────────────────────────────────────────────────────────────
+  const handleFileSelect = (dossierId: string) => {
+    activeDossierId.current = dossierId
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUpload({ dossierId: activeDossierId.current, file, nom: file.name.replace(/\.[^.]+$/, ''), classeUnique: true, indexerIA: true })
+    e.target.value = ''
+  }
+
+  const saveUpload = async () => {
+    if (!upload || !profil) return
+    setUploading(true)
+    // Determine type from file extension
+    const ext = upload.file.name.split('.').pop()?.toLowerCase() || ''
+    const typeMap: Record<string, string> = { pdf: 'document', doc: 'document', docx: 'document', txt: 'document', png: 'image', jpg: 'image', jpeg: 'image', mp4: 'video', mp3: 'audio' }
+    const type_fichier = typeMap[ext] || 'document'
+    const now = new Date()
+    const dateStr = now.toISOString().slice(0, 10)
+    const nomAuto = `${dateStr}_${classe?.nom || 'Classe'}_${type_fichier}_${upload.nom}`.replace(/\s+/g, '_')
+
+    const { data: f } = await supabase.from('fichiers_dossier').insert({
+      dossier_id: upload.dossierId,
+      enseignant_id: profil.id,
+      classe_id: upload.classeUnique ? id : null,
+      nom: upload.nom || nomAuto,
+      type_fichier,
+      taille_bytes: upload.file.size,
+      statut: 'brouillon',
+      indexe_studio_ia: upload.indexerIA,
+    }).select().single()
+
+    if (f && upload.indexerIA) {
+      await supabase.from('studio_ia_memoire').upsert({
+        enseignant_id: profil.id,
+        classe_id: upload.classeUnique ? id : null,
+        cle: f.id,
+        contenu: { nom: f.nom, type: f.type_fichier, fichier_id: f.id },
+        type: 'ressource',
+      }, { onConflict: 'enseignant_id,classe_id,cle' })
+    }
+
+    loadFichiers(upload.dossierId)
+    setUpload(null)
+    setUploading(false)
+  }
+
+  const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
 
   if (loading) return <LoadingScreen />
 
-  if (!classe) return (
-    <div className="loading-screen">
-      <p style={{ color: 'var(--text-3)' }}>Classe introuvable.</p>
-      <button className="btn-primary" onClick={() => router.push('/dashboard/classes')}>Retour</button>
-    </div>
-  )
+  // ── Current folder label for breadcrumb ──────────────────────────────────
+  const getCfg = (type: string) => DOSSIER_CFG[type] || DOSSIER_CFG.custom
 
-  const onglets = [
-    { id: 'programme', label: 'Programme annuel', icon: '📚' },
-    { id: 'lecons', label: 'Plans de leçon', icon: '📄' },
-    { id: 'eleves', label: 'Élèves', icon: '👥' },
-    { id: 'ressources', label: 'Ressources', icon: '📁' },
-    { id: 'notes', label: 'Notes', icon: '📝' },
-  ]
+  // ── Root dossiers to show (from DB + virtual fallback) ────────────────────
+  const rootDossiers = ROOT_TYPES.map(type => {
+    const dbRecord = dossiers.find(d => d.type === type)
+    return dbRecord || { id: `virtual_${type}`, type, nom: getCfg(type).nom, nb_fichiers: 0, virtual: true }
+  })
+
+  // ── Leçons grouped for the leçons folder ─────────────────────────────────
+  const sequences = lecons.filter(l => l.type_document === 'plan_sequence')
+  const plansLecon = lecons.filter(l => l.type_document === 'plan_lecon')
+  const leconsCompletes = lecons.filter(l => l.type_document === 'lecon_complete' || !l.type_document)
+
+  // ── Compute breadcrumb ────────────────────────────────────────────────────
+  const breadcrumb: { label: string; href?: string; onClick?: () => void }[] = (() => {
+    if (nav.level === 'racine') return [{ label: 'Mes classes', href: '/dashboard/classes' }, { label: classe?.nom || '…' }]
+    if (nav.level === 'dossier') return [{ label: 'Mes classes', href: '/dashboard/classes' }, { label: classe?.nom, onClick: () => setNav({ level: 'racine' }) }, { label: getCfg(nav.d.type).nom }]
+    if (nav.level === 'sous_dossier') return [
+      { label: 'Mes classes', href: '/dashboard/classes' },
+      { label: classe?.nom, onClick: () => setNav({ level: 'racine' }) },
+      { label: getCfg(nav.parent.type).nom, onClick: () => setNav({ level: 'dossier', d: nav.parent }) },
+      { label: getCfg(nav.d.type).nom },
+    ]
+    return []
+  })()
 
   return (
     <div className="app-layout">
+      <style>{`
+        .folder-grid   { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+        .folder-card   { padding:20px 16px; border-radius:14px; border:1.5px solid rgba(255,255,255,0.07); background:rgba(255,255,255,0.02); cursor:pointer; text-align:center; transition:all 0.18s; }
+        .folder-card:hover { transform:translateY(-3px); background:rgba(255,255,255,0.04); }
+        .file-grid     { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+        .file-card     { padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.07); background:rgba(255,255,255,0.02); cursor:pointer; transition:all 0.15s; position:relative; }
+        .file-card:hover { background:rgba(255,255,255,0.05); }
+        .lecon-row     { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.02); cursor:pointer; transition:background 0.15s; margin-bottom:8px; }
+        .lecon-row:hover { background:rgba(255,255,255,0.05); }
+        .ctx-menu      { position:absolute; top:100%; right:0; background:var(--bg-surface); border:1px solid rgba(255,255,255,0.1); border-radius:10px; min-width:160px; z-index:200; box-shadow:0 8px 24px rgba(0,0,0,0.4); overflow:hidden; }
+        .ctx-item      { display:flex; align-items:center; gap:8px; padding:9px 14px; font-size:12px; color:var(--text-2); cursor:pointer; transition:background 0.1s; width:100%; border:none; background:none; text-align:left; font-family:inherit; }
+        .ctx-item:hover { background:rgba(255,255,255,0.06); color:var(--text-1); }
+        .slide-panel   { position:fixed; top:0; right:0; width:420px; height:100vh; background:var(--bg-surface); border-left:1px solid rgba(255,255,255,0.1); z-index:300; display:flex; flex-direction:column; box-shadow:-12px 0 40px rgba(0,0,0,0.4); overflow-y:auto; }
+        .upload-drop   { border:2px dashed rgba(255,255,255,0.15); border-radius:12px; padding:32px 16px; text-align:center; cursor:pointer; transition:all 0.15s; }
+        .upload-drop:hover { border-color:rgba(167,139,250,0.5); background:rgba(167,139,250,0.05); }
+        .breadcrumb-item { font-size:12px; color:var(--text-4); cursor:default; }
+        .breadcrumb-link { color:var(--text-3); cursor:pointer; transition:color 0.15s; }
+        .breadcrumb-link:hover { color:var(--text-1); }
+      `}</style>
 
-      <Sidebar profil={profil} activeHref="/dashboard/classes" />
+      <Sidebar profil={profil} activeHref={`/dashboard/classes/${id}`} onLogout={handleLogout} />
+
+      {/* Hidden file input */}
+      <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileChange}
+        accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.mp4,.mp3,.xlsx,.pptx" />
 
       <div className="main-content">
 
-        {/* Header classe */}
-        <div className="class-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <button onClick={() => router.push('/dashboard/classes')}
-              style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', borderRadius: 'var(--radius-sm)', padding: '6px 12px', cursor: 'pointer', fontSize: '12px' }}>
+        {/* ── Topbar / Header classe ─────────────────────────────────────── */}
+        <div style={{ background: `linear-gradient(135deg, ${classe?.couleur || '#1B3F6E'}, ${classe?.couleur || '#1B3F6E'}88)`, padding: '20px 28px 16px' }}>
+          {/* Breadcrumb */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+            {breadcrumb.map((crumb, i) => (
+              <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {i > 0 && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>›</span>}
+                {crumb.href ? (
+                  <span className="breadcrumb-link breadcrumb-item" onClick={() => router.push(crumb.href!)}>{crumb.label}</span>
+                ) : crumb.onClick ? (
+                  <span className="breadcrumb-link breadcrumb-item" onClick={crumb.onClick}>{crumb.label}</span>
+                ) : (
+                  <span className="breadcrumb-item" style={{ color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>{crumb.label}</span>
+                )}
+              </span>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+            <div>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: 'white', margin: '0 0 4px' }}>{classe?.nom}</h1>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span>{classe?.niveau}</span>
+                <span>·</span>
+                <span>{classe?.matiere}</span>
+                <span>·</span>
+                <span>{classe?.nombre_eleves || 0} élèves</span>
+                {classe?.curriculum_charge
+                  ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', background: 'rgba(52,211,153,0.25)', color: '#34D399', borderRadius: 99 }}>✓ Curriculum</span>
+                  : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', background: 'rgba(251,195,74,0.2)', color: '#FBC34A', borderRadius: 99 }}>⚠ Sans curriculum</span>
+                }
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button onClick={() => router.push(`/dashboard/gerer/enseigner?classe=${id}`)}
+                style={{ padding: '8px 16px', borderRadius: 9, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                ▶ Enseigner
+              </button>
+              <button onClick={() => router.push(`/dashboard/classes/${id}/settings`)}
+                style={{ padding: '8px 12px', borderRadius: 9, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: 'pointer' }}>
+                ⚙️ Paramètres
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="page-content fade-in" onClick={() => { setMenuId(null) }}>
+
+          {/* ── Bouton retour ─────────────────────────────────────────────── */}
+          {nav.level !== 'racine' && (
+            <button onClick={goBack} style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: 0 }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
               ← Retour
             </button>
-            <div style={{
-              width: '44px', height: '44px', borderRadius: '11px',
-              background: classe.couleur || 'var(--blue-mid)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '20px', fontWeight: 700, color: 'white',
-              border: '2px solid rgba(255,255,255,0.25)',
-            }}>
-              {classe.nom?.[0]?.toUpperCase()}
-            </div>
-            <div>
-              <div style={{ fontSize: '18px', fontWeight: 700, color: 'white' }}>{classe.nom}</div>
-              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '1px' }}>
-                {classe.niveau} · {classe.matiere} · {classe.nombre_eleves} élèves
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{
-              fontSize: '11px', padding: '5px 12px', borderRadius: '99px',
-              background: classe.curriculum_charge ? 'rgba(46,204,113,0.2)' : 'rgba(255,255,255,0.1)',
-              color: classe.curriculum_charge ? '#6EFFA8' : 'rgba(255,255,255,0.6)',
-              border: `1px solid ${classe.curriculum_charge ? 'rgba(46,204,113,0.3)' : 'rgba(255,255,255,0.15)'}`,
-            }}>
-              {classe.curriculum_charge ? '✓ Curriculum chargé' : 'Curriculum non chargé'}
-            </span>
-            <button className="btn-violet btn-sm" onClick={() => router.push('/dashboard/studio')}>✦ Studio IA</button>
-          </div>
-        </div>
+          )}
 
-        {/* Onglets */}
-        <div className="tabs">
-          {onglets.map(o => (
-            <div key={o.id} className={`tab ${onglet === o.id ? 'active' : ''}`} onClick={() => setOnglet(o.id)}>
-              {o.icon} {o.label}
-            </div>
-          ))}
-          <div className="tab active-ia" style={{ marginLeft: 'auto' }} onClick={() => router.push('/dashboard/studio')}>
-            ✦ Studio IA
-          </div>
-        </div>
-
-        {/* Contenu */}
-        <div className="page-content fade-in">
-
-          {onglet === 'programme' && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>
-                <div>
-                  <h2 style={{ marginBottom: '4px' }}>Programme annuel</h2>
-                  <p style={{ fontSize: '13px', color: 'var(--text-3)' }}>
-                    Upload ton curriculum pour générer automatiquement tout le programme
-                  </p>
-                </div>
-                {classe.curriculum_charge && (
-                  <button className="btn-ghost btn-sm">↺ Régénérer</button>
-                )}
-              </div>
-              {!classe.curriculum_charge ? (
-                <UploadCurriculum
-                  classeId={classeId}
-                  onSuccess={(prog) => {
-                    setClasse({ ...classe, curriculum_charge: true })
-                    if (prog) setProgramme(prog)
-                  }}
-                />
-              ) : programme ? (
-                <div>
-                  <div className="card" style={{ marginBottom: '16px', background: 'var(--blue-pale)', border: '1px solid var(--border-mid)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#60A5FA', marginBottom: '4px' }}>
-                          {programme.titre || 'Programme annuel'}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>
-                          {programme.nb_semaines || 36} semaines · {(programme.contenu_json?.unites || []).length} unités · Généré par KlassIA ✦
-                        </div>
+          {/* ── VUE RACINE : grille de dossiers ───────────────────────────── */}
+          {nav.level === 'racine' && (
+            <>
+              <div className="folder-grid">
+                {rootDossiers.map(d => {
+                  const cfg = getCfg(d.type)
+                  const count = d.type === 'lecons' ? lecons.length
+                    : d.type === 'preparation' ? 3
+                    : d.nb_fichiers || 0
+                  return (
+                    <div key={d.id} className="folder-card"
+                      onClick={() => openDossier(d)}
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = `${cfg.couleur}55`)}
+                      onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)')}
+                    >
+                      <div style={{ fontSize: 32, marginBottom: 8 }}>{cfg.icon}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>{cfg.nom}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-4)', marginBottom: 10 }}>
+                        {count} élément{count !== 1 ? 's' : ''}
                       </div>
-                      <span className="badge badge-green">✓ Généré</span>
+                      <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 8 }} />
+                      <div style={{ fontSize: 10, color: 'var(--text-4)' }}>
+                        {d.created_at ? new Date(d.created_at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' }) : '—'}
+                      </div>
                     </div>
+                  )
+                })}
+              </div>
+              <button onClick={() => {/* TODO: create new folder */}}
+                style={{ marginTop: 16, width: '100%', padding: '10px', borderRadius: 10, border: '1.5px dashed rgba(255,255,255,0.1)', background: 'none', color: 'var(--text-4)', fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)'; e.currentTarget.style.color = 'var(--text-2)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'var(--text-4)' }}>
+                + Nouveau dossier
+              </button>
+            </>
+          )}
+
+          {/* ── VUE DOSSIER PRÉPARATION ─────────────────────────────────────── */}
+          {nav.level === 'dossier' && nav.d.type === 'preparation' && (
+            <div className="folder-grid">
+              {PREP_TYPES.map(type => {
+                const cfg = getCfg(type)
+                const dbRec = dossiers.find(d => d.type === type)
+                const d = dbRec || { id: `virtual_${type}`, type, nom: cfg.nom, virtual: true }
+                return (
+                  <div key={type} className="folder-card"
+                    onClick={() => openSousDossier(nav.d, d)}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = `${cfg.couleur}55`)}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)')}
+                  >
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>{cfg.icon}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>{cfg.nom}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-4)', marginBottom: 10 }}>—</div>
+                    <div style={{ height: 1, background: 'rgba(255,255,255,0.07)' }} />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {(programme.contenu_json?.unites || []).map((unite: any, i: number) => (
-                      <div key={i} className="card" style={{ padding: '16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <div style={{ width: '28px', height: '28px', borderRadius: 'var(--radius-sm)', background: 'linear-gradient(135deg,#2D5FA0,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: 'white' }}>
-                              {unite.numero}
-                            </div>
-                            <div>
-                              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-1)' }}>{unite.titre}</div>
-                              <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>
-                                Semaines {unite.semaine_debut} – {unite.semaine_fin} · {(unite.lecons || []).length} leçons
-                              </div>
-                            </div>
-                          </div>
-                          <span className="badge badge-blue">À venir</span>
-                        </div>
-                        {(unite.objectifs || []).length > 0 && (
-                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                            {unite.objectifs.map((obj: string, j: number) => (
-                              <span key={j} style={{ fontSize: '11px', padding: '3px 9px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-2)', borderRadius: '99px', border: '1px solid var(--border)' }}>
-                                {obj}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                )
+              })}
+            </div>
+          )}
+
+          {/* ── VUE DOSSIER LEÇONS ─────────────────────────────────────────── */}
+          {nav.level === 'dossier' && nav.d.type === 'lecons' && (
+            <>
+              {/* Plans de séquences */}
+              {sequences.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: 10 }}>Séquences</div>
+                  {sequences.map((seq: any) => (
+                    <div key={seq.id} className="lecon-row"
+                      onClick={() => router.push(`/dashboard/classes/${id}/lecons/${seq.id}`)}>
+                      <span style={{ fontSize: 18, flexShrink: 0 }}>📁</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seq.titre}</div>
+                        {seq.sujet && <div style={{ fontSize: 11, color: 'var(--text-4)' }}>{seq.sujet}</div>}
                       </div>
-                    ))}
-                  </div>
+                      <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{seq.duree_minutes} min</span>
+                    </div>
+                  ))}
+                  <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '14px 0' }} />
+                </>
+              )}
+              {/* Leçons */}
+              {lecons.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 24px', border: '1.5px dashed rgba(255,255,255,0.1)', borderRadius: 14 }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
+                  <div style={{ fontSize: 14, color: 'var(--text-3)', marginBottom: 16 }}>Aucune leçon — créez-en une depuis Studio IA</div>
+                  <button onClick={() => router.push('/dashboard/studio-ia')}
+                    style={{ padding: '9px 20px', borderRadius: 9, background: 'linear-gradient(135deg,#6B3FA0,#4F46E5)', border: 'none', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    ✦ Générer une leçon
+                  </button>
                 </div>
               ) : (
-                <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
-                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>✅</div>
-                  <h3 style={{ marginBottom: '6px' }}>Curriculum chargé</h3>
-                  <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '20px' }}>
-                    Connecte ta clé Anthropic pour générer le programme annuel complet
-                  </p>
-                  <button className="btn-violet" onClick={() => router.push('/dashboard/studio')}>✦ Aller au Studio IA</button>
+                <div className="file-grid">
+                  {leconsCompletes.map((l: any) => {
+                    const cfg = FICHIER_CFG[l.type_document || 'lecon_complete'] || FICHIER_CFG.lecon_complete
+                    const sc  = STATUT_CFG[l.statut] || STATUT_CFG.brouillon
+                    return (
+                      <div key={l.id} className="file-card">
+                        <div style={{ fontSize: 28, marginBottom: 8, color: cfg.couleur }}>{cfg.icon}</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>
+                          {l.titre}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-4)', marginBottom: 8 }}>
+                          {new Date(l.updated_at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}
+                        </div>
+                        <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 8 }} />
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', background: `${sc.color}22`, color: sc.color, borderRadius: 99 }}>{sc.label}</span>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                          <button onClick={() => setApercu(l)} title="Voir" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: '5px 0' }}>👁</button>
+                          <button onClick={() => router.push(`/dashboard/classes/${id}/lecons/${l.id}`)} title="Modifier" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: '5px 0' }}>✏️</button>
+                          <button onClick={e => { e.stopPropagation(); setMenuId(menuId === l.id ? null : l.id) }} title="Plus" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: '5px 0', position: 'relative' }}>
+                            ⋯
+                            {menuId === l.id && (
+                              <div className="ctx-menu">
+                                <button className="ctx-item" onClick={() => router.push(`/dashboard/classes/${id}/lecons/${l.id}`)}>✏️ Modifier</button>
+                                <button className="ctx-item" onClick={() => router.push(`/dashboard/classes/${id}/lecons/${l.id}/presenter`)}>▶ Présenter</button>
+                                <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '3px 0' }} />
+                                <button className="ctx-item" style={{ color: '#F87171' }} onClick={async () => { if (confirm('Supprimer cette leçon ?')) { await supabase.from('lecons').delete().eq('id', l.id); setLecons(prev => prev.filter(ll => ll.id !== l.id)); setMenuId(null) } }}>🗑 Supprimer</button>
+                              </div>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
-            </div>
+              <button onClick={() => router.push(`/dashboard/gerer/preparer`)}
+                style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)', color: '#A78BFA', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                ✦ Nouvelle leçon dans Studio IA
+              </button>
+            </>
           )}
 
-          {onglet === 'lecons' && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-                <div>
-                  <h2 style={{ marginBottom: '4px' }}>Plans de leçon</h2>
-                  <p style={{ fontSize: '13px', color: 'var(--text-3)' }}>Génère et gère tes fiches de leçon</p>
+          {/* ── VUE SOUS-DOSSIER / DOSSIER GÉNÉRIQUE ──────────────────────── */}
+          {(nav.level === 'sous_dossier' || (nav.level === 'dossier' && nav.d.type !== 'preparation' && nav.d.type !== 'lecons')) && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
+                  {getCfg(nav.level === 'sous_dossier' ? nav.d.type : (nav as any).d.type).icon} {' '}
+                  {getCfg(nav.level === 'sous_dossier' ? nav.d.type : (nav as any).d.type).nom}
                 </div>
-                <button className="btn-violet" onClick={() => router.push('/dashboard/studio')}>✦ Générer une leçon</button>
+                <button onClick={() => handleFileSelect(nav.level === 'sous_dossier' ? nav.d.id : (nav as any).d.id)}
+                  style={{ padding: '7px 16px', borderRadius: 8, background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60A5FA', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  ⬆️ Uploader
+                </button>
               </div>
-              <LeconsList classeId={classeId} router={router} />
-            </div>
-          )}
 
-          {onglet === 'eleves' && (
-            <div>
-              <h2 style={{ marginBottom: '4px' }}>Élèves à besoins particuliers</h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '24px' }}>Décris les profils sans nommer les élèves</p>
-              <div className="card" style={{ textAlign: 'center', padding: '64px 24px' }}>
-                <div style={{ fontSize: '48px', marginBottom: '14px' }}>👥</div>
-                <h3 style={{ marginBottom: '8px' }}>Module en développement</h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-3)' }}>La gestion des profils d'élèves arrive bientôt</p>
-              </div>
-            </div>
-          )}
-
-          {onglet === 'ressources' && (
-            <div>
-              <h2 style={{ marginBottom: '4px' }}>Ressources</h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '24px' }}>Tes fichiers et liens pour cette classe</p>
-              <div className="card" style={{ textAlign: 'center', padding: '64px 24px' }}>
-                <div style={{ fontSize: '48px', marginBottom: '14px' }}>📁</div>
-                <h3 style={{ marginBottom: '8px' }}>Aucune ressource encore</h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-3)' }}>Tes ressources apparaîtront ici</p>
-              </div>
-            </div>
-          )}
-
-          {onglet === 'notes' && (
-            <div>
-              <h2 style={{ marginBottom: '4px' }}>Notes & rappels</h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '24px' }}>Tes notes personnelles pour cette classe</p>
-              <div className="card">
-                <textarea
-                  placeholder="Écris tes notes, observations, idées pour cette classe..."
-                  style={{ height: '280px', resize: 'none', fontSize: '13px', lineHeight: '1.7', border: 'none', padding: '0', boxShadow: 'none' }}
-                />
-              </div>
-            </div>
+              {fichiers.length === 0 ? (
+                <div className="upload-drop" onClick={() => handleFileSelect(nav.level === 'sous_dossier' ? nav.d.id : (nav as any).d.id)}>
+                  <div style={{ fontSize: 32, marginBottom: 10 }}>📂</div>
+                  <div style={{ fontSize: 14, color: 'var(--text-3)', marginBottom: 6 }}>Ce dossier est vide</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-4)' }}>Déposez des fichiers ici ou cliquez pour uploader</div>
+                </div>
+              ) : (
+                <div className="file-grid">
+                  {fichiers.map((f: any) => {
+                    const cfg = FICHIER_CFG[f.type_fichier] || FICHIER_CFG.document
+                    const sc  = STATUT_CFG[f.statut] || STATUT_CFG.brouillon
+                    return (
+                      <div key={f.id} className="file-card">
+                        <div style={{ fontSize: 28, marginBottom: 8, color: cfg.couleur }}>{cfg.icon}</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 }}>
+                          {(f.nom || '').slice(0, 20)}{(f.nom?.length || 0) > 20 ? '…' : ''}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-4)', marginBottom: 8 }}>
+                          {new Date(f.created_at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}
+                        </div>
+                        <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 8 }} />
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', background: `${sc.color}22`, color: sc.color, borderRadius: 99 }}>{sc.label}</span>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                          <button onClick={() => setApercu(f)} title="Voir" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: '5px 0' }}>👁</button>
+                          <button title="Modifier" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: '5px 0' }}>✏️</button>
+                          <button onClick={e => { e.stopPropagation(); setMenuId(menuId === f.id ? null : f.id) }} title="Plus" style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 6, color: 'var(--text-3)', fontSize: 13, cursor: 'pointer', padding: '5px 0', position: 'relative' }}>
+                            ⋯
+                            {menuId === f.id && (
+                              <div className="ctx-menu">
+                                <button className="ctx-item">📝 Renommer</button>
+                                <button className="ctx-item">📂 Déplacer vers…</button>
+                                <button className="ctx-item">📑 Dupliquer</button>
+                                <button className="ctx-item">🔗 Partager</button>
+                                {f.url && <button className="ctx-item" onClick={() => window.open(f.url, '_blank')}>📥 Télécharger</button>}
+                                <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '3px 0' }} />
+                                <button className="ctx-item" style={{ color: '#F87171' }} onClick={async () => { if (confirm('Supprimer ?')) { await supabase.from('fichiers_dossier').delete().eq('id', f.id); setFichiers(prev => prev.filter(ff => ff.id !== f.id)); setMenuId(null) } }}>🗑 Supprimer</button>
+                              </div>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {/* ── Panneau aperçu latéral ─────────────────────────────────────────── */}
+      {apercu && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 299 }} onClick={() => setApercu(null)} />
+          <div className="slide-panel">
+            <div style={{ padding: '20px 20px 0', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{apercu.titre || apercu.nom}</div>
+                <button onClick={() => setApercu(null)} style={{ background: 'none', border: 'none', color: 'var(--text-4)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {apercu.type_document && <span style={{ fontSize: 10, color: 'var(--text-4)' }}>{apercu.type_document}</span>}
+                {apercu.statut && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', background: `${(STATUT_CFG[apercu.statut]?.color || '#94A3B8')}22`, color: STATUT_CFG[apercu.statut]?.color || '#94A3B8', borderRadius: 99 }}>
+                    {STATUT_CFG[apercu.statut]?.label || apercu.statut}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
+              {apercu.contenu_json ? (
+                <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.7 }}>
+                  {apercu.contenu_json.intention && <div style={{ marginBottom: 12 }}><strong>Intention :</strong><br /><span dangerouslySetInnerHTML={{ __html: apercu.contenu_json.intention }} /></div>}
+                  {apercu.contenu_json.avant_amorce && <div style={{ marginBottom: 12 }}><strong>Avant — Amorce :</strong><br /><span dangerouslySetInnerHTML={{ __html: apercu.contenu_json.avant_amorce }} /></div>}
+                  {apercu.contenu_json.pendant_modelisation && <div style={{ marginBottom: 12 }}><strong>Pendant — Modélisation :</strong><br /><span dangerouslySetInnerHTML={{ __html: apercu.contenu_json.pendant_modelisation }} /></div>}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', paddingTop: 32 }}>
+                  Aucun aperçu disponible
+                </div>
+              )}
+            </div>
+            <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 8 }}>
+              <button onClick={() => { apercu.classe_id ? router.push(`/dashboard/classes/${apercu.classe_id}/lecons/${apercu.id}`) : undefined; setApercu(null) }}
+                style={{ flex: 1, padding: '9px 0', borderRadius: 8, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)', color: '#A78BFA', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                ✏️ Modifier
+              </button>
+              <button style={{ flex: 1, padding: '9px 0', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-3)', fontSize: 12, cursor: 'pointer' }}>
+                📥 Télécharger
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Modal upload ──────────────────────────────────────────────────── */}
+      {upload && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 399 }} onClick={() => setUpload(null)} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'var(--bg-surface)', borderRadius: 16, padding: 28, width: 440, zIndex: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>⬆️ Configurer le fichier</div>
+              <button onClick={() => setUpload(null)} style={{ background: 'none', border: 'none', color: 'var(--text-4)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Nom du fichier</label>
+              <input value={upload.nom} onChange={e => setUpload({ ...upload, nom: e.target.value })}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text-1)', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">Cette ressource concerne</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[{ v: true, l: 'Cette classe uniquement' }, { v: false, l: 'Toutes mes classes' }].map(opt => (
+                  <button key={String(opt.v)} type="button" onClick={() => setUpload({ ...upload, classeUnique: opt.v })}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: `1.5px solid ${upload.classeUnique === opt.v ? '#60A5FA' : 'var(--border)'}`, background: upload.classeUnique === opt.v ? 'rgba(96,165,250,0.1)' : 'transparent', color: upload.classeUnique === opt.v ? '#60A5FA' : 'var(--text-3)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: 10, marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 13, color: 'var(--text-1)', fontWeight: 500 }}>Ajouter au Studio IA</div>
+                <div style={{ fontSize: 11, color: 'var(--text-4)' }}>L&apos;IA tiendra compte de ce fichier</div>
+              </div>
+              <div onClick={() => setUpload({ ...upload, indexerIA: !upload.indexerIA })}
+                style={{ width: 36, height: 20, borderRadius: 99, background: upload.indexerIA ? '#A78BFA' : 'rgba(255,255,255,0.15)', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
+                <div style={{ position: 'absolute', top: 2, left: upload.indexerIA ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+              </div>
+            </div>
+
+            <button onClick={saveUpload} disabled={uploading || !upload.nom}
+              style={{ width: '100%', padding: '11px 0', borderRadius: 10, background: 'linear-gradient(135deg,#6B3FA0,#4F46E5)', border: 'none', color: 'white', fontSize: 14, fontWeight: 700, cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1 }}>
+              {uploading ? '⟳ Sauvegarde...' : '💾 Sauvegarder'}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

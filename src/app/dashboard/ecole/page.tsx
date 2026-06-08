@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/lib/hooks/useAuth'
 
 // ── DONNÉES SIMULÉES ─────────────────────────────────────────────────────────
 
@@ -194,14 +195,24 @@ function Donut({ segments }: { segments: { label: string, value: number, color: 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 export default function EcoleDashboard() {
   const router = useRouter()
-  const [time, setTime] = useState('')
-  const [feed, setFeed] = useState(INITIAL_FEED)
-  const [filter, setFilter] = useState('')
-  const [activeNav, setActiveNav] = useState('overview')
-  const [refreshing, setRefreshing] = useState(false)
+  const { profil, loading: authLoading } = useAuth()
+
+  // All hooks must be declared before any conditional return
+  const [time,         setTime]         = useState('')
+  const [feed,         setFeed]         = useState(INITIAL_FEED)
+  const [filter,       setFilter]       = useState('')
+  const [activeNav,    setActiveNav]    = useState('overview')
+  const [refreshing,   setRefreshing]   = useState(false)
   const [barsAnimated, setBarsAnimated] = useState(false)
-  const feedRef = useRef(0)
+  const feedRef      = useRef(0)
   const eventCounter = useRef(9)
+
+  // Accès réservé aux admins
+  useEffect(() => {
+    if (!authLoading && profil && profil.type_compte !== 'admin') {
+      router.push('/dashboard')
+    }
+  }, [profil, authLoading, router])
 
   useEffect(() => {
     const tick = () => setTime(new Date().toLocaleTimeString('fr-CA', { hour12: false }))
@@ -223,6 +234,8 @@ export default function EcoleDashboard() {
     }, 10000)
     return () => clearInterval(iv)
   }, [])
+
+  if (authLoading || !profil || profil.type_compte !== 'admin') return null
 
   const handleRefresh = () => {
     setRefreshing(true)

@@ -170,7 +170,7 @@ export default function SondagePage() {
           ✕ Fermer (Échap)
         </button>
 
-        {/* KlassIA watermark */}
+        {/* KlassIA+ watermark */}
         <div style={{ position: 'absolute', top: 24, left: 32, fontSize: 18, fontWeight: 900, color: 'rgba(255,255,255,0.15)', letterSpacing: 2 }}>
           Klass<span style={{ color: 'rgba(107,63,160,0.4)' }}>IA</span>
         </div>

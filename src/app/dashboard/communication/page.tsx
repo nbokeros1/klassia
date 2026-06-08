@@ -57,7 +57,8 @@ export default function CommunicationPage() {
           contexte: {
             classe: classe ? { nom: classe.nom, niveau: classe.niveau, matiere: classe.matiere } : null,
           },
-          langue: classe?.langue || 'fr',
+          langue: classe?.langue || profil?.langue || 'fr',
+          profil_ia: profil?.profil_ia || null,
           instructions: `Rédige un message professionnel de type "${TYPES_MSG.find(t => t.id === form.type)?.label}" pour l'école. Ton poli, bienveillant et clair.`,
         }),
       })
@@ -93,11 +94,16 @@ export default function CommunicationPage() {
     setMessages(prev => prev.filter(m => m.id !== id))
   }
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   if (loading) return <LoadingScreen />
 
   return (
     <div className="app-layout">
-      <Sidebar profil={profil} activeHref="/dashboard/communication" />
+      <Sidebar profil={profil} activeHref="/dashboard/communication" onLogout={handleLogout} />
 
       <div className="main-content">
         <div className="topbar">

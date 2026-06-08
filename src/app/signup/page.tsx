@@ -24,18 +24,50 @@ export default function SignupPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const { data, error: authError } = await supabase.auth.signUp({ email: form.email, password: form.password })
-    if (authError) { setError(authError.message); setLoading(false); return }
-    if (data.user) {
-      await new Promise(r => setTimeout(r, 800))
-      await supabase.from('utilisateurs').upsert({
-        user_id: data.user.id, prenom: form.prenom, nom: form.nom,
-        email: form.email, ecole: form.ecole, type_compte: form.type_compte,
-        langue_interface: form.langue,
-        langue_enseignement: form.langue,
-      }, { onConflict: 'user_id' })
-      router.push('/dashboard')
+
+    // Pass metadata so the Supabase trigger can use them
+    const { data, error: authError } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.password,
+      options: {
+        data: {
+          prenom: form.prenom,
+          nom: form.nom,
+          ecole: form.ecole,
+        },
+      },
+    })
+
+    if (authError) {
+      setError(authError.message)
+      setLoading(false)
+      return
     }
+
+    if (data.user) {
+      // Wait for the trigger to run first
+      await new Promise(r => setTimeout(r, 1200))
+
+      // Upsert with full profile data (overwrites trigger's minimal row)
+      const { error: upsertError } = await supabase.from('utilisateurs').upsert({
+        user_id: data.user.id,
+        prenom: form.prenom,
+        nom: form.nom,
+        email: form.email,
+        ecole: form.ecole,
+        type_compte: form.type_compte,
+        langue: form.langue,
+        onboarding_complete: false,
+      }, { onConflict: 'user_id' })
+
+      if (upsertError) {
+        // Non-blocking: still redirect to onboarding even if upsert fails
+        console.warn('Profil upsert warning:', upsertError.message)
+      }
+
+      router.push('/onboarding')
+    }
+
     setLoading(false)
   }
 

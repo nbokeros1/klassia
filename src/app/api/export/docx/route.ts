@@ -67,7 +67,7 @@ export async function POST(request: Request) {
             new TableCell({
               children: [
                 new Paragraph({
-                  children: [new TextRun({ text: 'KlassIA', bold: true, size: 32, color: BLUE })],
+                  children: [new TextRun({ text: 'KlassIA+', bold: true, size: 32, color: BLUE })],
                 }),
                 new Paragraph({
                   children: [new TextRun({ text: 'Plan de leçon', size: 22, color: '8492A6' })],
@@ -260,7 +260,7 @@ export async function POST(request: Request) {
 
           ligne_vide(),
           new Paragraph({
-            children: [new TextRun({ text: `Généré par KlassIA · ${new Date().toLocaleDateString('fr-CA')}`, size: 16, color: 'B0B8C8', italics: true })],
+            children: [new TextRun({ text: `Généré par KlassIA+ — klassia.app · ${new Date().toLocaleDateString('fr-CA')}`, size: 16, color: 'B0B8C8', italics: true })],
             alignment: AlignmentType.CENTER,
           }),
         ],
@@ -269,7 +269,7 @@ export async function POST(request: Request) {
 
     const buffer = await Packer.toBuffer(doc)
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'Content-Disposition': `attachment; filename="KlassIA_${(lecon.titre || 'lecon').replace(/\s+/g, '_')}.docx"`,

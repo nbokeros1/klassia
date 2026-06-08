@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import LoadingScreen from '@/components/LoadingScreen'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 
 const PROVINCES = [
   'Alberta', 'Colombie-Britannique', 'Manitoba', 'Nouveau-Brunswick',
@@ -86,7 +87,7 @@ export default function ProfilPage() {
 
   return (
     <div className="app-layout">
-      <Sidebar profil={profil} activeHref="" />
+      <Sidebar profil={profil} activeHref="/dashboard/profil" />
 
       <div className="main-content">
         <div className="topbar">
@@ -221,6 +222,15 @@ export default function ProfilPage() {
             </form>
           </div>
 
+          {/* Apparence */}
+          <div className="card" style={{ marginBottom: '16px' }}>
+            <h3 style={{ marginBottom: '4px' }}>Apparence</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-3)', marginBottom: '16px' }}>Thème de l'interface</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <ThemeToggle showLabels />
+            </div>
+          </div>
+
           {/* Liens rapides */}
           <div className="card">
             <h3 style={{ marginBottom: '12px' }}>Accès rapide</h3>
@@ -228,8 +238,8 @@ export default function ProfilPage() {
               <button onClick={() => router.push('/dashboard/profil-ia')} className="btn-ghost btn-sm">
                 🧠 Mon profil IA
               </button>
-              <button onClick={() => router.push('/dashboard/studio')} className="btn-ghost btn-sm">
-                ✦ Studio IA
+              <button onClick={() => router.push('/dashboard/bibliotheque')} className="btn-ghost btn-sm">
+                📚 Bibliothèque
               </button>
               <button onClick={() => router.push('/dashboard/classes')} className="btn-ghost btn-sm">
                 🏫 Mes classes

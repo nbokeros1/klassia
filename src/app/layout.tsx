@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'KlassIA — Quartier général pédagogique',
-  description: 'Organise ton année scolaire et génère tes leçons avec l\'IA',
+  title: 'KlassIA+ — Plateforme pédagogique IA',
+  description: 'KlassIA+ aide les enseignants canadiens à préparer leurs leçons avec l\'IA',
 }
 
 export default function RootLayout({
@@ -12,9 +12,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="fr" data-scroll-behavior="smooth">
+    <html lang="fr" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
+        <script dangerouslySetInnerHTML={{
+          __html: `(function(){var t=localStorage.getItem('klassia-theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();`
+        }} />
       </head>
       <body>
         {children}

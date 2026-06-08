@@ -18,7 +18,7 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
       if (error.message.toLowerCase().includes('confirm') || error.message.toLowerCase().includes('verified')) {
         setError('Email non confirmé — vérifie ta boîte mail et clique sur le lien de confirmation Supabase')
@@ -30,7 +30,16 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.push('/dashboard')
+    const { data: profil } = await supabase
+      .from('utilisateurs')
+      .select('onboarding_complete')
+      .eq('user_id', authData.user?.id)
+      .maybeSingle()
+    if (!profil?.onboarding_complete) {
+      router.push('/onboarding')
+    } else {
+      router.push('/dashboard')
+    }
   }
 
   return (
