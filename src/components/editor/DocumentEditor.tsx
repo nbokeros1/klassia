@@ -5,7 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import RichEditor from '@/components/RichEditor'
 import type { Editor } from '@tiptap/core'
 import SchemasPanel from './SchemasPanel'
+import PanneauSchemas from './PanneauSchemas'
 import { TOUS_SCHEMAS } from './SchemasSVG/index'
+import type { SchemaImage } from '@/lib/constants/schemas-images'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -83,8 +85,9 @@ export default function DocumentEditor({ lecon, classe, profil, leconId, onValid
   const [editor,      setEditor]      = useState<Editor | null>(null)
   const [openColor,   setOpenColor]   = useState(false)
   const [openHL,      setOpenHL]      = useState(false)
-  const [schemasOpen,    setSchemasOpen]    = useState(false)
-  const [validating,     setValidating]     = useState(false)
+  const [schemasOpen,         setSchemasOpen]         = useState(false)
+  const [panneauSchemasOpen,  setPanneauSchemasOpen]  = useState(false)
+  const [validating,          setValidating]          = useState(false)
   const [validateMsg,    setValidateMsg]    = useState('')
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -379,8 +382,12 @@ Utilise du HTML propre, pas de markdown.`,
         </div>
 
         {/* Schémas SVG */}
-        <TBtn title="Bibliothèque de schémas" onClick={() => setSchemasOpen(true)}>
+        <TBtn title="Bibliothèque de schémas SVG" onClick={() => setSchemasOpen(true)}>
           <span style={{ fontSize: 11 }}>🔬 Schémas</span>
+        </TBtn>
+        {/* Schémas images réelles annotables */}
+        <TBtn title="Schémas avec images réelles" onClick={() => setPanneauSchemasOpen(true)}>
+          <span style={{ fontSize: 11 }}>🖼️ Images</span>
         </TBtn>
         <TDivider />
 
@@ -513,7 +520,33 @@ Utilise du HTML propre, pas de markdown.`,
         </div>
       )}
 
-      {/* ── SchemasPanel ────────────────────────────────────────────────── */}
+      {/* ── PanneauSchemas (images réelles annotables) ──────────────────── */}
+      <PanneauSchemas
+        isOpen={panneauSchemasOpen}
+        onClose={() => setPanneauSchemasOpen(false)}
+        matiereClasse={classe?.matiere}
+        onInsert={(schema: SchemaImage) => {
+          if (!editor) return
+          const annotationsHtml = schema.annotations_defaut.map(a => `
+            <span style="
+              position:absolute;left:${a.x}%;top:${a.y}%;
+              transform:translate(-50%,-50%);
+              background:${a.couleur};color:white;
+              padding:2px 8px;border-radius:12px;
+              font-size:11px;font-weight:500;
+              white-space:nowrap;cursor:default;
+              box-shadow:0 2px 4px rgba(0,0,0,0.3);z-index:10;
+            ">${a.texte}</span>`).join('')
+          const html = `<div data-schema-id="${schema.id}" style="position:relative;display:inline-block;max-width:100%;margin:12px auto;">
+            <img src="${schema.url_fallback}" alt="${schema.nom}" style="max-width:100%;height:auto;border-radius:8px;border:1px solid #E5E7EB;" />
+            ${annotationsHtml}
+          </div>`
+          editor.chain().focus().insertContent(html).run()
+          setPanneauSchemasOpen(false)
+        }}
+      />
+
+      {/* ── SchemasPanel (SVG) ───────────────────────────────────────────── */}
       <SchemasPanel
         isOpen={schemasOpen}
         onClose={() => setSchemasOpen(false)}

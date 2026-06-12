@@ -11,8 +11,28 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPass, setShowPass] = useState(false)
+  const [codeAdmin, setCodeAdmin] = useState('')
+  const [adminMsg, setAdminMsg] = useState('')
   const router = useRouter()
   const supabase = createClient()
+
+  const handleAdminLogin = async () => {
+    if (!codeAdmin.trim()) return
+    setAdminMsg('Vérification...')
+    const { data } = await supabase
+      .from('utilisateurs')
+      .select('email')
+      .eq('code_admin', codeAdmin.trim())
+      .eq('is_admin', true)
+      .maybeSingle()
+    if (!data?.email) {
+      setAdminMsg('Code invalide')
+      return
+    }
+    setEmail(data.email)
+    setAdminMsg('✓ Email prérempli — entrez votre mot de passe ci-dessus')
+    setCodeAdmin('')
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -62,7 +82,7 @@ export default function LoginPage() {
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', background: 'linear-gradient(135deg, #1B3F6E, #7C3AED)', borderRadius: '13px', fontSize: '22px', fontWeight: 800, color: 'white', boxShadow: '0 0 32px rgba(124,58,237,0.5)', marginBottom: '14px' }}>K</div>
           <div style={{ fontSize: '26px', fontWeight: 700, color: 'white', letterSpacing: '-0.5px' }}>
-            Klass<span style={{ color: '#A78BFA' }}>IA</span>
+            Klass<span style={{ color: '#A78BFA' }}>IA+</span>
           </div>
           <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)', marginTop: '4px' }}>
             Ton quartier général pédagogique
@@ -167,6 +187,40 @@ export default function LoginPage() {
         <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '11px', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.3px' }}>
           🔒 Données protégées · Conformité LPRPDE · Canada
         </p>
+
+        <details style={{ marginTop: 16 }}>
+          <summary style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', cursor: 'pointer', userSelect: 'none', listStyle: 'none', textAlign: 'center' }}>
+            Accès administrateur
+          </summary>
+          <div style={{ marginTop: 10, padding: '14px', background: 'rgba(13,21,37,0.7)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, backdropFilter: 'blur(8px)' }}>
+            {adminMsg && (
+              <div style={{ fontSize: 11, marginBottom: 8, color: adminMsg.startsWith('✓') ? '#34D399' : '#F87171', padding: '6px 10px', background: 'rgba(255,255,255,0.05)', borderRadius: 7 }}>
+                {adminMsg}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="password"
+                placeholder="Code d'accès admin"
+                value={codeAdmin}
+                onChange={e => setCodeAdmin(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAdminLogin() }}
+                style={{
+                  flex: 1, padding: '9px 12px', background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+                  fontSize: 12, color: 'rgba(255,255,255,0.7)', outline: 'none', fontFamily: 'inherit',
+                }}
+              />
+              <button onClick={handleAdminLogin} style={{
+                padding: '9px 14px', background: 'rgba(96,165,250,0.15)',
+                border: '1px solid rgba(96,165,250,0.25)', borderRadius: 8,
+                color: '#60A5FA', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              }}>
+                Accès
+              </button>
+            </div>
+          </div>
+        </details>
       </div>
 
       <style>{`

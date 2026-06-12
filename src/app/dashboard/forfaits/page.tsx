@@ -117,7 +117,7 @@ export default function ForfaitsPage() {
 
   if (loading) return <LoadingScreen />
 
-  const currentPlan: string = (profil as any)?.ia_config?.forfait || 'gratuit'
+  const currentPlan: string = profil?.forfait || 'gratuit'
 
   const handleUpgrade = (planId: string) => {
     if (planId === 'institution') {

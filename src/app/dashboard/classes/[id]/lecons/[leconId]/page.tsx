@@ -205,7 +205,7 @@ export default function LeconPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `KlassIA_${form.titre.replace(/\s+/g, '_')}.pptx`
+      a.download = `KlassIA+_${form.titre.replace(/\s+/g, '_')}.pptx`
       a.click()
       URL.revokeObjectURL(url)
       setExportMsg('✓ PowerPoint téléchargé !')
@@ -247,7 +247,7 @@ const handleExportDocx = async () => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `KlassIA_${form.titre.replace(/\s+/g, '_')}.docx`
+    a.download = `KlassIA+_${form.titre.replace(/\s+/g, '_')}.docx`
     a.click()
     URL.revokeObjectURL(url)
     setExportMsg('✓ Word téléchargé !')

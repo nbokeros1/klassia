@@ -1,7 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function POST(request: Request) {
+  const { error, session } = await requireAuth()
+  if (error) return error
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'Clé API manquante' }, { status: 500 })
 

@@ -89,9 +89,43 @@
   --color-sidebar-text: #9BA3B8;
   --color-sidebar-active: #7F77DD;
   --color-sidebar-active-bg: rgba(127,119,221,0.15);
+  --color-sidebar-border: rgba(255,255,255,0.08);
   --shadow-card: 0 2px 8px rgba(0,0,0,0.4);
   --shadow-modal: 0 8px 32px rgba(0,0,0,0.6);
   --border-radius: 12px;
+
+  /* Onglets */
+  --color-tab-bg: transparent;
+  --color-tab-active-bg: transparent;
+  --color-tab-active-border: var(--blue-mid);
+  --color-tab-text: rgba(240,244,255,0.4);
+  --color-tab-active-text: #60A5FA;
+  /* Cards */
+  --color-card-bg: #1E2130;
+  --color-card-border: rgba(255,255,255,0.07);
+  --color-card-hover-border: rgba(255,255,255,0.16);
+  --color-card-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  /* Badges statut */
+  --color-badge-brouillon: rgba(148,163,184,0.15);
+  --color-badge-valide: rgba(96,165,250,0.15);
+  --color-badge-enseigne: rgba(167,139,250,0.15);
+  /* Inputs */
+  --color-input-bg: rgba(255,255,255,0.05);
+  --color-input-border: rgba(255,255,255,0.08);
+  --color-input-focus-border: rgba(124,58,237,0.5);
+  --color-input-text: #F0F4FF;
+  /* Boutons ghost */
+  --color-btn-ghost-bg: rgba(255,255,255,0.06);
+  --color-btn-ghost-hover-bg: rgba(255,255,255,0.1);
+  --color-btn-ghost-border: rgba(255,255,255,0.08);
+  --color-btn-ghost-text: rgba(240,244,255,0.7);
+  /* Dropdowns */
+  --color-dropdown-bg: #1A1D27;
+  --color-dropdown-border: rgba(255,255,255,0.1);
+  /* Éditeur étendu */
+  --color-editor-outer-bg: #1A1D27;
+  --color-editor-page-bg: #1E2130;
+  --color-editor-toolbar-bg: #13151F;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -153,9 +187,43 @@
   --color-sidebar-text: #4B5563;
   --color-sidebar-active: #6C63D4;
   --color-sidebar-active-bg: rgba(108,99,212,0.08);
+  --color-sidebar-border: #E5E7EB;
   --shadow-card: 0 2px 8px rgba(0,0,0,0.08);
   --shadow-modal: 0 8px 32px rgba(0,0,0,0.15);
   --border-radius: 12px;
+
+  /* Onglets */
+  --color-tab-bg: transparent;
+  --color-tab-active-bg: transparent;
+  --color-tab-active-border: #2563EB;
+  --color-tab-text: #9CA3AF;
+  --color-tab-active-text: #2563EB;
+  /* Cards */
+  --color-card-bg: #FFFFFF;
+  --color-card-border: #E5E7EB;
+  --color-card-hover-border: #D1D5DB;
+  --color-card-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  /* Badges statut */
+  --color-badge-brouillon: rgba(107,114,128,0.12);
+  --color-badge-valide: rgba(37,99,235,0.1);
+  --color-badge-enseigne: rgba(108,99,212,0.1);
+  /* Inputs */
+  --color-input-bg: #FFFFFF;
+  --color-input-border: #D1D5DB;
+  --color-input-focus-border: rgba(108,99,212,0.5);
+  --color-input-text: #111827;
+  /* Boutons ghost */
+  --color-btn-ghost-bg: #F3F4F6;
+  --color-btn-ghost-hover-bg: #E5E7EB;
+  --color-btn-ghost-border: #E5E7EB;
+  --color-btn-ghost-text: #374151;
+  /* Dropdowns */
+  --color-dropdown-bg: #FFFFFF;
+  --color-dropdown-border: #E5E7EB;
+  /* Éditeur étendu */
+  --color-editor-outer-bg: #F0F2F5;
+  --color-editor-page-bg: #FFFFFF;
+  --color-editor-toolbar-bg: #F8F9FC;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -187,9 +255,9 @@ p { color: var(--text-2); }
 input, textarea, select {
   font-family: inherit;
   font-size: 13px;
-  color: var(--text-1);
-  background: rgba(255,255,255,0.05);
-  border: 1.5px solid var(--border);
+  color: var(--color-input-text, var(--text-1));
+  background: var(--color-input-bg);
+  border: 1.5px solid var(--color-input-border, var(--border));
   border-radius: var(--radius-sm);
   padding: 10px 13px;
   width: 100%;
@@ -242,15 +310,15 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; tra
 .btn-violet:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(124,58,237,0.45); }
 
 .btn-ghost {
-  background: rgba(255,255,255,0.06);
-  color: var(--text-2);
+  background: var(--color-btn-ghost-bg);
+  color: var(--color-btn-ghost-text, var(--text-2));
   padding: 10px 18px;
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-btn-ghost-border, var(--border));
 }
-.btn-ghost:hover { background: rgba(255,255,255,0.1); color: var(--text-1); }
+.btn-ghost:hover { background: var(--color-btn-ghost-hover-bg); color: var(--text-1); }
 
 [data-theme="light"] .btn-ghost {
   background: var(--bg-elevated);

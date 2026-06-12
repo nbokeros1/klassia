@@ -69,7 +69,7 @@ export default function FeedbackPostLecon({
     await supabase.from('studio_ia_ressources').insert({
       enseignant_id,
       classe_id,
-      source:        'feedback',
+      source:        'ressource_generale',
       type_contenu:  'feedback_lecon',
       titre:         `Feedback — ${lecon_titre}`,
       contenu_texte: commentaire,

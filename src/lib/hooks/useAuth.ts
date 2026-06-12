@@ -40,5 +40,7 @@ export function useAuth() {
     })
   }, [router])
 
-  return { profil, loading, logout }
+  const isAdmin = profil?.is_admin === true || profil?.type_compte === 'admin'
+
+  return { profil, loading, logout, isAdmin }
 }

@@ -91,8 +91,10 @@ export default function ClassePage() {
   const [upload,    setUpload]    = useState<UploadModal | null>(null)
   const [menuId,    setMenuId]    = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadingCurriculum, setUploadingCurriculum] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const curriculumInputRef = useRef<HTMLInputElement>(null)
   const activeDossierId = useRef<string>('')
 
   // ── Init ──────────────────────────────────────────────────────────────────
@@ -106,7 +108,7 @@ export default function ClassePage() {
 
       const [{ data: cls }, { data: dos }, { data: lec }] = await Promise.all([
         supabase.from('classes').select('*').eq('id', id).single(),
-        supabase.from('dossiers_systeme').select('*').eq('classe_id', id).is('parent_id', null).order('ordre'),
+        supabase.from('dossiers_systeme').select('*').eq('classe_id', id).order('ordre'),
         supabase.from('lecons').select('id,titre,sujet,statut,type_document,duree_minutes,numero,updated_at').eq('classe_id', id).order('numero'),
       ])
       setClasse(cls)
@@ -158,6 +160,21 @@ export default function ClassePage() {
 
   const saveUpload = async () => {
     if (!upload || !profil) return
+    if (upload.dossierId.startsWith('virtual_')) {
+      alert('Ce dossier n\'existe pas encore en base. Veuillez recharger la page ou créer la classe d\'abord.')
+      setUpload(null)
+      return
+    }
+    const { data: dossier } = await supabase
+      .from('dossiers_systeme')
+      .select('id')
+      .eq('id', upload.dossierId)
+      .single()
+    if (!dossier) {
+      alert('Dossier introuvable. Veuillez recharger la page.')
+      setUpload(null)
+      return
+    }
     setUploading(true)
     // Determine type from file extension
     const ext = upload.file.name.split('.').pop()?.toLowerCase() || ''
@@ -193,6 +210,46 @@ export default function ClassePage() {
     setUploading(false)
   }
 
+  const saveCurriculumUpload = async (file: File) => {
+    if (!profil || !classe) return
+    const curriculumDossier = dossiers.find((d: any) => d.type === 'curriculum')
+    if (!curriculumDossier) {
+      alert('Dossier curriculum introuvable. Rechargez la page.')
+      return
+    }
+    setUploadingCurriculum(true)
+    const storageKey = `${profil.id}/${id}/curriculum/${Date.now()}_${file.name}`
+    const { error: storageErr } = await supabase.storage.from('ressources').upload(storageKey, file, { upsert: true })
+    if (storageErr) { alert('Erreur upload : ' + storageErr.message); setUploadingCurriculum(false); return }
+    const { data: urlData } = await supabase.storage.from('ressources').createSignedUrl(storageKey, 365 * 24 * 3600)
+    const url = urlData?.signedUrl || ''
+    const { data: f } = await supabase.from('fichiers_dossier').insert({
+      dossier_id: curriculumDossier.id,
+      enseignant_id: profil.id,
+      classe_id: id,
+      nom: file.name.replace(/\.[^.]+$/, ''),
+      type_fichier: 'curriculum',
+      taille_bytes: file.size,
+      statut: 'valide',
+      url,
+      indexe_studio_ia: true,
+    }).select().single()
+    await supabase.from('classes').update({ curriculum_charge: true }).eq('id', id)
+    setClasse((prev: any) => ({ ...prev, curriculum_charge: true }))
+    if (f) {
+      await supabase.from('studio_ia_memoire').upsert({
+        enseignant_id: profil.id,
+        classe_id: id,
+        cle: `curriculum_${id}`,
+        contenu: { nom: f.nom, type: 'curriculum', fichier_id: f.id, url },
+        type: 'curriculum',
+      }, { onConflict: 'enseignant_id,cle,type' })
+    }
+    await loadFichiers(curriculumDossier.id)
+    setUploadingCurriculum(false)
+    alert('✓ Curriculum chargé avec succès !')
+  }
+
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
 
   if (loading) return <LoadingScreen />
@@ -202,7 +259,7 @@ export default function ClassePage() {
 
   // ── Root dossiers to show (from DB + virtual fallback) ────────────────────
   const rootDossiers = ROOT_TYPES.map(type => {
-    const dbRecord = dossiers.find(d => d.type === type)
+    const dbRecord = dossiers.find((d: any) => d.type === type && !d.parent_id)
     return dbRecord || { id: `virtual_${type}`, type, nom: getCfg(type).nom, nb_fichiers: 0, virtual: true }
   })
 
@@ -248,9 +305,11 @@ export default function ClassePage() {
 
       <Sidebar profil={profil} activeHref={`/dashboard/classes/${id}`} onLogout={handleLogout} />
 
-      {/* Hidden file input */}
+      {/* Hidden file inputs */}
       <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileChange}
         accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.mp4,.mp3,.xlsx,.pptx" />
+      <input ref={curriculumInputRef} type="file" style={{ display: 'none' }} accept=".pdf,.doc,.docx,.txt"
+        onChange={async e => { const f = e.target.files?.[0]; if (f) await saveCurriculumUpload(f); e.target.value = '' }} />
 
       <div className="main-content">
 
@@ -292,7 +351,7 @@ export default function ClassePage() {
                 style={{ padding: '8px 16px', borderRadius: 9, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 ▶ Enseigner
               </button>
-              <button onClick={() => router.push(`/dashboard/classes/${id}/settings`)}
+              <button onClick={() => router.push(`/dashboard/profil`)}
                 style={{ padding: '8px 12px', borderRadius: 9, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: 'pointer' }}>
                 ⚙️ Paramètres
               </button>
@@ -445,8 +504,88 @@ export default function ClassePage() {
             </>
           )}
 
+          {/* ── VUE SOUS-DOSSIER CURRICULUM ───────────────────────────────── */}
+          {nav.level === 'sous_dossier' && nav.d.type === 'curriculum' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>📋 Curriculum officiel</div>
+                {fichiers.some((f: any) => f.type_fichier === 'curriculum') && (
+                  <button onClick={() => curriculumInputRef.current?.click()}
+                    style={{ padding: '7px 16px', borderRadius: 8, background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60A5FA', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    🔄 Remplacer
+                  </button>
+                )}
+              </div>
+              {fichiers.filter((f: any) => f.type_fichier === 'curriculum').length > 0 ? (
+                fichiers.filter((f: any) => f.type_fichier === 'curriculum').map((f: any) => (
+                  <div key={f.id} style={{ padding: '20px', borderRadius: 14, border: '1.5px solid rgba(52,211,153,0.3)', background: 'rgba(52,211,153,0.05)', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                      <div style={{ fontSize: 32, flexShrink: 0 }}>📋</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{f.nom}</div>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', background: 'rgba(52,211,153,0.2)', color: '#34D399', borderRadius: 99 }}>✓ Curriculum chargé</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-4)' }}>
+                          Ajouté le {new Date(f.created_at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          {f.taille_bytes ? ` · ${Math.round(f.taille_bytes / 1024)} Ko` : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                      {f.url && (
+                        <button onClick={() => window.open(f.url, '_blank')}
+                          style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)', color: '#60A5FA', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                          👁 Voir
+                        </button>
+                      )}
+                      <button onClick={() => curriculumInputRef.current?.click()}
+                        style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-3)', fontSize: 12, cursor: 'pointer' }}>
+                        🔄 Remplacer
+                      </button>
+                      {f.url && (
+                        <button onClick={() => { const a = document.createElement('a'); a.href = f.url; a.download = f.nom; a.click() }}
+                          style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-3)', fontSize: 12, cursor: 'pointer' }}>
+                          📥 Télécharger
+                        </button>
+                      )}
+                      <button onClick={async () => {
+                        if (!confirm('Supprimer ce curriculum ?')) return
+                        await supabase.from('fichiers_dossier').delete().eq('id', f.id)
+                        await supabase.from('classes').update({ curriculum_charge: false }).eq('id', id)
+                        setClasse((prev: any) => ({ ...prev, curriculum_charge: false }))
+                        setFichiers((prev: any[]) => prev.filter(ff => ff.id !== f.id))
+                      }}
+                        style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.2)', color: '#F87171', fontSize: 12, cursor: 'pointer' }}>
+                        🗑 Supprimer
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: '40px 24px', border: '2px dashed rgba(255,255,255,0.1)', borderRadius: 14, textAlign: 'center' }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>Aucun curriculum chargé</div>
+                  <p style={{ fontSize: 13, color: 'var(--text-4)', marginBottom: 20, maxWidth: 340, margin: '0 auto 20px' }}>
+                    Le curriculum guide l&apos;IA lors de la génération de leçons. Ajoutez le programme officiel de votre classe.
+                  </p>
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                    <button onClick={() => curriculumInputRef.current?.click()} disabled={uploadingCurriculum}
+                      style={{ padding: '10px 20px', borderRadius: 10, background: 'linear-gradient(135deg,#2D5FA0,#6B3FA0)', border: 'none', color: 'white', fontSize: 13, fontWeight: 700, cursor: uploadingCurriculum ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 7, opacity: uploadingCurriculum ? 0.7 : 1 }}>
+                      ⬆️ {uploadingCurriculum ? 'Chargement…' : 'Importer le curriculum'}
+                    </button>
+                    <button onClick={() => router.push(`/dashboard/studio-ia?type=curriculum&classe=${id}`)}
+                      style={{ padding: '10px 20px', borderRadius: 10, background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)', color: '#A78BFA', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                      ✦ Générer avec IA
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── VUE SOUS-DOSSIER / DOSSIER GÉNÉRIQUE ──────────────────────── */}
-          {(nav.level === 'sous_dossier' || (nav.level === 'dossier' && nav.d.type !== 'preparation' && nav.d.type !== 'lecons')) && (
+          {((nav.level === 'sous_dossier' && nav.d.type !== 'curriculum') || (nav.level === 'dossier' && nav.d.type !== 'preparation' && nav.d.type !== 'lecons')) && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>

@@ -117,9 +117,11 @@ export const FORFAIT_AVANTAGES: Record<ForfaitType, string[]> = {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useForfait(forfait: ForfaitType = 'gratuit') {
-  const peutUtiliser = (f: FonctionnaliteForfait): boolean =>
-    FORFAIT_FONCTIONNALITES[forfait].includes(f)
+export function useForfait(forfait: ForfaitType = 'gratuit', is_admin?: boolean) {
+  const peutUtiliser = (f: FonctionnaliteForfait): boolean => {
+    if (is_admin) return true
+    return FORFAIT_FONCTIONNALITES[forfait].includes(f)
+  }
 
   const forfaitRequis = (f: FonctionnaliteForfait): ForfaitType => {
     if (FORFAIT_FONCTIONNALITES.pro.includes(f))         return 'pro'

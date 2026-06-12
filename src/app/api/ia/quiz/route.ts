@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/api-auth'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,9 @@ function extractJSON(text: string): { questions: QuestionIA[] } | null {
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  const { error, session } = await requireAuth()
+  if (error) return error
+
   const apiKey = process.env.ANTHROPIC_API_KEY
 
   const body = await request.json()

@@ -89,7 +89,7 @@ export default function ClassesPage() {
 
   return (
     <div className="app-layout">
-      <Sidebar profil={profil} activeHref="/dashboard/classes" />
+      <Sidebar profil={profil} activeHref="/dashboard/classes" onLogout={async () => { await supabase.auth.signOut(); router.push('/login') }} />
 
       <div className="main-content">
         <div className="topbar">
@@ -182,7 +182,10 @@ export default function ClassesPage() {
 
                 return (
                   <div key={cls.id} className="class-card"
-                    style={{ '--card-accent': cls.couleur || 'var(--blue)', padding: 0, overflow: 'hidden' } as any}>
+                    onClick={() => router.push(`/dashboard/classes/${cls.id}`)}
+                    style={{ '--card-accent': cls.couleur || 'var(--blue)', padding: 0, overflow: 'hidden', cursor: 'pointer', transition: 'transform 0.18s, box-shadow 0.18s, border-color 0.18s' } as any}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 8px 32px ${cls.couleur || '#1B3F6E'}33`; e.currentTarget.style.borderColor = (cls.couleur || '#1B3F6E') + '55' }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = '' }}>
 
                     {/* Bande colorée */}
                     <div style={{ height: 6, background: cls.couleur || 'var(--blue)' }} />

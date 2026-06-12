@@ -169,7 +169,7 @@ export default function PrintPanel({ open, onClose, lecon, classe, profil, form 
         const blob = await res.blob()
         const url  = URL.createObjectURL(blob)
         const a    = document.createElement('a')
-        a.href = url; a.download = `KlassIA_${(form.titre || 'lecon').replace(/\s+/g, '_')}.docx`
+        a.href = url; a.download = `KlassIA+_${(form.titre || 'lecon').replace(/\s+/g, '_')}.docx`
         document.body.appendChild(a); a.click(); a.remove()
         URL.revokeObjectURL(url)
       }

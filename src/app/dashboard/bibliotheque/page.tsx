@@ -178,8 +178,8 @@ export default function BibliothequePage() {
       const fileName = `${profil.id}/${Date.now()}_${fichier.name}`
       const { data: uploadData, error: uploadError } = await supabase.storage.from(BUCKET).upload(fileName, fichier)
       if (!uploadError) {
-        const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(fileName)
-        url = urlData.publicUrl
+        const { data: urlData } = await supabase.storage.from(BUCKET).createSignedUrl(fileName, 3600)
+        url = urlData?.signedUrl || ''
         if (fichier.type.includes('pdf')) type = 'document'
         else if (fichier.type.includes('image')) type = 'image'
         else if (fichier.type.includes('video')) type = 'video'

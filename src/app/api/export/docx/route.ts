@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/api-auth'
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   Table, TableRow, TableCell, WidthType, BorderStyle,
@@ -6,6 +7,9 @@ import {
 } from 'docx'
 
 export async function POST(request: Request) {
+  const { error, session } = await requireAuth()
+  if (error) return error
+
   try {
     const { lecon, classe, enseignant } = await request.json()
 
@@ -272,7 +276,7 @@ export async function POST(request: Request) {
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="KlassIA_${(lecon.titre || 'lecon').replace(/\s+/g, '_')}.docx"`,
+        'Content-Disposition': `attachment; filename="KlassIA+_${(lecon.titre || 'lecon').replace(/\s+/g, '_')}.docx"`,
       },
     })
 

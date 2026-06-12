@@ -158,7 +158,7 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount }: Si
 
   // ── Enseignant mode ───────────────────────────────────────────────────────
 
-  const communauteOK = forfait === 'pro_plus' || forfait === 'institution'
+  const communauteOK = isAdmin || forfait === 'pro_plus' || forfait === 'institution'
   const gererIsActive = activeHref.startsWith('/dashboard/gerer/')
 
   return (
@@ -280,7 +280,7 @@ function Logo({ adminMode, router, badge, forfait }: {
 }) {
   return (
     <div className="sidebar-logo"
-      onClick={() => router.push('/')}
+      onClick={() => router.push('/dashboard')}
       title="Accueil KlassIA+"
       style={{ cursor: 'pointer', transition: 'opacity 0.15s' }}
       onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
