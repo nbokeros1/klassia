@@ -70,6 +70,17 @@ type Nav =
 
 type UploadModal = { dossierId: string; file: File; nom: string; classeUnique: boolean; indexerIA: boolean }
 
+// ─── Utilitaire ───────────────────────────────────────────────────────────────
+
+function nettoyerNomFichier(nom: string): string {
+  return nom
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ClassePage() {
@@ -218,10 +229,11 @@ export default function ClassePage() {
       return
     }
     setUploadingCurriculum(true)
-    const storageKey = `${profil.id}/${id}/curriculum/${Date.now()}_${file.name}`
-    const { error: storageErr } = await supabase.storage.from('ressources').upload(storageKey, file, { upsert: true })
+    const nomNettoye = nettoyerNomFichier(file.name)
+    const cheminStorage = `${profil.id}/${id}/curriculum/${Date.now()}_${nomNettoye}`
+    const { error: storageErr } = await supabase.storage.from('ressources').upload(cheminStorage, file, { upsert: true })
     if (storageErr) { alert('Erreur upload : ' + storageErr.message); setUploadingCurriculum(false); return }
-    const { data: urlData } = await supabase.storage.from('ressources').createSignedUrl(storageKey, 365 * 24 * 3600)
+    const { data: urlData } = await supabase.storage.from('ressources').createSignedUrl(cheminStorage, 365 * 24 * 3600)
     const url = urlData?.signedUrl || ''
     const { data: f } = await supabase.from('fichiers_dossier').insert({
       dossier_id: curriculumDossier.id,

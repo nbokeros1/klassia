@@ -15,6 +15,15 @@ type FileItem = {
 }
 const BUCKET = 'ressources'
 
+function nettoyerNomFichier(nom: string): string {
+  return nom
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+}
+
 function formatSize(bytes?: number) {
   if (!bytes) return ''
   if (bytes < 1024) return `${bytes} o`
@@ -143,7 +152,7 @@ export default function BibliothequePage() {
     const file = e.target.files?.[0]
     if (!file || !profil) return
     setUploading(true); setFileError('')
-    const path = `${profil.id}/${Date.now()}-${file.name}`
+    const path = `${profil.id}/${Date.now()}-${nettoyerNomFichier(file.name)}`
     const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file)
     if (upErr) { setFileError(upErr.message); setUploading(false); return }
     await loadFiles()
@@ -175,7 +184,7 @@ export default function BibliothequePage() {
     setResUploading(true)
     let url = form.url; let type = form.type
     if (fichier) {
-      const fileName = `${profil.id}/${Date.now()}_${fichier.name}`
+      const fileName = `${profil.id}/${Date.now()}_${nettoyerNomFichier(fichier.name)}`
       const { data: uploadData, error: uploadError } = await supabase.storage.from(BUCKET).upload(fileName, fichier)
       if (!uploadError) {
         const { data: urlData } = await supabase.storage.from(BUCKET).createSignedUrl(fileName, 3600)
