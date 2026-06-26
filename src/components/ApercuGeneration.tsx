@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ForfaitType } from '@/lib/types/database'
+import MarkdownRenderer from '@/components/ui/MarkdownRenderer'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -11,10 +12,13 @@ export type TypeContenuApercu = 'programme' | 'plan' | 'lecon' | 'activite' | 'q
 interface ApercuGenerationProps {
   titre: string
   type: TypeContenuApercu
-  contenu_html: string
+  /** Contenu HTML pré-généré (mode non-streaming) */
+  contenu_html?: string
+  /** Params pour appel streaming direct */
+  params?: Record<string, any>
   contenu_json?: Record<string, any>
   forfait: ForfaitType
-  onValider: () => void
+  onValider: (contenu?: string) => void
   onModifier: () => void
   onRegenerer: () => void
   onTelecharger?: (format: 'pdf' | 'docx' | 'pptx') => void
@@ -32,12 +36,30 @@ const TYPE_LABELS: Record<TypeContenuApercu, { label: string; color: string; bg:
   kit:       { label: 'Kit pédagogique',  color: '#22D3EE', bg: 'rgba(34,211,238,0.12)' },
 }
 
+// ─── Dots animation ───────────────────────────────────────────────────────────
+
+function AnimatedDots() {
+  return (
+    <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center', marginLeft: 4 }}>
+      {[0, 1, 2].map(i => (
+        <span key={i} style={{
+          width: 4, height: 4, borderRadius: '50%',
+          background: '#A78BFA',
+          animation: `dotPulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+          display: 'inline-block',
+        }} />
+      ))}
+    </span>
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ApercuGeneration({
   titre,
   type,
-  contenu_html,
+  contenu_html = '',
+  params,
   contenu_json,
   forfait,
   onValider,
@@ -53,6 +75,67 @@ export default function ApercuGeneration({
 
   const [downloading, setDownloading] = useState<string | null>(null)
 
+  // ── Streaming state ──────────────────────────────────────────────────────
+  const [streamContenu, setStreamContenu] = useState('')
+  const [enCours, setEnCours]             = useState(false)
+  const [termine, setTermine]             = useState(!params)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const contenuAffiche = streamContenu || contenu_html
+
+  // ── Auto-démarrage du streaming si params fournis ────────────────────────
+  useEffect(() => {
+    if (params) {
+      genererAvecStreaming(params)
+    }
+    return () => { abortRef.current?.abort() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function genererAvecStreaming(p: Record<string, any>) {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    setEnCours(true)
+    setTermine(false)
+    setStreamContenu('')
+
+    try {
+      const response = await fetch('/api/ia/generer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...p, streaming: true }),
+        signal: controller.signal,
+      })
+
+      if (!response.ok || !response.body) {
+        setStreamContenu('⚠️ Erreur lors de la génération.')
+        setEnCours(false)
+        setTermine(true)
+        return
+      }
+
+      const reader  = response.body.getReader()
+      const decoder = new TextDecoder()
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        setStreamContenu(prev => prev + chunk)
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        setStreamContenu(prev => prev || '⚠️ Erreur de connexion.')
+      }
+    }
+
+    setEnCours(false)
+    setTermine(true)
+  }
+
+  // ── Téléchargement ───────────────────────────────────────────────────────
   const now = new Date().toLocaleDateString('fr-CA', {
     day: 'numeric', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -64,16 +147,16 @@ export default function ApercuGeneration({
 
     setDownloading(format)
     try {
-      const endpoint = format === 'docx' ? '/api/export/docx' : '/api/export/pptx'
       if (format === 'pdf') {
         window.print()
         setDownloading(null)
         return
       }
+      const endpoint = format === 'docx' ? '/api/export/docx' : '/api/export/pptx'
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contenu_html, titre }),
+        body: JSON.stringify({ contenu_html: contenuAffiche, titre }),
       })
       if (!res.ok) throw new Error('Export failed')
       const blob = await res.blob()
@@ -84,11 +167,12 @@ export default function ApercuGeneration({
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      // Fail silently — export routes may not support content-only mode yet
+      /* Fail silently */
     }
     setDownloading(null)
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <>
       {/* Backdrop */}
@@ -104,41 +188,56 @@ export default function ApercuGeneration({
         transform: 'translate(-50%, -50%)',
         width: '100%', maxWidth: 760,
         maxHeight: '90vh',
-        background: '#0D1526',
-        border: '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--color-bg-secondary)',
+        border: '1.5px solid var(--color-border)',
         borderRadius: 18,
         zIndex: 1001,
         display: 'flex', flexDirection: 'column',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+        boxShadow: 'var(--shadow-modal)',
         overflow: 'hidden',
       }}>
 
         {/* ── En-tête ────────────────────────────────────────────────── */}
-        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+        <div style={{ padding: '18px 24px 14px', borderBottom: '1px solid var(--color-separator)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 14 }}>✦</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
-                  Aperçu généré — {titre}
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                  Aperçu — {titre}
                 </span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' as const }}>
                 <span style={{
                   padding: '3px 10px',
                   background: typeInfo.bg, color: typeInfo.color,
                   borderRadius: 99, fontSize: 11, fontWeight: 700,
+                  border: `1px solid ${typeInfo.color}33`,
                 }}>
                   {typeInfo.label}
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--text-4)', alignSelf: 'center' }}>
-                  Généré le {now}
-                </span>
+
+                {/* Indicateur streaming */}
+                {enCours ? (
+                  <span style={{ fontSize: 11, color: '#A78BFA', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    ✦ KlassIA+ génère<AnimatedDots />
+                  </span>
+                ) : termine ? (
+                  <span style={{ fontSize: 11, color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    ✓ Génération terminée
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    Généré le {now}
+                  </span>
+                )}
               </div>
             </div>
             {onClose && (
               <button onClick={onClose}
-                style={{ background: 'none', border: 'none', color: 'var(--text-4)', cursor: 'pointer', fontSize: 20, lineHeight: 1, flexShrink: 0, padding: 4 }}>
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 22, lineHeight: 1, flexShrink: 0, padding: 4, transition: 'color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.color = 'var(--color-text-primary)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}>
                 ×
               </button>
             )}
@@ -146,56 +245,90 @@ export default function ApercuGeneration({
         </div>
 
         {/* ── Contenu scrollable ─────────────────────────────────────── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
           <style>{`
-            .apercu-content { font-family: Georgia, 'Times New Roman', serif; font-size: 14px; line-height: 1.7; color: #1A1A2E; }
-            .apercu-content h1 { font-size: 22px; font-weight: 800; margin: 24px 0 12px; }
-            .apercu-content h2 { font-size: 17px; font-weight: 700; margin: 18px 0 8px; }
-            .apercu-content h3 { font-size: 14px; font-weight: 700; margin: 14px 0 6px; }
-            .apercu-content p  { margin: 0 0 10px; }
-            .apercu-content ul, .apercu-content ol { margin: 8px 0 10px 22px; }
-            .apercu-content li { margin-bottom: 4px; }
-            .apercu-content table { width: 100%; border-collapse: collapse; margin: 14px 0; }
-            .apercu-content th { background: #EDE9FE; color: #4C1D95; padding: 8px 12px; text-align: left; font-size: 12px; }
-            .apercu-content td { padding: 8px 12px; border-bottom: 1px solid #EDE9FE; font-size: 13px; }
-            .apercu-content tr:nth-child(even) td { background: #FAFBFF; }
-            .apercu-content callout { display:block; padding:12px 16px; border-radius:8px; margin:12px 0; border-left:3px solid; }
-            .apercu-content callout[type="intention"] { background:rgba(96,165,250,0.1); border-color:#60A5FA; }
-            .apercu-content callout[type="exemple"]   { background:rgba(52,211,153,0.1); border-color:#34D399; }
-            .apercu-content callout[type="activite"]  { background:rgba(167,139,250,0.1); border-color:#A78BFA; }
-            .apercu-content callout[type="exercice"]  { background:rgba(251,195,74,0.1); border-color:#FBC34A; }
-            .apercu-content callout[type="formule"]   { background:rgba(248,113,113,0.1); border-color:#F87171; }
-            .apercu-content callout[type="important"] { background:rgba(248,113,113,0.12); border-color:#F87171; }
+            @keyframes dotPulse {
+              0%,100% { opacity: 1; transform: scale(1); }
+              50%      { opacity: 0.4; transform: scale(0.75); }
+            }
           `}</style>
+
           <div style={{ background: 'white', padding: '28px 32px', minHeight: 300 }}>
-            <div
-              className="apercu-content"
-              dangerouslySetInnerHTML={{ __html: contenu_html }}
-            />
+            {contenuAffiche ? (
+              <>
+                <MarkdownRenderer content={contenuAffiche} className="md-doc" />
+                {enCours && (
+                  <div style={{ display: 'flex', gap: 5, alignItems: 'center', paddingTop: 8 }}>
+                    {([0, 0.3, 0.6] as number[]).map(delay => (
+                      <span key={delay} style={{
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: '#A78BFA', display: 'inline-block',
+                        animation: `dotPulse 1.2s ease-in-out ${delay}s infinite`,
+                      }} />
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : enCours ? (
+              /* Skeleton minimal pendant le démarrage */
+              <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                <div style={{ fontSize: 28, marginBottom: 12 }}>✦</div>
+                <div style={{ fontSize: 13, color: '#6B7280' }}>
+                  KlassIA+ prépare votre contenu<AnimatedDots />
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
         {/* ── Actions ────────────────────────────────────────────────── */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, background: '#0D1526' }}>
+        <div style={{
+          padding: '14px 24px 16px',
+          borderTop: '1px solid var(--color-separator)',
+          flexShrink: 0,
+          background: 'var(--color-bg-secondary)',
+        }}>
 
           {/* Actions principales */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-            <button onClick={onValider}
-              style={{ flex: 1, padding: '11px', background: 'linear-gradient(135deg,#6B3FA0,#4F46E5)', border: 'none', borderRadius: 10, color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'opacity 0.15s' }}
-              onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+            <button onClick={() => onValider(streamContenu || contenu_html)}
+              disabled={enCours}
+              style={{
+                flex: 1, padding: '11px',
+                background: enCours ? 'rgba(107,63,160,0.4)' : 'linear-gradient(135deg,#6B3FA0,#4F46E5)',
+                border: 'none', borderRadius: 10, color: 'white',
+                fontSize: 14, fontWeight: 700,
+                cursor: enCours ? 'not-allowed' : 'pointer',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { if (!enCours) e.currentTarget.style.opacity = '0.9' }}
               onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
               ✓ Valider
             </button>
             <button onClick={onModifier}
-              style={{ padding: '11px 18px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, color: 'var(--text-2)', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}>
+              style={{
+                padding: '11px 18px',
+                background: 'var(--color-btn-ghost-bg)',
+                border: '1px solid var(--color-btn-ghost-border)',
+                borderRadius: 10, color: 'var(--color-btn-ghost-text)',
+                fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--color-btn-ghost-hover-bg)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--color-btn-ghost-bg)'}>
               ✏️ Modifier
             </button>
-            <button onClick={onRegenerer}
-              style={{ padding: '11px 18px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, color: 'var(--text-2)', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}>
+            <button onClick={params ? () => genererAvecStreaming(params) : onRegenerer}
+              disabled={enCours}
+              style={{
+                padding: '11px 18px',
+                background: 'var(--color-btn-ghost-bg)',
+                border: '1px solid var(--color-btn-ghost-border)',
+                borderRadius: 10, color: 'var(--color-btn-ghost-text)',
+                fontSize: 14, fontWeight: 600,
+                cursor: enCours ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { if (!enCours) e.currentTarget.style.background = 'var(--color-btn-ghost-hover-bg)' }}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--color-btn-ghost-bg)'}>
               🔄 Regénérer
             </button>
           </div>
@@ -206,24 +339,23 @@ export default function ApercuGeneration({
               {(['pdf', 'docx', 'pptx'] as const).map(fmt => (
                 <button key={fmt}
                   onClick={() => handleDownload(fmt)}
-                  disabled={downloading === fmt}
+                  disabled={downloading === fmt || enCours}
                   style={{
                     padding: '7px 14px', borderRadius: 8,
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: downloading === fmt ? 'rgba(255,255,255,0.06)' : 'transparent',
-                    color: 'var(--text-3)', fontSize: 12, fontWeight: 600,
-                    cursor: downloading === fmt ? 'wait' : 'pointer',
+                    border: '1px solid var(--color-border)',
+                    background: downloading === fmt ? 'var(--color-bg-hover)' : 'transparent',
+                    color: 'var(--color-text-muted)', fontSize: 12, fontWeight: 600,
+                    cursor: (downloading === fmt || enCours) ? 'wait' : 'pointer',
                     transition: 'all 0.15s', fontFamily: 'inherit',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+                  onMouseEnter={e => { if (!enCours) e.currentTarget.style.borderColor = 'var(--color-border-strong)' }}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
                 >
                   {downloading === fmt ? '⏳' : fmt === 'pdf' ? '📄' : fmt === 'docx' ? '📝' : '📊'}{' '}
                   {fmt.toUpperCase()}
                 </button>
               ))}
 
-              {/* Kit complet si Pro+ + type leçon */}
               {isProPlus && type === 'lecon' && (
                 <button
                   onClick={() => router.push('/dashboard/classes')}

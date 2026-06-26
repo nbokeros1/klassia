@@ -95,6 +95,7 @@ interface RichEditorProps {
   lightBackground?: boolean    // white/light bg for the content area
   onEditorReady?: (editor: Editor) => void  // called once editor is mounted
   onFocus?: (editor: Editor) => void        // called when this editor gains focus
+  uploadImage?: (file: File) => Promise<string>  // upload to Storage, return signed URL
 }
 
 type Panel = 'math' | 'science' | 'table' | 'blocks' | 'diagrams' | 'color' | 'highlight' | null
@@ -102,17 +103,37 @@ type Panel = 'math' | 'science' | 'table' | 'blocks' | 'diagrams' | 'color' | 'h
 export default function RichEditor({
   value, onChange, placeholder, rows = 3, disabled = false,
   showToolbar = true, lightBackground = false,
-  onEditorReady, onFocus,
+  onEditorReady, onFocus, uploadImage,
 }: RichEditorProps) {
   const [openPanel, setOpenPanel] = useState<Panel>(null)
   const [mathCat, setMathCat] = useState(0)
   const [sciCat, setSciCat] = useState(0)
   const panelRef = useRef<HTMLDivElement>(null)
+  const uploadImageRef = useRef(uploadImage)
+  uploadImageRef.current = uploadImage
+  const editorRef = useRef<Editor | null>(null)
+
+  const insertImageFromFile = (file: File) => {
+    const fn = uploadImageRef.current
+    if (fn) {
+      fn(file).then(src => {
+        editorRef.current?.chain().focus().setImage({ src, alt: file.name }).run()
+      }).catch(() => {
+        const reader = new FileReader()
+        reader.onload = ev => editorRef.current?.chain().focus().setImage({ src: ev.target?.result as string, alt: file.name }).run()
+        reader.readAsDataURL(file)
+      })
+    } else {
+      const reader = new FileReader()
+      reader.onload = ev => editorRef.current?.chain().focus().setImage({ src: ev.target?.result as string, alt: file.name }).run()
+      reader.readAsDataURL(file)
+    }
+  }
 
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit,
+      StarterKit.configure({ link: false, underline: false }),
       Underline,
       Placeholder.configure({ placeholder: placeholder || '' }),
       Table.configure({ resizable: false }),
@@ -130,10 +151,37 @@ export default function RichEditor({
     editable: !disabled,
     onUpdate({ editor }) { onChange(editor.getHTML()) },
     onFocus({ editor }) { onFocus?.(editor as Editor) },
+    editorProps: {
+      handlePaste(view, event) {
+        const items = Array.from(event.clipboardData?.items || [])
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            event.preventDefault()
+            const file = item.getAsFile()
+            if (file) insertImageFromFile(file)
+            return true
+          }
+        }
+        return false
+      },
+      handleDrop(view, event, _slice, moved) {
+        if (moved) return false
+        const files = Array.from((event as DragEvent).dataTransfer?.files || [])
+        for (const file of files) {
+          if (file.type.startsWith('image/')) {
+            event.preventDefault()
+            insertImageFromFile(file)
+            return true
+          }
+        }
+        return false
+      },
+    },
   })
 
   useEffect(() => {
     if (!editor) return
+    editorRef.current = editor
     onEditorReady?.(editor as Editor)
     const current = editor.getHTML()
     if (value !== current && value !== '<p></p>') editor.commands.setContent(value || '')
@@ -406,7 +454,7 @@ export default function RichEditor({
         </div>
       )}
 
-      <EditorContent editor={editor} style={{ minHeight, padding: '10px 13px', border: `1.5px solid ${disabled ? 'transparent' : 'var(--border)'}`, borderTop: (disabled || !showToolbar) ? undefined : 'none', borderRadius: disabled ? 'var(--radius-sm)' : (showToolbar ? '0 0 8px 8px' : '8px'), fontSize: 13, color: contentColor, background: contentBg, outline: 'none', lineHeight: '1.65', cursor: disabled ? 'default' : 'text' }} />
+      <EditorContent editor={editor} style={{ minHeight, padding: '10px 13px', borderLeft: `1.5px solid ${disabled ? 'transparent' : 'var(--border)'}`, borderRight: `1.5px solid ${disabled ? 'transparent' : 'var(--border)'}`, borderBottom: `1.5px solid ${disabled ? 'transparent' : 'var(--border)'}`, borderTop: (disabled || !showToolbar) ? `1.5px solid ${disabled ? 'transparent' : 'var(--border)'}` : 'none', borderRadius: disabled ? 'var(--radius-sm)' : (showToolbar ? '0 0 8px 8px' : '8px'), fontSize: 13, color: contentColor, background: contentBg, outline: 'none', lineHeight: '1.65', cursor: disabled ? 'default' : 'text' }} />
 
       <style>{`
         /* ── Base tiptap (dark mode) ─────────────────────────────────────── */

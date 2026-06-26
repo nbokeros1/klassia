@@ -1,30 +1,100 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
+import Topbar from '@/components/Topbar'
 import LoadingScreen from '@/components/LoadingScreen'
-import { STATUT_LECON } from '@/lib/constants/statuts'
+import CadenasForFait from '@/components/ui/CadenasForFait'
+import { peutCreerClasse } from '@/lib/hooks/useForfait'
 
 const COULEURS = [
   '#1B3F6E', '#6B3FA0', '#2D7DD2', '#2ECC71',
   '#E8634A', '#F39C12', '#C9A84C', '#0A7065',
 ]
 
+function getMatieres(cls: any): string {
+  if (Array.isArray(cls.matieres) && cls.matieres.length > 0) return cls.matieres.join(' · ')
+  return cls.matiere || ''
+}
+
+// ─── Composant tag input ──────────────────────────────────────────────────────
+
+function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
+  const [input, setInput] = useState('')
+  const ref = useRef<HTMLInputElement>(null)
+
+  const add = (value: string) => {
+    const v = value.trim()
+    if (v && !tags.includes(v)) onChange([...tags, v])
+    setInput('')
+  }
+
+  const remove = (tag: string) => onChange(tags.filter(t => t !== tag))
+
+  return (
+    <div
+      onClick={() => ref.current?.focus()}
+      style={{
+        display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center',
+        padding: '6px 10px', border: '1.5px solid var(--color-input-border)',
+        borderRadius: 9, background: 'var(--color-input-bg)', cursor: 'text', minHeight: 40,
+      }}
+    >
+      {tags.map(t => (
+        <span key={t} style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          padding: '2px 8px', borderRadius: 99,
+          background: 'var(--color-accent-violet-bg)',
+          border: '1px solid var(--color-border-accent)',
+          color: 'var(--color-accent-violet)', fontSize: 11, fontWeight: 600,
+        }}>
+          {t}
+          <button
+            type="button"
+            onClick={() => remove(t)}
+            style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '0 1px', fontSize: 11, lineHeight: 1, opacity: .7 }}
+          >×</button>
+        </span>
+      ))}
+      <input
+        ref={ref}
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => {
+          if ((e.key === 'Enter' || e.key === ',') && input.trim()) { e.preventDefault(); add(input) }
+          if (e.key === 'Backspace' && !input && tags.length > 0) remove(tags[tags.length - 1])
+        }}
+        onBlur={() => { if (input.trim()) add(input) }}
+        placeholder={tags.length === 0 ? 'Ex: Maths, Français… (Entrée pour ajouter)' : '+ Ajouter'}
+        style={{ border: 'none', background: 'none', outline: 'none', fontSize: 12, color: 'var(--color-text-primary)', minWidth: 120, flex: 1, fontFamily: 'inherit' }}
+      />
+    </div>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function ClassesPage() {
-  const [classes, setClasses] = useState<any[]>([])
+  const [classes,       setClasses]       = useState<any[]>([])
   const [leconsByClass, setLeconsByClass] = useState<Record<string, any[]>>({})
-  const [profil, setProfil] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [profil,        setProfil]        = useState<any>(null)
+  const [loading,       setLoading]       = useState(true)
+  const [showForm,      setShowForm]      = useState(false)
+  const [saving,        setSaving]        = useState(false)
+
   const [form, setForm] = useState({
-    nom: '', niveau: '', matiere: '',
-    nombre_eleves: '', couleur: '#1B3F6E', langue: 'fr',
+    nom:           '',
+    niveau:        '',
+    matieres:      [] as string[],
+    nombre_eleves: '',
+    couleur:       '#1B3F6E',
+    langue:        'fr',
   })
+
   const supabase = createClient()
-  const router = useRouter()
+  const router   = useRouter()
 
   useEffect(() => {
     const init = async () => {
@@ -36,8 +106,8 @@ export default function ClassesPage() {
         const { data: nouveau } = await supabase.from('utilisateurs').upsert({
           user_id: user.id, email: user.email,
           prenom: user.user_metadata?.prenom || '',
-          nom: user.user_metadata?.nom || '',
-          ecole: user.user_metadata?.ecole || '',
+          nom:    user.user_metadata?.nom    || '',
+          ecole:  user.user_metadata?.ecole  || '',
           type_compte: 'enseignant', langue_interface: 'fr', langue_enseignement: 'fr',
         }, { onConflict: 'user_id' }).select().single()
         if (!nouveau) { router.push('/login'); return }
@@ -69,196 +139,264 @@ export default function ClassesPage() {
     e.preventDefault()
     if (!profil?.id) return
     setSaving(true)
+
+    const matieresPrimaire = form.matieres[0] || ''
     const { data, error } = await supabase.from('classes').insert({
       enseignant_id: profil.id,
-      nom: form.nom, niveau: form.niveau, matiere: form.matiere,
+      nom:           form.nom,
+      niveau:        form.niveau,
+      matiere:       matieresPrimaire,
+      matieres:      form.matieres.length > 0 ? form.matieres : null,
       nombre_eleves: parseInt(form.nombre_eleves) || 0,
-      couleur: form.couleur, langue: form.langue,
+      couleur:       form.couleur,
+      langue:        form.langue,
       annee_scolaire: '2025-2026',
     }).select().single()
 
     if (!error && data) {
       setClasses(prev => [data, ...prev])
       setShowForm(false)
-      setForm({ nom: '', niveau: '', matiere: '', nombre_eleves: '', couleur: '#1B3F6E', langue: 'fr' })
+      setForm({ nom: '', niveau: '', matieres: [], nombre_eleves: '', couleur: '#1B3F6E', langue: 'fr' })
     }
     setSaving(false)
   }
 
   if (loading) return <LoadingScreen />
 
+  const isFr      = profil?.langue_interface !== 'en'
+  const prenom    = profil?.prenom ?? profil?.email?.split('@')[0] ?? ''
+  const initiales = prenom ? prenom[0].toUpperCase() : (profil?.email?.[0] ?? 'E').toUpperCase()
+
   return (
-    <div className="app-layout">
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <style>{`
+        @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        .cls-card { transition: transform 0.18s, box-shadow 0.18s; cursor: pointer; }
+        .cls-card:hover { transform: translateY(-3px); }
+        .cls-tag-chip {
+          font-size: 10px; font-weight: 700;
+          padding: 2px 7px; border-radius: 99px;
+          background: rgba(108,92,231,0.1);
+          color: var(--violet);
+          border: 1px solid rgba(108,92,231,0.2);
+        }
+      `}</style>
+
       <Sidebar profil={profil} activeHref="/dashboard/classes" onLogout={async () => { await supabase.auth.signOut(); router.push('/login') }} />
 
-      <div className="main-content">
-        <div className="topbar">
-          <div>
-            <div className="topbar-title">Mes classes</div>
-            <div className="topbar-sub">{classes.length} classe{classes.length !== 1 ? 's' : ''} · Année 2025-2026</div>
+      <div style={{ marginLeft: 'var(--sidebar-w)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <Topbar notifCount={0} initiales={initiales} isFr={isFr} />
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 32px' }}>
+
+          {/* Page header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>Mes classes</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 3 }}>
+                {classes.length} classe{classes.length !== 1 ? 's' : ''} · Année 2025-2026
+              </div>
+            </div>
+            <CadenasForFait
+              fonctionnalite="classes_illimitees"
+              forfait_actuel={profil?.forfait || 'gratuit'}
+              bloque={!peutCreerClasse(profil, classes.length)}
+              messageCustom="Limite de classes atteinte pour votre forfait"
+              forfait_cible={profil?.forfait === 'pro' ? 'pro_plus' : 'pro'}
+            >
+              <button onClick={() => setShowForm(true)}
+                style={{ padding: '10px 20px', fontSize: 13, fontWeight: 600, background: 'var(--violet)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', boxShadow: '0 4px 12px var(--violet-glow)', fontFamily: 'inherit' }}>
+                + Nouvelle classe
+              </button>
+            </CadenasForFait>
           </div>
-          <button className="btn-primary" onClick={() => setShowForm(true)}>+ Nouvelle classe</button>
-        </div>
 
-        <div className="page-content fade-in">
-
-          {/* Formulaire */}
+          {/* ── Formulaire ──────────────────────────────────────────────── */}
           {showForm && (
-            <div className="card fade-in" style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <h3 style={{ color: 'var(--text-1)' }}>Nouvelle classe</h3>
-                <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', fontSize: '20px', color: 'var(--text-4)', cursor: 'pointer' }}>✕</button>
+            <div className="glass-light" style={{ borderRadius: 'var(--radius-lg)', padding: 24, marginBottom: 24, boxShadow: 'var(--shadow-card)', animation: 'fadeUp .2s ease both' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Nouvelle classe</div>
+                <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--text-muted)', cursor: 'pointer' }}>✕</button>
               </div>
               <form onSubmit={handleCreate}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Nom de la classe *</label>
-                    <input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Ex: Français 3e A" required />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                  <div style={{ marginBottom: 0 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Nom de la classe *</label>
+                    <input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Ex: Français 3e A" required
+                      style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid rgba(15,35,65,0.12)', background: 'rgba(255,255,255,0.8)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Niveau *</label>
-                    <input value={form.niveau} onChange={e => setForm({ ...form, niveau: e.target.value })} placeholder="Ex: Secondaire 3" required />
+                  <div style={{ marginBottom: 0 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Niveau *</label>
+                    <input value={form.niveau} onChange={e => setForm({ ...form, niveau: e.target.value })} placeholder="Ex: Secondaire 3" required
+                      style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid rgba(15,35,65,0.12)', background: 'rgba(255,255,255,0.8)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Matière *</label>
-                    <input value={form.matiere} onChange={e => setForm({ ...form, matiere: e.target.value })} placeholder="Ex: Français" required />
+                  <div style={{ marginBottom: 0 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Nombre d&apos;élèves</label>
+                    <input type="number" value={form.nombre_eleves} onChange={e => setForm({ ...form, nombre_eleves: e.target.value })} placeholder="Ex: 28"
+                      style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid rgba(15,35,65,0.12)', background: 'rgba(255,255,255,0.8)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const }} />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Nombre d'élèves</label>
-                    <input type="number" value={form.nombre_eleves} onChange={e => setForm({ ...form, nombre_eleves: e.target.value })} placeholder="Ex: 28" />
+                  <div style={{ marginBottom: 0 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Langue d&apos;enseignement</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {[{ v: 'fr', l: '🇫🇷 Français' }, { v: 'en', l: '🇨🇦 English' }].map(lang => (
+                        <button key={lang.v} type="button"
+                          onClick={() => setForm({ ...form, langue: lang.v })}
+                          style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1.5px solid ${form.langue === lang.v ? 'var(--violet)' : 'rgba(15,35,65,0.12)'}`, background: form.langue === lang.v ? 'rgba(108,92,231,0.1)' : 'transparent', color: form.langue === lang.v ? 'var(--violet)' : 'var(--text-secondary)', fontSize: 12, fontWeight: form.langue === lang.v ? 700 : 400, cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit' }}>
+                          {lang.l}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Couleur</label>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+
+                {/* ── Matières (multi-tags) ──────────────────────────────── */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Matières enseignées *</label>
+                  <TagInput
+                    tags={form.matieres}
+                    onChange={matieres => setForm({ ...form, matieres })}
+                  />
+                  {form.matieres.length === 0 && (
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+                      Appuyez sur Entrée ou virgule après chaque matière
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Couleur ───────────────────────────────────────────── */}
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Couleur</label>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
                     {COULEURS.map(c => (
                       <div key={c} onClick={() => setForm({ ...form, couleur: c })}
-                        style={{ width: '30px', height: '30px', borderRadius: '50%', background: c, cursor: 'pointer', border: form.couleur === c ? '3px solid var(--text-1)' : '3px solid transparent', transition: 'all 0.15s' }} />
+                        style={{ width: 30, height: 30, borderRadius: '50%', background: c, cursor: 'pointer', border: form.couleur === c ? '3px solid var(--text-primary)' : '3px solid transparent', boxShadow: form.couleur === c ? `0 0 0 2px ${c}44` : 'none', transition: 'all 0.15s' }} />
                     ))}
                   </div>
                 </div>
-                <div className="form-group" style={{ marginBottom: '24px' }}>
-                  <label className="form-label">Langue d'enseignement</label>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    {[{ v: 'fr', l: '🇫🇷 Français' }, { v: 'en', l: '🇨🇦 English' }].map(lang => (
-                      <button key={lang.v} type="button" onClick={() => setForm({ ...form, langue: lang.v })}
-                        style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-sm)', border: `2px solid ${form.langue === lang.v ? 'var(--violet)' : 'var(--border)'}`, background: form.langue === lang.v ? 'var(--violet-pale)' : 'rgba(255,255,255,0.03)', color: form.langue === lang.v ? '#A78BFA' : 'var(--text-3)', fontSize: '13px', fontWeight: form.langue === lang.v ? 600 : 400, cursor: 'pointer', transition: 'all 0.15s' }}>
-                        {lang.l}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="submit" disabled={saving} className="btn-primary" style={{ opacity: saving ? 0.7 : 1 }}>
+
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="submit" disabled={saving || form.matieres.length === 0}
+                    style={{ padding: '9px 20px', fontSize: 13, fontWeight: 600, background: 'var(--violet)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: saving || form.matieres.length === 0 ? 'not-allowed' : 'pointer', opacity: saving || form.matieres.length === 0 ? 0.6 : 1, fontFamily: 'inherit' }}>
                     {saving ? 'Création...' : 'Créer la classe'}
                   </button>
-                  <button type="button" className="btn-ghost" onClick={() => setShowForm(false)}>Annuler</button>
+                  <button type="button" onClick={() => setShowForm(false)}
+                    style={{ padding: '9px 18px', fontSize: 13, color: 'var(--text-secondary)', background: 'transparent', border: '1px solid rgba(15,35,65,0.12)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Annuler
+                  </button>
                 </div>
               </form>
             </div>
           )}
 
-          {/* Vide */}
+          {/* ── État vide ──────────────────────────────────────────────── */}
           {classes.length === 0 && !showForm && (
-            <div className="card" style={{ textAlign: 'center', padding: '64px 24px' }}>
-              <div style={{ fontSize: '52px', marginBottom: '14px' }}>🏫</div>
-              <h3 style={{ marginBottom: '6px' }}>Aucune classe encore</h3>
-              <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '24px' }}>
+            <div className="glass-light" style={{ textAlign: 'center', padding: '64px 24px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)' }}>
+              <div style={{ fontSize: 52, marginBottom: 14 }}>🏫</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>Aucune classe encore</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24, lineHeight: 1.6 }}>
                 Crée ta première classe pour organiser ton année scolaire et générer tes leçons
-              </p>
-              <button className="btn-primary" onClick={() => setShowForm(true)}>+ Créer ma première classe</button>
+              </div>
+              <button onClick={() => setShowForm(true)}
+                style={{ padding: '10px 24px', fontSize: 13, fontWeight: 600, background: 'var(--violet)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', boxShadow: '0 4px 12px var(--violet-glow)', fontFamily: 'inherit' }}>
+                + Créer ma première classe
+              </button>
             </div>
           )}
 
-          {/* Grille des classes */}
+          {/* ── Grille des classes ─────────────────────────────────────── */}
           {classes.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
               {classes.map(cls => {
-                const lecons = leconsByClass[cls.id] || []
-                const done = lecons.filter((l: any) => l.statut === 'complete').length
+                const lecons    = leconsByClass[cls.id] || []
                 const enseignees = lecons.filter((l: any) => ['enseignee', 'complete'].includes(l.statut)).length
-                const pretes = lecons.filter((l: any) => l.statut === 'prete').length
-                const pct = lecons.length > 0 ? Math.round((enseignees / lecons.length) * 100) : 0
+                const pretes    = lecons.filter((l: any) => l.statut === 'prete').length
+                const pct       = lecons.length > 0 ? Math.round((enseignees / lecons.length) * 100) : 0
+                const matieres  = getMatieres(cls)
+                const accent    = cls.couleur || '#6C5CE7'
 
                 return (
-                  <div key={cls.id} className="class-card"
+                  <div key={cls.id} className="glass-light cls-card"
                     onClick={() => router.push(`/dashboard/classes/${cls.id}`)}
-                    style={{ '--card-accent': cls.couleur || 'var(--blue)', padding: 0, overflow: 'hidden', cursor: 'pointer', transition: 'transform 0.18s, box-shadow 0.18s, border-color 0.18s' } as any}
-                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 8px 32px ${cls.couleur || '#1B3F6E'}33`; e.currentTarget.style.borderColor = (cls.couleur || '#1B3F6E') + '55' }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = '' }}>
+                    style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}
+                    onMouseEnter={e => (e.currentTarget.style.boxShadow = `0 8px 32px ${accent}33`)}
+                    onMouseLeave={e => (e.currentTarget.style.boxShadow = 'var(--shadow-card)')}>
 
-                    {/* Bande colorée */}
-                    <div style={{ height: 6, background: cls.couleur || 'var(--blue)' }} />
+                    {/* Color band top */}
+                    <div style={{ height: 5, background: accent }} />
 
-                    <div style={{ padding: '14px' }}>
+                    <div style={{ padding: 16 }}>
                       {/* Header */}
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: cls.couleur || 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 800, color: 'white', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 10, background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#FFF', flexShrink: 0, boxShadow: `0 4px 10px ${accent}55` }}>
                             {cls.nom?.[0]?.toUpperCase()}
                           </div>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cls.nom}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>{cls.niveau} · {cls.matiere}</div>
+                            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{cls.nom}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{cls.niveau}{matieres ? ` · ${matieres}` : ''}</div>
                           </div>
                         </div>
                         {cls.curriculum_charge
-                          ? <span className="badge badge-green" style={{ fontSize: '9px', flexShrink: 0 }}>✓ Curriculum</span>
-                          : <span className="badge" style={{ fontSize: '9px', background: 'rgba(251,195,74,0.12)', color: '#FBC34A', border: '1px solid rgba(251,195,74,0.2)', flexShrink: 0 }}>Sans curriculum</span>
+                          ? <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 99, background: 'rgba(52,211,153,0.12)', color: '#34D399', border: '1px solid rgba(52,211,153,0.25)', flexShrink: 0, fontWeight: 700 }}>✓ Curriculum</span>
+                          : <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 99, background: 'rgba(251,195,74,0.12)', color: '#FBC34A', border: '1px solid rgba(251,195,74,0.2)', flexShrink: 0 }}>Sans curriculum</span>
                         }
                       </div>
 
+                      {/* Tags matières multiples */}
+                      {Array.isArray(cls.matieres) && cls.matieres.length > 1 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 4, marginBottom: 10 }}>
+                          {cls.matieres.map((m: string) => (
+                            <span key={m} className="cls-tag-chip">{m}</span>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Stats */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '5px', marginBottom: '12px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, marginBottom: 12 }}>
                         {([
                           { icon: '👥', v: cls.nombre_eleves || 0, l: 'Élèves',  c: '#60A5FA' },
-                          { icon: '📄', v: lecons.length,           l: 'Leçons',  c: '#A78BFA' },
-                          { icon: '✅', v: pretes,                   l: 'Prêtes',  c: '#FBC34A' },
-                          { icon: '📊', v: `${pct}%`,               l: 'Prog.',   c: pct >= 80 ? '#34D399' : pct >= 40 ? '#60A5FA' : '#94A3B8' },
+                          { icon: '📄', v: lecons.length,          l: 'Leçons',  c: '#A78BFA' },
+                          { icon: '✅', v: pretes,                  l: 'Prêtes',  c: '#FBC34A' },
+                          { icon: '📊', v: `${pct}%`,              l: 'Prog.',   c: pct >= 80 ? '#34D399' : pct >= 40 ? '#60A5FA' : '#94A3B8' },
                         ] as const).map((s, i) => (
-                          <div key={i} style={{ textAlign: 'center', padding: '6px 4px', background: 'rgba(255,255,255,0.04)', borderRadius: '7px' }}>
-                            <div style={{ fontSize: '11px', marginBottom: '2px' }}>{s.icon}</div>
-                            <div style={{ fontSize: '15px', fontWeight: 700, color: s.c, lineHeight: 1 }}>{s.v}</div>
-                            <div style={{ fontSize: '9px', color: 'var(--text-4)', marginTop: '2px' }}>{s.l}</div>
+                          <div key={i} style={{ textAlign: 'center', padding: '6px 4px', background: 'rgba(15,35,65,0.04)', borderRadius: 8 }}>
+                            <div style={{ fontSize: 11, marginBottom: 2 }}>{s.icon}</div>
+                            <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: s.c, lineHeight: 1 }}>{s.v}</div>
+                            <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>{s.l}</div>
                           </div>
                         ))}
                       </div>
 
-                      {/* Barre de progression */}
-                      <div style={{ marginBottom: '10px' }}>
-                        <div style={{ height: '4px', background: 'rgba(255,255,255,0.07)', borderRadius: '99px', overflow: 'hidden', marginBottom: '6px' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#34D399' : `linear-gradient(90deg, ${cls.couleur || '#A78BFA'}, #34D399)`, borderRadius: '99px', transition: 'width 0.6s ease' }} />
+                      {/* Barre progression */}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ height: 4, background: 'rgba(15,35,65,0.08)', borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#34D399' : `linear-gradient(90deg, ${accent}, #34D399)`, borderRadius: 99, transition: 'width 0.6s ease' }} />
                         </div>
-                        {/* Message contextuel */}
                         {!cls.curriculum_charge ? (
-                          <div style={{ fontSize: '11px', color: '#F97316', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ fontSize: 11, color: '#F97316', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <span>⚠️</span><span>Charger le curriculum</span>
                           </div>
                         ) : lecons.length === 0 ? (
-                          <div style={{ fontSize: '11px', color: '#34D399', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ fontSize: 11, color: '#34D399', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <span>✓</span><span>Prêt à créer des leçons</span>
                           </div>
                         ) : (
-                          <div style={{ fontSize: '11px', color: 'var(--text-4)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <span>✓</span><span>{lecons.length} leçon{lecons.length !== 1 ? 's' : ''} planifiée{lecons.length !== 1 ? 's' : ''}</span>
                           </div>
                         )}
                       </div>
 
                       {/* Actions */}
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: 8 }}>
                         <button
-                          onClick={() => router.push(`/dashboard/classes/${cls.id}`)}
-                          style={{ flex: 1, padding: '8px 0', borderRadius: '8px', fontSize: '12px', fontWeight: 600, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-2)', cursor: 'pointer', transition: 'background 0.15s' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}>
+                          onClick={e => { e.stopPropagation(); router.push(`/dashboard/classes/${cls.id}`) }}
+                          style={{ flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(15,35,65,0.04)', border: '1px solid rgba(15,35,65,0.1)', color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>
                           📂 Ouvrir
                         </button>
                         <button
-                          onClick={() => router.push(`/dashboard/gerer/enseigner?classe=${cls.id}`)}
-                          style={{ flex: 1, padding: '8px 0', borderRadius: '8px', fontSize: '12px', fontWeight: 700, background: 'rgba(37,99,235,0.18)', border: '1px solid rgba(37,99,235,0.35)', color: '#60A5FA', cursor: 'pointer', transition: 'background 0.15s' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(37,99,235,0.28)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(37,99,235,0.18)')}>
+                          onClick={e => { e.stopPropagation(); router.push(`/dashboard/gerer/enseigner?classe=${cls.id}`) }}
+                          style={{ flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 12, fontWeight: 700, background: `${accent}18`, border: `1px solid ${accent}44`, color: accent, cursor: 'pointer', fontFamily: 'inherit' }}>
                           ▶ Enseigner
                         </button>
                       </div>

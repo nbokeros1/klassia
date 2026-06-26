@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import RichEditor from '@/components/RichEditor'
@@ -56,6 +56,16 @@ export default function LeconPage() {
   })
   const supabase = createClient()
   const router = useRouter()
+
+  const uploadImageFn = useCallback(async (file: File): Promise<string> => {
+    const nomNettoye = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const chemin = `${profil?.id || 'anon'}/images/${Date.now()}_${nomNettoye}`
+    const { error } = await supabase.storage.from('ressources').upload(chemin, file)
+    if (error) throw new Error('Erreur upload image')
+    const { data } = await supabase.storage.from('ressources').createSignedUrl(chemin, 60 * 60 * 24 * 365)
+    if (!data?.signedUrl) throw new Error('URL introuvable')
+    return data.signedUrl
+  }, [profil?.id, supabase])
   const params = useParams()
   const classeId = params.id as string
   const leconId = params.leconId as string
@@ -507,7 +517,7 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
 
           {/* ── Barre de l'éditeur partagée (sticky) ── */}
           <div style={{ position: 'sticky', top: 0, zIndex: 200, background: 'var(--surface-elevated, #0A1628)', borderBottom: '1px solid var(--border)' }}>
-            <EditorToolbar editor={editing ? activeEditor : null} />
+            <EditorToolbar editor={editing ? activeEditor : null} uploadImage={uploadImageFn} />
           </div>
 
           {/* ── Onglets Plan / Présentation + IA tools ── */}
@@ -605,7 +615,7 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
                     <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>pédagogique</div>
                   </td>
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: '#FFFFFF08' }}>
-                    <RichEditor value={form.intention} onChange={v => setForm({ ...form, intention: v })} rows={2} placeholder="Les élèves seront capables de..." disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} />
+                    <RichEditor value={form.intention} onChange={v => setForm({ ...form, intention: v })} rows={2} placeholder="Les élèves seront capables de..." disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} uploadImage={uploadImageFn} />
                   </td>
                   <td style={{ borderBottom: '1px solid var(--border)' }} />
                 </tr>
@@ -617,7 +627,7 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
                     <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>d'apprentissage</div>
                   </td>
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: '#FFFFFF08' }}>
-                    <RichEditor value={form.objectifs} onChange={v => setForm({ ...form, objectifs: v })} rows={3} placeholder="• Objectif 1&#10;• Objectif 2" disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} />
+                    <RichEditor value={form.objectifs} onChange={v => setForm({ ...form, objectifs: v })} rows={3} placeholder="• Objectif 1&#10;• Objectif 2" disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} uploadImage={uploadImageFn} />
                   </td>
                   <td style={{ borderBottom: '1px solid var(--border)' }} />
                 </tr>
@@ -641,7 +651,7 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
                     <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>mise en route</div>
                   </td>
                   <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'rgba(251,195,74,0.03)' }}>
-                    <RichEditor value={form.avant_amorce} onChange={v => setForm({ ...form, avant_amorce: v })} rows={4} placeholder="Question déclenchante, activité d'activation des connaissances..." disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} />
+                    <RichEditor value={form.avant_amorce} onChange={v => setForm({ ...form, avant_amorce: v })} rows={4} placeholder="Question déclenchante, activité d'activation des connaissances..." disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} uploadImage={uploadImageFn} />
                   </td>
                   <td style={{ borderBottom: '1px solid var(--border)' }} />
                 </tr>
@@ -670,7 +680,7 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
                       <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>{row.sub}</div>
                     </td>
                     <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'rgba(96,165,250,0.03)' }}>
-                      <RichEditor value={(form as any)[row.key]} onChange={v => setForm({ ...form, [row.key]: v })} rows={4} placeholder={row.ph} disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} />
+                      <RichEditor value={(form as any)[row.key]} onChange={v => setForm({ ...form, [row.key]: v })} rows={4} placeholder={row.ph} disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} uploadImage={uploadImageFn} />
                     </td>
                     <td style={{ borderBottom: '1px solid var(--border)' }} />
                   </tr>
@@ -699,7 +709,7 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
                       <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>{row.sub}</div>
                     </td>
                     <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'rgba(52,211,153,0.025)' }}>
-                      <RichEditor value={(form as any)[row.key]} onChange={v => setForm({ ...form, [row.key]: v })} rows={3} placeholder={row.ph} disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} />
+                      <RichEditor value={(form as any)[row.key]} onChange={v => setForm({ ...form, [row.key]: v })} rows={3} placeholder={row.ph} disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} uploadImage={uploadImageFn} />
                     </td>
                     <td style={{ borderBottom: '1px solid var(--border)' }} />
                   </tr>
@@ -723,7 +733,7 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
                       <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>{row.sub}</div>
                     </td>
                     <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: '#FFFFFF06' }}>
-                      <RichEditor value={(form as any)[row.key]} onChange={v => setForm({ ...form, [row.key]: v })} rows={3} placeholder={row.ph} disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} />
+                      <RichEditor value={(form as any)[row.key]} onChange={v => setForm({ ...form, [row.key]: v })} rows={3} placeholder={row.ph} disabled={!editing} showToolbar={false} lightBackground onFocus={setActiveEditor} uploadImage={uploadImageFn} />
                     </td>
                     <td style={{ borderBottom: '1px solid var(--border)' }} />
                   </tr>

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import LogoKlassIA from '@/components/ui/LogoKlassIA'
 
 const NAV = [
   { href: '/admin',             icon: '📊', label: 'Vue d\'ensemble' },
@@ -25,9 +26,9 @@ export default function AdminSidebar() {
     }}>
       {/* Logo */}
       <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: '-0.5px' }}>
-          <span style={{ background: 'linear-gradient(135deg,#FF6B35,#EF4444)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>K+</span>
-          <span style={{ color: 'rgba(255,255,255,0.6)', fontWeight: 400, fontSize: 13, marginLeft: 6 }}>Admin</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <LogoKlassIA variant="icone" taille={28} />
+          <span style={{ color: 'rgba(255,255,255,0.6)', fontWeight: 400, fontSize: 13 }}>Admin</span>
         </div>
         <div style={{ fontSize: 10, color: '#EF4444', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', marginTop: 3 }}>
           Panneau d'administration

@@ -18,8 +18,13 @@ interface CadenasForFaitProps {
   fonctionnalite: FonctionnaliteForfait
   forfait_actuel: ForfaitType
   children: React.ReactNode
-  /** Si true, affiche une bannière au lieu d'un overlay semi-transparent */
   mode?: 'overlay' | 'banniere'
+  /** Force le cadenas indépendamment du feature flag (ex: quota numérique atteint) */
+  bloque?: boolean
+  /** Message personnalisé affiché en titre de la modal quand bloque=true */
+  messageCustom?: string
+  /** Forfait recommandé quand bloque=true (par défaut : 'pro') */
+  forfait_cible?: ForfaitType
 }
 
 // ─── Couleurs par forfait ─────────────────────────────────────────────────────
@@ -38,18 +43,19 @@ function CadenasModal({
   forfait_actuel,
   forfaitRequis,
   onClose,
+  messageCustom,
 }: {
   fonctionnalite: FonctionnaliteForfait
   forfait_actuel: ForfaitType
   forfaitRequis: ForfaitType
   onClose: () => void
+  messageCustom?: string
 }) {
   const router    = useRouter()
   const colors    = FORFAIT_COLORS[forfaitRequis]
   const avantages = FORFAIT_AVANTAGES[forfaitRequis]
   const prix      = FORFAIT_PRIX[forfaitRequis]
   const label     = FORFAIT_LABELS[forfaitRequis]
-  const nomFonc   = FONCTIONNALITE_LABELS[fonctionnalite]
 
   return (
     <>
@@ -80,8 +86,8 @@ function CadenasModal({
         {/* En-tête */}
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginBottom: 6, lineHeight: 1.4 }}>
-            {nomFonc}
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginBottom: 6, lineHeight: 1.5 }}>
+            {messageCustom || FONCTIONNALITE_LABELS[fonctionnalite]}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
             Disponible avec KlassIA+{' '}
@@ -131,7 +137,7 @@ function CadenasModal({
             onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
             onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
-            Passer au {label} — {prix}/mois
+            Voir les forfaits — {label} dès {prix}/mois
           </button>
         ) : (
           <button
@@ -149,7 +155,7 @@ function CadenasModal({
           </button>
         )}
 
-        {/* Lien voir tous les forfaits */}
+        {/* Voir tous les forfaits */}
         <button
           onClick={() => { router.push('/dashboard/forfaits'); onClose() }}
           style={{
@@ -165,7 +171,7 @@ function CadenasModal({
           Voir tous les forfaits
         </button>
 
-        {/* Rester sur le forfait actuel */}
+        {/* Rester */}
         <button
           onClick={onClose}
           style={{
@@ -191,17 +197,23 @@ export default function CadenasForFait({
   forfait_actuel,
   children,
   mode = 'overlay',
+  bloque,
+  messageCustom,
+  forfait_cible,
 }: CadenasForFaitProps) {
   const { peutUtiliser, forfaitRequis } = useForfait(forfait_actuel)
   const [modalOpen, setModalOpen]       = useState(false)
 
-  // Si l'utilisateur a accès → afficher directement
-  if (peutUtiliser(fonctionnalite)) {
+  // Déterminer si le cadenas doit s'activer
+  const estBloque = bloque === true ? true : !peutUtiliser(fonctionnalite)
+
+  // Accès libre
+  if (!estBloque) {
     return <>{children}</>
   }
 
-  const requis = forfaitRequis(fonctionnalite)
-  const colors = FORFAIT_COLORS[requis]
+  const requis = forfait_cible ?? forfaitRequis(fonctionnalite)
+  const colors  = FORFAIT_COLORS[requis]
 
   // ── Mode bannière ──────────────────────────────────────────────────────────
   if (mode === 'banniere') {
@@ -223,10 +235,10 @@ export default function CadenasForFait({
           <span style={{ fontSize: 16 }}>🔒</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: colors.accent }}>
-              Fonctionnalité KlassIA+ {FORFAIT_LABELS[requis]}
+              {messageCustom ? 'Limite atteinte' : `Fonctionnalité KlassIA+ ${FORFAIT_LABELS[requis]}`}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-4)' }}>
-              {FONCTIONNALITE_LABELS[fonctionnalite]} · Cliquez pour débloquer
+              {messageCustom || `${FONCTIONNALITE_LABELS[fonctionnalite]} · Cliquez pour débloquer`}
             </div>
           </div>
           <span style={{
@@ -245,6 +257,7 @@ export default function CadenasForFait({
             fonctionnalite={fonctionnalite}
             forfait_actuel={forfait_actuel}
             forfaitRequis={requis}
+            messageCustom={messageCustom}
             onClose={() => setModalOpen(false)}
           />
         )}
@@ -259,7 +272,6 @@ export default function CadenasForFait({
         style={{ position: 'relative', display: 'contents' }}
         onClick={() => setModalOpen(true)}
       >
-        {/* Contenu grisé / inerte */}
         <div style={{
           position: 'relative',
           pointerEvents: 'none',
@@ -298,6 +310,7 @@ export default function CadenasForFait({
           fonctionnalite={fonctionnalite}
           forfait_actuel={forfait_actuel}
           forfaitRequis={requis}
+          messageCustom={messageCustom}
           onClose={() => setModalOpen(false)}
         />
       )}

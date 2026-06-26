@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { ForfaitType } from '@/lib/types/database'
+import { Z } from '@/lib/constants/z-index'
 
 function fmtTime(secs: number): string {
   const m = Math.floor(secs / 60).toString().padStart(2, '0')
@@ -242,7 +243,7 @@ export default function OutilsFlottant() {
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 18,
           boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
-          zIndex: 900,
+          zIndex: Z.panel_flottant,
           overflow: 'hidden',
           maxHeight: 'calc(100vh - 120px)',
           display: 'flex', flexDirection: 'column',
@@ -412,24 +413,27 @@ export default function OutilsFlottant() {
         </div>
       )}
 
-      {/* Bouton principal */}
-      <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 901 }}>
+      {/* Bouton principal — pill */}
+      <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: Z.bouton_flottant }}>
         {timerRunning && !timerPaused && (
-          <div style={{ position: 'absolute', inset: -4, borderRadius: '50%', border: '2px solid #A78BFA', animation: 'pulse-ring 1.8s ease-out infinite' }} />
+          <div style={{ position: 'absolute', inset: -4, borderRadius: 50, border: '2px solid #A78BFA', animation: 'pulse-ring 1.8s ease-out infinite', pointerEvents: 'none' }} />
         )}
         <button
           onClick={() => setOpen(o => !o)}
           style={{
-            width: 56, height: 56, borderRadius: '50%',
+            height: 46, padding: open ? '0 20px' : '0 20px 0 14px', borderRadius: 50,
             background: open ? 'linear-gradient(135deg, #4F46E5, #6B3FA0)' : 'linear-gradient(135deg, #6B3FA0, #7F77DD)',
             border: 'none', cursor: 'pointer',
             boxShadow: '0 4px 20px rgba(127,119,221,0.4)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 22, transition: 'all 0.2s', position: 'relative',
+            display: 'flex', alignItems: 'center', gap: 8,
+            color: '#fff', fontSize: 13, fontWeight: 700,
+            transition: 'all 0.2s', position: 'relative',
+            fontFamily: 'inherit', whiteSpace: 'nowrap' as const,
           }}
-          title="Outils du prof"
+          title={open ? undefined : 'Outils enseignant'}
         >
-          {open ? '×' : '🛠️'}
+          <span style={{ fontSize: open ? 20 : 18, lineHeight: 1 }}>{open ? '×' : '✨'}</span>
+          {!open && <span>Outils enseignant</span>}
           {badgeLabel && !open && (
             <div style={{ position: 'absolute', top: -6, right: -6, background: timerSecs < 60 ? '#EF4444' : '#6B3FA0', color: 'white', fontSize: 9, fontWeight: 800, padding: '2px 5px', borderRadius: 99, minWidth: 36, textAlign: 'center', border: '1.5px solid #0D1B2E', letterSpacing: '0.3px' }}>
               {badgeLabel}

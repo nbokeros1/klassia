@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getMaxTokens } from '@/lib/ia/get-max-tokens'
 
 export async function POST(request: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -27,47 +28,77 @@ export async function POST(request: Request) {
   const client = new Anthropic({ apiKey })
   const isFr   = (langue || 'fr') !== 'en'
 
-  const ctx = `
-Sujet : ${sujet}
-Niveau : ${niveau || 'non spécifié'}
-Matière : ${matiere || 'non spécifiée'}
-Durée typique : ${duree || 75} minutes
-Style pédagogique : ${profil.profil_ia?.style_peda || 'explicite'}
-`.trim()
+  const ctx = isFr
+    ? `Sujet : ${sujet}\nNiveau : ${niveau || 'non spécifié'}\nMatière : ${matiere || 'non spécifiée'}\nDurée : ${duree || 75} min\nStyle : ${(profil.profil_ia as any)?.style_peda || 'explicite'}`
+    : `Subject: ${sujet}\nLevel: ${niveau || 'unspecified'}\nSubject area: ${matiere || 'unspecified'}\nDuration: ${duree || 75} min`
 
-  // ── Helper : generate one item ────────────────────────────────────────────────
-  const gen = async (prompt: string, max = 2000): Promise<string> => {
+  // Helper : génère un élément simple
+  const gen = async (prompt: string, maxTokens: number): Promise<string> => {
     const msg = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: max,
+      max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }],
     })
     return (msg.content[0] as any).text || ''
   }
 
-  // ── 6 éléments en parallèle ───────────────────────────────────────────────────
-  const [plan, lecon, activite, quizRaw, devoir, corrige] = await Promise.all([
+  // ── Vague 1 : Plan seul (les autres en dépendent) ─────────────────────────
+  const plan = await gen(
+    isFr
+      ? `${ctx}\n\nGénère un plan de leçon structuré AVANT/PENDANT/APRÈS. Format HTML avec sections claires.`
+      : `${ctx}\n\nGenerate a structured lesson plan BEFORE/DURING/AFTER. HTML format.`,
+    getMaxTokens('plan_lecon')
+  )
 
-    // 1. Plan de leçon
-    gen(`${ctx}\n\nGénère un plan de leçon structuré AVANT/PENDANT/APRÈS pour ce sujet en ${isFr ? 'français' : 'anglais'}. Format HTML.`, 1800),
+  // ── Vague 2 : Éléments dépendants du plan, en parallèle ───────────────────
+  const planCtx = isFr
+    ? `${ctx}\n\nPlan de leçon de référence :\n${plan.replace(/<[^>]+>/g, ' ').substring(0, 800)}`
+    : `${ctx}\n\nReference lesson plan:\n${plan.replace(/<[^>]+>/g, ' ').substring(0, 800)}`
 
-    // 2. Leçon complète (5 étapes Bruner)
-    gen(`${ctx}\n\nGénère une leçon complète selon les 5 étapes de Bruner : Engagement, Exploration, Explication, Élaboration, Évaluation. Inclure activités et exemples. Format HTML.`, 3000),
+  const [lecon, activite, quizRaw, devoir] = await Promise.all([
 
-    // 3. Activité de groupe
-    gen(`${ctx}\n\nGénère une activité de groupe collaborative (3-4 étapes, matériel, rôles, consignes, variantes de différenciation). Format HTML.`, 1500),
+    // Leçon complète basée sur le plan
+    gen(
+      isFr
+        ? `${planCtx}\n\nGénère une leçon complète selon les 5 étapes de Bruner : Engagement, Exploration, Explication, Élaboration, Évaluation. Activités et exemples inclus. Format HTML.`
+        : `${planCtx}\n\nGenerate a complete lesson using Bruner's 5E model. Include activities and examples. HTML format.`,
+      getMaxTokens('lecon_complete')
+    ),
 
-    // 4. Quiz 10 questions JSON
-    gen(`${ctx}\n\nGénère un quiz de 10 questions à choix multiples (4 options chacune) avec le corrigé. Réponds UNIQUEMENT en JSON valide dans ce format: {"questions":[{"question":"...","options":["A","B","C","D"],"reponse_correcte":0,"explication":"..."}]}`, 2000),
+    // Activité de groupe
+    gen(
+      isFr
+        ? `${planCtx}\n\nGénère une activité de groupe collaborative (3-4 étapes, matériel, rôles, consignes, différenciation). Format HTML.`
+        : `${planCtx}\n\nGenerate a collaborative group activity (steps, materials, roles, instructions). HTML format.`,
+      getMaxTokens('activite_groupe')
+    ),
 
-    // 5. Devoir différencié
-    gen(`${ctx}\n\nGénère un devoir différencié avec 3 niveaux : Base, Intermédiaire, Enrichissement. Chaque niveau adapté à différents besoins. Format HTML.`, 1500),
+    // Quiz JSON
+    gen(
+      isFr
+        ? `${planCtx}\n\nGénère un quiz de 10 questions à choix multiples (4 options) avec corrigé. Réponds UNIQUEMENT en JSON valide :\n{"questions":[{"question":"...","options":["A","B","C","D"],"reponse_correcte":0,"explication":"..."}]}`
+        : `${planCtx}\n\nGenerate a 10-question multiple-choice quiz with answer key. Reply ONLY in valid JSON: {"questions":[{"question":"...","options":["A","B","C","D"],"reponse_correcte":0,"explication":"..."}]}`,
+      getMaxTokens('quiz')
+    ),
 
-    // 6. Corrigé complet
-    gen(`${ctx}\n\nGénère un corrigé complet et détaillé pour l'enseignant(e), incluant les réponses attendues, les indicateurs de réussite et les suggestions de rétroaction. Format HTML.`, 1500),
+    // Devoir différencié
+    gen(
+      isFr
+        ? `${planCtx}\n\nGénère un devoir différencié (3 niveaux : Base, Intermédiaire, Enrichissement). Format HTML.`
+        : `${planCtx}\n\nGenerate a differentiated homework (3 levels: Basic, Intermediate, Enrichment). HTML format.`,
+      getMaxTokens('devoir')
+    ),
   ])
 
-  // ── Parse quiz JSON ───────────────────────────────────────────────────────────
+  // ── Vague 3 : Corrigé basé sur quiz + devoir ──────────────────────────────
+  const corrige = await gen(
+    isFr
+      ? `${ctx}\n\nGénère un corrigé complet pour l'enseignant(e), incluant réponses attendues, indicateurs de réussite et suggestions de rétroaction. Basé sur ce devoir :\n${devoir.replace(/<[^>]+>/g, ' ').substring(0, 600)}\n\nFormat HTML.`
+      : `${ctx}\n\nGenerate a complete answer key with expected answers, success indicators, and feedback suggestions. HTML format.`,
+    getMaxTokens('evaluation')
+  )
+
+  // ── Parse quiz JSON ────────────────────────────────────────────────────────
   let quizJson: any = null
   try {
     const jsonMatch = quizRaw.match(/\{[\s\S]*\}/)
@@ -76,11 +107,10 @@ Style pédagogique : ${profil.profil_ia?.style_peda || 'explicite'}
     quizJson = null
   }
 
-  // ── Sauvegardes automatiques ──────────────────────────────────────────────────
+  // ── Sauvegardes automatiques ───────────────────────────────────────────────
   let quizId: string | null = null
   let activiteId: string | null = null
 
-  // Sauvegarder le quiz
   if (quizJson?.questions?.length) {
     const { data: newQuiz } = await supabase.from('quiz').insert({
       enseignant_id: profil.id,
@@ -92,7 +122,6 @@ Style pédagogique : ${profil.profil_ia?.style_peda || 'explicite'}
     quizId = newQuiz?.id || null
   }
 
-  // Sauvegarder l'activité
   try {
     const { data: newActivite } = await supabase.from('activites').insert({
       enseignant_id: profil.id,
@@ -107,7 +136,7 @@ Style pédagogique : ${profil.profil_ia?.style_peda || 'explicite'}
     activiteId = null
   }
 
-  // ── BLOC 13 — Tâche auto après kit complet ────────────────────────────────────
+  // ── BLOC 13 — Tâche auto après kit complet ────────────────────────────────
   try {
     const nbEleves   = (body.nb_eleves as number) || (profil.profil_ia as any)?.groupes_typiques || 25
     const datePrevue = body.date_prevue as string | undefined
@@ -124,7 +153,7 @@ Style pédagogique : ${profil.profil_ia?.style_peda || 'explicite'}
     } as any)
   } catch { /* non-bloquant */ }
 
-  // ── Réponse ───────────────────────────────────────────────────────────────────
+  // ── Réponse ───────────────────────────────────────────────────────────────
   return NextResponse.json({
     kit_id:          `kit_${Date.now()}`,
     lecon_id:        lecon_id || null,

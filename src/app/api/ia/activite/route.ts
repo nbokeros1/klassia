@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
+import { getMaxTokens } from '@/lib/ia/get-max-tokens'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,9 +138,16 @@ Format HTML propre.`
       : `Generate ${typeLabel[type as TypeActivite] || 'an activity'} for this lesson.\n\n${classeCtx}${contenuCtx}`
 
     // ── Appel Claude ─────────────────────────────────────────────────────────
+    const typeToKey: Record<string, string> = {
+      formative:  'evaluation',
+      sommative:  'evaluation',
+      groupe:     'activite_groupe',
+      nuage_mots: 'nuage_mots',
+      devoir:     'devoir',
+    }
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: getMaxTokens(typeToKey[type] ?? 'activite_groupe'),
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })

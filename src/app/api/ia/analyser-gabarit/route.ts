@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
+import { getMaxTokens } from '@/lib/ia/get-max-tokens'
 
 export async function POST(request: Request) {
   const { error, session } = await requireAuth()
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
 
     const msg = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
+      max_tokens: getMaxTokens('analyser_gabarit'),
       messages: [{
         role: 'user',
         content: `Analyse ce gabarit de leçon et décris sa structure pédagogique.

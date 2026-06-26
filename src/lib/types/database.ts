@@ -59,12 +59,20 @@ export type Utilisateur = {
   onboarding_complete: boolean
   // ── Champs migration 007 ──────────────────────────────────────────────────
   is_admin?: boolean
+  role_admin?: 'super_admin' | 'support' | 'developpeur' | null
   onboarding_etape?: number
   onboarding_complete_v2?: boolean
   gabarit_lecon_url?: string
   gabarit_lecon_analyse?: string
   menus_debloque?: MenuDebloque[]
   forfait?: ForfaitType
+  // ── Champs migration 016 ──────────────────────────────────────────────────
+  palier_scolaire?: 'primaire' | 'secondaire'
+  pays?: string
+  generations_ia_total_a_vie?: number
+  generations_ia_mois_courant?: number
+  derniere_reinit_quota?: string
+  onboarding_cascade_complete?: boolean
   created_at: string
 }
 
@@ -211,6 +219,7 @@ export type Lecon = {
   statut: StatutLecon
   type_document?: TypeDocument
   contenu_json: ContenuLecon
+  hors_quota?: boolean
   created_at: string
   updated_at: string
 }
@@ -380,7 +389,7 @@ export type TypeDossier =
   | 'preparation' | 'curriculum' | 'plan_annuel' | 'plans_lecons'
   | 'sequence'    | 'lecons'     | 'lecon'       | 'evaluations_sommatives'
   | 'eleves'      | 'ressources' | 'administration' | 'parents'
-  | 'evenements'  | 'custom'
+  | 'evenements'  | 'custom'    | 'matiere'
 
 export type TypeFichier =
   | 'plan_lecon' | 'lecon_complete' | 'sequence'    | 'curriculum'
@@ -426,7 +435,7 @@ export type FichierDossier = {
 
 // ─── Calendrier enrichi ───────────────────────────────────────────────────────
 
-export type TypeEvenement = 'lecon' | 'evaluation' | 'sortie' | 'reunion' | 'conge' | 'autre'
+export type TypeEvenement = 'lecon' | 'evaluation' | 'sortie' | 'reunion' | 'conge' | 'autre' | 'calendrier_scolaire'
 
 export type EvenementCalendrier = {
   id: string
@@ -673,5 +682,17 @@ export type StatsPlateforme = {
   nb_conversions_pro: number
   nb_conversions_proplus: number
   mrr_usd: number
+  created_at: string
+}
+
+// ─── Impersonation admin ───────────────────────────────────────────────────────
+
+export type SessionImpersonation = {
+  id: string
+  admin_id: string
+  enseignant_id: string
+  debut_session: string
+  fin_session: string | null
+  raison: string | null
   created_at: string
 }

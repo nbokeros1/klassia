@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS fichiers_dossier (
 ALTER TABLE dossiers_systeme ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fichiers_dossier ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "user_own_dossiers_systeme" ON dossiers_systeme;
 CREATE POLICY "user_own_dossiers_systeme"
   ON dossiers_systeme FOR ALL
   USING (enseignant_id IN (
@@ -73,6 +74,7 @@ CREATE POLICY "user_own_dossiers_systeme"
     SELECT id FROM utilisateurs WHERE user_id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "user_own_fichiers_dossier" ON fichiers_dossier;
 CREATE POLICY "user_own_fichiers_dossier"
   ON fichiers_dossier FOR ALL
   USING (enseignant_id IN (

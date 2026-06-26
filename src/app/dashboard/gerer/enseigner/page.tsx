@@ -4,9 +4,11 @@ import { useEffect, useState, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
+import Topbar from '@/components/Topbar'
 import LoadingScreen from '@/components/LoadingScreen'
 import { useForfait } from '@/lib/hooks/useForfait'
 import type { ForfaitType } from '@/lib/types/database'
+import OutilCard from '@/components/ui/OutilCard'
 
 // ─── Timer ────────────────────────────────────────────────────────────────────
 
@@ -125,30 +127,27 @@ function EnseignerPageInner() {
   return (
     <div className="app-layout">
       <style>{`
-        .outil-tile { padding:20px 14px; border-radius:13px; border:1.5px solid rgba(255,255,255,0.07); background:rgba(255,255,255,0.02); cursor:pointer; text-align:center; transition:all 0.18s; }
-        .outil-tile:hover:not(.locked) { border-color:rgba(255,255,255,0.18); background:rgba(255,255,255,0.05); transform:translateY(-2px); }
-        .outil-tile.active { border-color:#A78BFA; background:rgba(167,139,250,0.08); }
-        .outil-tile.locked { opacity:0.5; cursor:default; }
-        .lecon-card { padding:0; border-radius:14px; border:1.5px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.02); overflow:hidden; margin-bottom:20px; }
-        .fichier-pill { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.07); background:rgba(255,255,255,0.02); font-size:12px; color:var(--text-2); transition:background 0.12s; }
-        .fichier-pill:hover { background:rgba(255,255,255,0.06); }
+        .lecon-card { padding:0; border-radius:14px; border:1px solid var(--card-border-light); background:var(--card-bg-light); overflow:hidden; margin-bottom:20px; }
+        .fichier-pill { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; border:1px solid rgba(15,35,65,0.08); background:rgba(255,255,255,0.6); font-size:12px; color:var(--text-secondary); transition:background 0.12s; }
+        .fichier-pill:hover { background:rgba(255,255,255,0.9); }
       `}</style>
 
       <Sidebar profil={profil} activeHref="/dashboard/gerer/enseigner" onLogout={handleLogout} />
 
       <div className="main-content">
-        <div className="topbar">
-          <div>
-            <div className="topbar-title">▶ Enseigner</div>
-            <div className="topbar-sub">Leçon active · Outils</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <label style={{ fontSize: 12, color: 'var(--text-4)' }}>Classe :</label>
-            <select value={classeId} onChange={e => setClasseId(e.target.value)}
-              style={{ padding: '7px 12px', borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-1)', fontSize: 13, outline: 'none' }}>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
-            </select>
-          </div>
+        <Topbar
+          classeActive={classes.find(c => c.id === classeId)?.nom}
+          initiales={`${profil?.prenom?.[0] || ''}${profil?.nom?.[0] || ''}`.toUpperCase() || '?'}
+          isFr={profil?.langue_interface !== 'en'}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 24px', borderBottom: '1px solid rgba(15,35,65,0.08)', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)' }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>▶ Enseigner</span>
+          <div style={{ flex: 1 }} />
+          <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Classe :</label>
+          <select value={classeId} onChange={e => setClasseId(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(15,35,65,0.1)', color: 'var(--text-primary)', fontSize: 12, outline: 'none', fontFamily: 'inherit' }}>
+            {classes.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+          </select>
         </div>
 
         <div className="page-content fade-in" style={{ maxWidth: 960 }}>
@@ -219,17 +218,19 @@ function EnseignerPageInner() {
 
           {/* ── Section 3 : Outils d'enseignement ──────────────────────── */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)', marginBottom: 12 }}>🛠️ Outils d&apos;enseignement</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>🛠️ Outils d&apos;enseignement</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
               {OUTILS.map(outil => (
-                <div key={outil.id}
-                  className={`outil-tile ${toolActive === outil.id ? 'active' : ''} ${outil.locked ? 'locked' : ''}`}
-                  onClick={() => !outil.locked && setToolActive(t => t === outil.id ? null : outil.id)}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>{outil.icon}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 3 }}>{outil.label}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-4)', marginBottom: outil.locked ? 6 : 0 }}>{outil.desc}</div>
-                  {outil.locked && <div style={{ fontSize: 9, color: '#A78BFA', fontWeight: 700 }}>🔒 Pro+</div>}
-                </div>
+                <OutilCard
+                  key={outil.id}
+                  icone={outil.icon}
+                  titre={outil.label}
+                  description={outil.desc}
+                  badge={outil.locked ? 'Pro+' : null}
+                  active={toolActive === outil.id}
+                  disabled={outil.locked}
+                  onClick={() => setToolActive(t => t === outil.id ? null : outil.id)}
+                />
               ))}
             </div>
 

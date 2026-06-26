@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
+  <defs>
+    <radialGradient id="m" cx="32%" cy="25%" r="75%">
+      <stop offset="0%"   stop-color="#7DD3FC" />
+      <stop offset="28%"  stop-color="#2563EB" />
+      <stop offset="65%"  stop-color="#1D4ED8" />
+      <stop offset="100%" stop-color="#0B2654" />
+    </radialGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="white" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="white" stop-opacity="0"    />
+    </linearGradient>
+    <linearGradient id="kc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#DBEAFE" />
+    </linearGradient>
+    <linearGradient id="kf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#EFF6FF" />
+      <stop offset="100%" stop-color="#93C5FD" />
+    </linearGradient>
+    <clipPath id="cc">
+      <circle cx="50" cy="50" r="47" />
+    </clipPath>
+  </defs>
+
+  <!-- Fond médaillon -->
+  <circle cx="50" cy="50" r="48" fill="url(#m)" />
+
+  <!-- K + reflet glass, clipés -->
+  <g clip-path="url(#cc)">
+    <polygon points="26,18 40,18 40,82 26,82"  fill="url(#kc)" />
+    <polygon points="40,38 40,50 75,26 75,18"  fill="url(#kf)" />
+    <polygon points="40,38 75,18 75,20 40,40"  fill="url(#kc)" opacity="0.85" />
+    <polygon points="40,50 40,62 75,82 75,74"  fill="url(#kf)" />
+    <ellipse cx="38" cy="28" rx="22" ry="11"   fill="url(#g)" transform="rotate(-18 38 28)" />
+  </g>
+
+  <!-- Badge + violet -->
+  <circle cx="84" cy="18" r="14" fill="#000" opacity="0.25" />
+  <circle cx="84" cy="18" r="12" fill="#7C3AED" />
+  <line x1="84" y1="12.5" x2="84" y2="23.5" stroke="white" stroke-width="2.8" stroke-linecap="round" />
+  <line x1="78.5" y1="18" x2="89.5" y2="18" stroke="white" stroke-width="2.8" stroke-linecap="round" />
+</svg>

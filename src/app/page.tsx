@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import LogoKlassIA from '@/components/ui/LogoKlassIA'
 
 const TEMOIGNAGES = [
   {
@@ -268,17 +269,8 @@ export default function LandingPage() {
         borderBottom: navScrolled ? '1px solid rgba(255,255,255,0.07)' : 'none',
         transition: 'all 0.3s ease',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '32px', height: '32px',
-            background: 'linear-gradient(135deg, #1B3F6E, #7C3AED)',
-            borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '15px', fontWeight: 800, color: 'white',
-            boxShadow: '0 0 20px rgba(124,58,237,0.5)',
-          }}>K</div>
-          <span style={{ fontSize: '18px', fontWeight: 700, color: 'white', letterSpacing: '-0.3px' }}>
-            Klass<span style={{ color: '#A78BFA' }}>IA</span>
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <LogoKlassIA variant="horizontal" taille={32} />
         </div>
 
         <div style={{ display: 'flex', gap: '32px' }}>
@@ -596,20 +588,11 @@ export default function LandingPage() {
 
             <div style={{ position: 'relative', zIndex: 1, maxWidth: '1400px', margin: '0 auto' }}>
               {/* En-tête */}
-              <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', padding: '5px 16px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '16px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', padding: '5px 16px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase' }}>
                   <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: s.accent, display: 'inline-block', transition: 'background 0.4s' }} />
                   {isFr ? 'Découvrir KlassIA+' : 'Explore KlassIA+'}
                 </div>
-                <h1 style={{ fontSize: '52px', fontWeight: 900, color: 'white', letterSpacing: '-2px', lineHeight: 1.1, marginBottom: '12px' }}>
-                  {isFr ? 'Une plateforme éducative ' : 'One educational platform '}
-                  <span style={{ background: `linear-gradient(135deg, ${s.accent}, #ffffff90)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                    {isFr ? 'tout en un.' : 'all-in-one.'}
-                  </span>
-                </h1>
-                <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.35)', maxWidth: '560px', margin: '0 auto', lineHeight: 1.7 }}>
-                  {isFr ? "De la préparation à l'évaluation, KlassIA+ couvre tout le cycle pédagogique." : 'From preparation to assessment, KlassIA+ covers the full pedagogical cycle.'}
-                </p>
               </div>
 
               {/* Tabs */}
@@ -969,9 +952,8 @@ export default function LandingPage() {
 
       {/* ── FOOTER ── */}
       <footer style={{ background: '#02060F', padding: '28px 48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '28px', height: '28px', background: 'linear-gradient(135deg, #1B3F6E, #7C3AED)', borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'white' }}>K</div>
-          <span style={{ fontSize: '16px', fontWeight: 700, color: 'white' }}>Klass<span style={{ color: '#7C3AED' }}>IA</span></span>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <LogoKlassIA variant="horizontal" taille={24} />
         </div>
         <div style={{ display: 'flex', gap: '28px' }}>
           {t.footer_links.map((l, i) => (

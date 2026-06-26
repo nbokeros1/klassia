@@ -33,9 +33,10 @@ const TYPE_COLOR: Record<string, string> = {
 }
 
 export default function AdminUtilisateurs() {
-  const { profil, loading: authLoading, logout } = useAuth()
+  const { profil, loading: authLoading, logout, isAdmin, demarrerImpersonation } = useAuth()
   const router = useRouter()
   const supabase = createClient()
+  const [impersonLoading, setImpersonLoading] = useState<string | null>(null)
 
   const [users,    setUsers]    = useState<Utilisateur[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -45,15 +46,15 @@ export default function AdminUtilisateurs() {
   const [saving,   setSaving]   = useState(false)
   const [sortBy,   setSortBy]   = useState<'date' | 'nom' | 'activite'>('date')
 
-  // Guard admin
+  // Guard admin — is_admin OU type_compte admin
   useEffect(() => {
-    if (!authLoading && profil && profil.type_compte !== 'admin') {
+    if (!authLoading && profil && !isAdmin) {
       router.push('/dashboard')
     }
-  }, [profil, authLoading, router])
+  }, [profil, authLoading, isAdmin, router])
 
   useEffect(() => {
-    if (!profil || profil.type_compte !== 'admin') return
+    if (!profil || !isAdmin) return
     const load = async () => {
       const { data: users } = await supabase
         .from('utilisateurs')
@@ -86,7 +87,7 @@ export default function AdminUtilisateurs() {
   }
 
   if (authLoading || loading) return <LoadingScreen />
-  if (!profil || profil.type_compte !== 'admin') return null
+  if (!profil || !isAdmin) return null
 
   const filtered = users
     .filter(u => {
@@ -171,7 +172,7 @@ export default function AdminUtilisateurs() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                  {['Utilisateur', 'Email', 'École', 'Type', 'Province', 'Onboarding', 'Classes', 'Leçons', 'Générations IA', 'Inscrit le'].map(h => (
+                  {['Utilisateur', 'Email', 'École', 'Type', 'Province', 'Onboarding', 'Classes', 'Leçons', 'Générations IA', 'Inscrit le', 'Action'].map(h => (
                     <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-5)', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -219,6 +220,34 @@ export default function AdminUtilisateurs() {
                     <td style={{ padding: '10px 12px', color: '#FCD34D', fontWeight: 700, textAlign: 'center' }}>{u._nb_generations}</td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-5)', whiteSpace: 'nowrap' }}>
                       {new Date(u.created_at).toLocaleDateString('fr-CA')}
+                    </td>
+                    <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                      {u.type_compte !== 'admin' && (
+                        <button
+                          disabled={!!impersonLoading}
+                          onClick={async () => {
+                            setImpersonLoading(u.id)
+                            try { await demarrerImpersonation(u.id) }
+                            catch (err: any) {
+                              alert(err.message || 'Erreur impersonation')
+                              setImpersonLoading(null)
+                            }
+                          }}
+                          style={{
+                            padding: '3px 10px',
+                            borderRadius: 6,
+                            border: '1px solid rgba(96,165,250,0.35)',
+                            background: impersonLoading === u.id ? 'rgba(96,165,250,0.05)' : 'rgba(96,165,250,0.12)',
+                            color: '#60A5FA',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: impersonLoading ? 'not-allowed' : 'pointer',
+                            fontFamily: 'inherit',
+                          }}
+                        >
+                          {impersonLoading === u.id ? '…' : '👁 Voir comme'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

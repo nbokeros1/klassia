@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getMaxTokens } from '@/lib/ia/get-max-tokens'
 
 const CURRICULA_CONTEXT: Record<string, string> = {
   quebec:      'Programme de formation de l\'école québécoise (PFEQ/MEES). Compétences transversales, domaines d\'apprentissage, progression des apprentissages.',
@@ -95,7 +96,7 @@ Same JSON structure but in English.`
 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
+      max_tokens: getMaxTokens('curriculum'),
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })

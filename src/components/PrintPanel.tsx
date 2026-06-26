@@ -68,6 +68,61 @@ function htmlToLines(html: string): string[] {
   return text.split('\n').map(s => s.trim()).filter(Boolean)
 }
 
+// Convertit les tableaux Markdown pipe (| col | col |) en HTML <table> avec bordures visibles
+function renderContent(text: string): string {
+  if (!text) return text
+  // Si déjà du HTML, retourner tel quel
+  if (/<[a-z][\s\S]*>/i.test(text)) return text
+
+  const lines = text.split('\n')
+  const out: string[] = []
+  let tableRows: string[][] = []
+  let isFirstRow = true
+
+  const flushTable = () => {
+    if (!tableRows.length) return
+    out.push('<table style="width:100%;border-collapse:collapse;margin:6px 0;font-size:9.5pt">')
+    tableRows.forEach((cells, idx) => {
+      out.push('<tr>')
+      cells.forEach(cell => {
+        const tag = idx === 0 ? 'th' : 'td'
+        const style = idx === 0
+          ? 'padding:5px 8px;border:1px solid #D1D5DB;background:#F3F4F6;font-weight:700;text-align:left'
+          : 'padding:5px 8px;border:1px solid #D1D5DB;vertical-align:top'
+        const content = cell.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>')
+        out.push(`<${tag} style="${style}">${content}</${tag}>`)
+      })
+      out.push('</tr>')
+    })
+    out.push('</table>')
+    tableRows = []
+    isFirstRow = true
+  }
+
+  for (const line of lines) {
+    const t = line.trim()
+    if (t.startsWith('|')) {
+      if (/^\|[\s|:-]+\|$/.test(t)) continue // ligne séparateur ---
+      const cells = t.split('|').filter((_, i, a) => i > 0 && i < a.length - 1).map(c => c.trim())
+      tableRows.push(cells)
+    } else {
+      if (tableRows.length) flushTable()
+      // Markdown de base → HTML
+      let html = t
+        .replace(/^### (.+)$/, '<h3 style="font-size:10pt;font-weight:700;margin:6px 0 2px">$1</h3>')
+        .replace(/^## (.+)$/, '<h2 style="font-size:11pt;font-weight:700;margin:8px 0 3px;color:#374151">$1</h2>')
+        .replace(/^# (.+)$/, '<h1 style="font-size:13pt;font-weight:800;margin:10px 0 4px">$1</h1>')
+        .replace(/^[-•] (.+)$/, '<li style="margin:2px 0;margin-left:14px">$1</li>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      if (html === '') html = '<br>'
+      out.push(html)
+    }
+  }
+  if (tableRows.length) flushTable()
+  return out.join('\n')
+}
+
 // ─── PrintPanel ───────────────────────────────────────────────────────────────
 
 export default function PrintPanel({ open, onClose, lecon, classe, profil, form }: Props) {
@@ -129,7 +184,8 @@ export default function PrintPanel({ open, onClose, lecon, classe, profil, form 
       apres_materiel:         form.materiel,
       apres_temps:            `${form.apres_duree} min`,
     }
-    return map[id] ?? cj[id] ?? ''
+    const raw = map[id] ?? cj[id] ?? ''
+    return renderContent(raw)
   }
 
   const hasContent = (id: string) => {

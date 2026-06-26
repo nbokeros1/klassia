@@ -4,6 +4,11 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'KlassIA+ — Plateforme pédagogique IA',
   description: 'KlassIA+ aide les enseignants canadiens à préparer leurs leçons avec l\'IA',
+  icons: {
+    icon:     [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg',
+    apple:    '/favicon.svg',
+  },
 }
 
 export default function RootLayout({

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/api-auth'
+import { getMaxTokens } from '@/lib/ia/get-max-tokens'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -199,7 +200,7 @@ Suggested duration: true_false = 10-15s, mcq = 20-30s, short_answer = 30-45s`
     try {
       const message = await client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
+        max_tokens: getMaxTokens('quiz'),
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       })

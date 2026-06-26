@@ -1,6 +1,6 @@
 'use client'
 
-import type { ForfaitType } from '@/lib/types/database'
+import type { ForfaitType, Utilisateur } from '@/lib/types/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,28 +91,140 @@ export const FORFAIT_LABELS: Record<ForfaitType, string> = {
 
 export const FORFAIT_AVANTAGES: Record<ForfaitType, string[]> = {
   gratuit: [
-    '3 classes · 5 leçons par classe',
-    '10 générations IA par mois',
+    '1 classe · 5 générations IA à vie',
     'Export PDF basique',
+    'Agenda intelligent',
   ],
   pro: [
-    'Classes et leçons illimitées',
-    'Génération IA illimitée + leçon complète Bruner',
+    '8 classes maximum',
+    '75 générations IA par mois',
     'Export Word & PowerPoint',
     'Programme annuel IA · Timer · Sondage QR · TBI',
   ],
   pro_plus: [
-    'Tout Pro +',
+    'Classes illimitées · Générations IA illimitées',
     'Quiz interactif en direct (Kahoot-style)',
     'Communauté d\'enseignants · Partage de ressources',
     'Collaboration en temps réel + ressources premium',
   ],
   institution: [
-    'Tout Pro+ +',
+    'Tout Pro+ inclus',
     'Licences multi-enseignants pour toute l\'école',
     'Tableau de bord administrateur (analytics)',
     'Déploiement personnalisé + support dédié',
   ],
+}
+
+// ─── Limites numériques réelles par forfait ───────────────────────────────────
+
+export type LimiteForfait = {
+  generations_quota_type: 'a_vie' | 'mensuel' | 'illimite'
+  generations_quota_max:  number | null
+  classes_max:            number | null
+  matieres_par_classe_max: (palier: 'primaire' | 'secondaire' | undefined) => number | null
+}
+
+export const LIMITES_FORFAIT: Record<ForfaitType, LimiteForfait> = {
+  gratuit: {
+    generations_quota_type:  'a_vie',
+    generations_quota_max:   5,
+    classes_max:             1,
+    matieres_par_classe_max: (palier) => palier === 'secondaire' ? 1 : null,
+  },
+  pro: {
+    generations_quota_type:  'mensuel',
+    generations_quota_max:   75,
+    classes_max:             8,
+    matieres_par_classe_max: () => null,
+  },
+  pro_plus: {
+    generations_quota_type:  'illimite',
+    generations_quota_max:   null,
+    classes_max:             null,
+    matieres_par_classe_max: () => null,
+  },
+  institution: {
+    generations_quota_type:  'illimite',
+    generations_quota_max:   null,
+    classes_max:             null,
+    matieres_par_classe_max: () => null,
+  },
+}
+
+// ─── Fonctions de vérification exportées ─────────────────────────────────────
+
+export function peutGenererContenu(
+  profil: Pick<Utilisateur,
+    'forfait' | 'is_admin' | 'generations_ia_total_a_vie' |
+    'generations_ia_mois_courant' | 'derniere_reinit_quota'
+  >,
+): { autorise: boolean; raison?: string } {
+  if (profil.is_admin) return { autorise: true }
+
+  const forfait = profil.forfait || 'gratuit'
+  const limites = LIMITES_FORFAIT[forfait]
+
+  if (limites.generations_quota_type === 'illimite') return { autorise: true }
+
+  if (limites.generations_quota_type === 'a_vie') {
+    const total = profil.generations_ia_total_a_vie ?? 0
+    const max   = limites.generations_quota_max!
+    if (total >= max) {
+      return {
+        autorise: false,
+        raison: `Vous avez utilisé vos ${max} générations gratuites.`,
+      }
+    }
+    return { autorise: true }
+  }
+
+  // mensuel — vérifier si le cycle de 30 jours a expiré
+  if (limites.generations_quota_type === 'mensuel') {
+    const max             = limites.generations_quota_max!
+    const derniereReinit  = profil.derniere_reinit_quota
+      ? new Date(profil.derniere_reinit_quota)
+      : new Date(0)
+    const maintenant      = new Date()
+    const joursEcoules    = (maintenant.getTime() - derniereReinit.getTime()) / (1000 * 60 * 60 * 24)
+
+    // Si plus de 30 jours, le compteur doit être réinitialisé côté serveur avant de continuer
+    // (la réinit est faite dans la route API après vérification)
+    const compteur = joursEcoules >= 30 ? 0 : (profil.generations_ia_mois_courant ?? 0)
+    if (compteur >= max) {
+      return {
+        autorise: false,
+        raison: `Vous avez atteint la limite de ${max} générations ce mois-ci.`,
+      }
+    }
+    return { autorise: true }
+  }
+
+  return { autorise: true }
+}
+
+export function peutCreerClasse(
+  profil: Pick<Utilisateur, 'forfait' | 'is_admin'>,
+  nbClassesActuelles: number,
+): boolean {
+  if (profil.is_admin) return true
+  const forfait = profil.forfait || 'gratuit'
+  const max     = LIMITES_FORFAIT[forfait].classes_max
+  if (max === null) return true
+  // Bloquer uniquement la création d'une nouvelle classe au-delà de la limite.
+  // Les classes déjà existantes au-delà (cas grandfathering) ne sont pas supprimées.
+  return nbClassesActuelles < max
+}
+
+export function peutAjouterMatiere(
+  profil: Pick<Utilisateur, 'forfait' | 'is_admin' | 'palier_scolaire'>,
+  nbMatieresActuelles: number,
+): boolean {
+  if (profil.is_admin) return true
+  const forfait = profil.forfait || 'gratuit'
+  const palier  = profil.palier_scolaire
+  const max     = LIMITES_FORFAIT[forfait].matieres_par_classe_max(palier)
+  if (max === null) return true
+  return nbMatieresActuelles < max
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

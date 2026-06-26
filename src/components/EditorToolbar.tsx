@@ -45,9 +45,9 @@ const HIGHLIGHT_COLORS = [
 
 type PanelId = 'math'|'science'|'callout'|'color'|'highlight'|'table'|'image'|'video'|'link'|'schemas'|null
 
-interface Props { editor: Editor | null; matiereClasse?: string }
+interface Props { editor: Editor | null; matiereClasse?: string; uploadImage?: (file: File) => Promise<string> }
 
-export default function EditorToolbar({ editor, matiereClasse }: Props) {
+export default function EditorToolbar({ editor, matiereClasse, uploadImage }: Props) {
   const [panel, setPanel] = useState<PanelId>(null)
   const [schemasOpen, setSchemasOpen] = useState(false)
   const [mathCat, setMathCat]     = useState(0)
@@ -94,15 +94,24 @@ export default function EditorToolbar({ editor, matiereClasse }: Props) {
     setImageUrl(''); setImageAlt(''); setPanel(null)
   }
 
-  const insertImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const insertImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const src = ev.target?.result as string
-      editor?.chain().focus().setImage({ src, alt: file.name }).run()
-      setPanel(null)
+    e.target.value = ''
+    setPanel(null)
+    if (uploadImage) {
+      try {
+        const src = await uploadImage(file)
+        editor?.chain().focus().setImage({ src, alt: file.name }).run()
+      } catch {
+        const reader = new FileReader()
+        reader.onload = ev => editor?.chain().focus().setImage({ src: ev.target?.result as string, alt: file.name }).run()
+        reader.readAsDataURL(file)
+      }
+    } else {
+      const reader = new FileReader()
+      reader.onload = ev => editor?.chain().focus().setImage({ src: ev.target?.result as string, alt: file.name }).run()
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
   }
 
   const getYoutubeEmbed = (url: string) => {

@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
+import Topbar from '@/components/Topbar'
 import LoadingScreen from '@/components/LoadingScreen'
+import ModalUploadEmploiDuTemps from '@/components/calendrier/ModalUploadEmploiDuTemps'
+import ModalUploadCalendrier from '@/components/calendrier/ModalUploadCalendrier'
 
 const JOURS_SEMAINE     = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi']
 const JOURS_SEMAINE_7   = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
@@ -13,41 +16,96 @@ const MOIS_NOMS         = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin'
 const HEURES            = ['8:00', '9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00']
 const HEURES_ETENDUES   = ['7:00', '8:00', '9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']
 
-const HOLIDAYS: { date: string; titre: string; type: 'ferie' | 'scolaire' | 'fete' }[] = [
-  { date: '2025-09-02', titre: 'Rentrée scolaire',         type: 'scolaire' },
-  { date: '2025-09-01', titre: 'Fête du travail',           type: 'ferie'   },
-  { date: '2025-10-13', titre: 'Action de grâce',           type: 'ferie'   },
-  { date: '2025-10-31', titre: 'Halloween',                  type: 'fete'    },
-  { date: '2025-11-11', titre: 'Jour du Souvenir',           type: 'ferie'   },
-  { date: '2025-12-25', titre: 'Noël',                       type: 'ferie'   },
-  { date: '2025-12-26', titre: 'Boxing Day',                 type: 'ferie'   },
-  { date: '2025-12-22', titre: 'Vacances de Noël',           type: 'scolaire' },
-  { date: '2026-01-01', titre: "Jour de l'An",               type: 'ferie'   },
-  { date: '2026-01-05', titre: 'Retour en classe',           type: 'scolaire' },
-  { date: '2026-02-14', titre: 'Saint-Valentin',             type: 'fete'    },
-  { date: '2026-02-16', titre: 'Début relâche scolaire',     type: 'scolaire' },
-  { date: '2026-02-20', titre: 'Fin relâche scolaire',       type: 'scolaire' },
-  { date: '2026-03-17', titre: 'Saint-Patrick',              type: 'fete'    },
-  { date: '2026-04-03', titre: 'Vendredi Saint',             type: 'ferie'   },
-  { date: '2026-04-05', titre: 'Pâques',                     type: 'fete'    },
-  { date: '2026-04-06', titre: 'Lundi de Pâques',            type: 'ferie'   },
-  { date: '2026-05-18', titre: 'Journée des Patriotes',      type: 'ferie'   },
-  { date: '2026-06-21', titre: 'Fête nationale autochtone',  type: 'fete'    },
-  { date: '2026-06-24', titre: 'Fête nationale du Québec',   type: 'ferie'   },
-  { date: '2026-06-26', titre: "Fin d'année scolaire",       type: 'scolaire' },
-  { date: '2026-07-01', titre: 'Fête du Canada',             type: 'ferie'   },
-]
+type JourFerie = { date: string; titre: string; type: 'ferie' | 'scolaire' | 'fete' }
+
+const JOURS_FERIES: Record<string, Record<string, JourFerie[]>> = {
+  Canada: {
+    default: [
+      // Fériés fédéraux
+      { date: '2025-09-01', titre: 'Fête du travail',          type: 'ferie' },
+      { date: '2025-10-13', titre: 'Action de grâce',          type: 'ferie' },
+      { date: '2025-11-11', titre: 'Jour du Souvenir',         type: 'ferie' },
+      { date: '2025-12-25', titre: 'Noël',                     type: 'ferie' },
+      { date: '2025-12-26', titre: 'Boxing Day',               type: 'ferie' },
+      { date: '2026-01-01', titre: "Jour de l'An",             type: 'ferie' },
+      { date: '2026-04-03', titre: 'Vendredi Saint',           type: 'ferie' },
+      { date: '2026-04-06', titre: 'Lundi de Pâques',          type: 'ferie' },
+      { date: '2026-07-01', titre: 'Fête du Canada',           type: 'ferie' },
+      // Fêtes populaires pan-canadiennes
+      { date: '2025-10-31', titre: 'Halloween',                type: 'fete'  },
+      { date: '2026-02-14', titre: 'Saint-Valentin',           type: 'fete'  },
+      { date: '2026-03-17', titre: 'Saint-Patrick',            type: 'fete'  },
+      { date: '2026-04-05', titre: 'Pâques',                   type: 'fete'  },
+      { date: '2026-06-21', titre: 'Fête nationale autochtone',type: 'fete'  },
+    ],
+    Quebec: [
+      { date: '2025-09-02', titre: 'Rentrée scolaire',         type: 'scolaire' },
+      { date: '2025-12-22', titre: 'Vacances de Noël',         type: 'scolaire' },
+      { date: '2026-01-05', titre: 'Retour en classe',         type: 'scolaire' },
+      { date: '2026-02-16', titre: 'Début relâche scolaire',   type: 'scolaire' },
+      { date: '2026-02-20', titre: 'Fin relâche scolaire',     type: 'scolaire' },
+      { date: '2026-06-26', titre: "Fin d'année scolaire",     type: 'scolaire' },
+      { date: '2026-05-18', titre: 'Journée des Patriotes',    type: 'ferie'    },
+      { date: '2026-06-24', titre: 'Fête nationale du Québec', type: 'ferie'    },
+    ],
+    Ontario: [
+      { date: '2025-09-02', titre: 'Rentrée scolaire',         type: 'scolaire' },
+      { date: '2025-12-22', titre: 'Vacances de Noël',         type: 'scolaire' },
+      { date: '2026-01-05', titre: 'Retour en classe',         type: 'scolaire' },
+      { date: '2026-03-16', titre: 'Début relâche scolaire',   type: 'scolaire' },
+      { date: '2026-03-20', titre: 'Fin relâche scolaire',     type: 'scolaire' },
+      { date: '2026-06-26', titre: "Fin d'année scolaire",     type: 'scolaire' },
+      { date: '2026-02-16', titre: 'Jour de la Famille',       type: 'ferie'    },
+      { date: '2026-05-18', titre: 'Fête de Victoria',         type: 'ferie'    },
+    ],
+    Alberta: [
+      { date: '2025-09-02', titre: 'Rentrée scolaire',         type: 'scolaire' },
+      { date: '2025-12-22', titre: 'Vacances de Noël',         type: 'scolaire' },
+      { date: '2026-01-05', titre: 'retour en classe',         type: 'scolaire' },
+      { date: '2026-03-23', titre: 'Début relâche scolaire',   type: 'scolaire' },
+      { date: '2026-03-27', titre: 'Fin relâche scolaire',     type: 'scolaire' },
+      { date: '2026-06-26', titre: "Fin d'année scolaire",     type: 'scolaire' },
+      { date: '2026-02-16', titre: 'Jour de la Famille',       type: 'ferie'    },
+      { date: '2026-05-18', titre: 'Fête de Victoria',         type: 'ferie'    },
+    ],
+  },
+  'États-Unis': {
+    default: [
+      { date: '2025-09-01', titre: 'Labor Day',                   type: 'ferie' },
+      { date: '2025-11-11', titre: 'Veterans Day',                type: 'ferie' },
+      { date: '2025-11-27', titre: 'Thanksgiving',                type: 'ferie' },
+      { date: '2025-12-25', titre: 'Christmas',                   type: 'ferie' },
+      { date: '2026-01-01', titre: "New Year's Day",              type: 'ferie' },
+      { date: '2026-01-19', titre: 'Martin Luther King Jr. Day',  type: 'ferie' },
+      { date: '2026-02-16', titre: "Presidents' Day",             type: 'ferie' },
+      { date: '2026-05-25', titre: 'Memorial Day',                type: 'ferie' },
+      { date: '2026-07-04', titre: 'Independence Day',            type: 'ferie' },
+      { date: '2025-10-31', titre: 'Halloween',                   type: 'fete'  },
+      { date: '2026-02-14', titre: 'Valentine\'s Day',            type: 'fete'  },
+    ],
+  },
+}
+
+function getActiveHolidays(pays?: string, province?: string): JourFerie[] {
+  const country     = pays || 'Canada'
+  const countryData = JOURS_FERIES[country]
+  if (!countryData) return []
+  const defaults = countryData['default'] || []
+  const specific = province && countryData[province] ? countryData[province] : []
+  return [...defaults, ...specific]
+}
 
 const HOLIDAY_COLORS: Record<string, string> = { ferie: '#F59E0B', scolaire: '#10B981', fete: '#EC4899' }
 
 const TYPE_EVT_CONFIG: Record<string, { icon: string; color: string }> = {
-  lecon:           { icon: '📚', color: '#A78BFA' },
-  evaluation:      { icon: '📊', color: '#F87171' },
-  devoir:          { icon: '🏠', color: '#FBC34A' },
-  reunion_parents: { icon: '👥', color: '#F472B6' },
-  evenement:       { icon: '🎉', color: '#FB923C' },
-  rappel:          { icon: '🔔', color: '#60A5FA' },
-  ferie:           { icon: '🏖️', color: '#94A3B8' },
+  lecon:               { icon: '📚', color: '#A78BFA' },
+  evaluation:          { icon: '📊', color: '#F87171' },
+  devoir:              { icon: '🏠', color: '#FBC34A' },
+  reunion_parents:     { icon: '👥', color: '#F472B6' },
+  evenement:           { icon: '🎉', color: '#FB923C' },
+  rappel:              { icon: '🔔', color: '#60A5FA' },
+  ferie:               { icon: '🏖️', color: '#94A3B8' },
+  calendrier_scolaire: { icon: '🏫', color: '#818CF8' },
 }
 
 const EVT_TYPES   = ['lecon', 'evaluation', 'devoir', 'reunion_parents', 'evenement', 'rappel']
@@ -81,6 +139,10 @@ export default function CalendrierPage() {
   // Cours form (cours_semaine — existing)
   const [showAddCours, setShowAddCours] = useState(false)
   const [coursForm,    setCoursForm]    = useState({ classe_id: '', jour: 'Lundi', heure_debut: '8:00', heure_fin: '9:00', salle: '', note: '' })
+
+  // Upload modals
+  const [showUploadEmploi,     setShowUploadEmploi]     = useState(false)
+  const [showUploadCalendrier, setShowUploadCalendrier] = useState(false)
 
   // Evenement modal (evenements_calendrier — new)
   const [showEvtModal, setShowEvtModal] = useState(false)
@@ -171,7 +233,9 @@ export default function CalendrierPage() {
   const getCoursPour = (jour: string, heure: string) => cours.filter((c: any) => c.jour === jour && c.heure_debut === heure)
 
   // ── Event helpers ─────────────────────────────────────────────────────────
-  const holidaysForDate = (iso: string)  => HOLIDAYS.filter(h => h.date === iso)
+  const activeHolidays  = getActiveHolidays(profil?.pays, profil?.province)
+  const regionConnue    = !profil || !!JOURS_FERIES[profil?.pays || 'Canada']
+  const holidaysForDate = (iso: string) => activeHolidays.filter(h => h.date === iso)
   const notesForDate    = (iso: string)  => notes.filter((n: any) => n.date === iso)
   const eventsForDate   = (iso: string)  => evenements.filter((e: any) => e.date_debut === iso)
   const coursForDate    = (d: Date)      => { const dow = d.getDay() === 0 ? 7 : d.getDay(); return cours.filter((c: any) => JOUR_MAP[c.jour] === dow) }
@@ -252,7 +316,7 @@ export default function CalendrierPage() {
   // ── Upcoming ──────────────────────────────────────────────────────────────
   const now  = todayIso()
   const in30 = toIso(new Date(Date.now() + 30 * 86400000))
-  const upcomingHolidays = HOLIDAYS.filter(h => h.date >= now && h.date <= in30).slice(0, 5)
+  const upcomingHolidays = activeHolidays.filter(h => h.date >= now && h.date <= in30).slice(0, 5)
   const upcomingNotes    = notes.filter((n: any) => n.date >= now && n.date <= in30).slice(0, 5)
   const upcomingEvts     = evenements.filter((e: any) => e.date_debut >= now && e.date_debut <= in30).slice(0, 5)
 
@@ -270,41 +334,46 @@ export default function CalendrierPage() {
       <div className="main-content">
 
         {/* Topbar */}
-        <div className="topbar">
-          <div>
-            <div className="topbar-title">Calendrier</div>
-            <div className="topbar-sub">Agenda pédagogique · {monthYear.year}-{monthYear.year + 1}</div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: 3, gap: 2 }}>
-              {(['mois', 'semaine', 'jour'] as const).map(v => (
-                <button key={v} onClick={() => setView(v)}
-                  style={{ padding: '5px 13px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, background: view === v ? 'var(--blue)' : 'transparent', color: view === v ? 'white' : 'var(--text-3)', cursor: 'pointer', transition: 'all 0.15s' }}>
-                  {v === 'mois' ? 'Mois' : v === 'semaine' ? 'Semaine' : 'Jour'}
-                </button>
-              ))}
-            </div>
+        <Topbar
+          initiales={`${profil?.prenom?.[0] || ''}${profil?.nom?.[0] || ''}`.toUpperCase() || '?'}
+          isFr={profil?.langue_interface !== 'en'}
+        />
 
-            {view === 'mois' && (<>
-              <button onClick={() => setMoisOffset(o => o - 1)} className="btn-ghost btn-sm">← Préc.</button>
-              <button onClick={() => setMoisOffset(0)} className="btn-ghost btn-sm" style={{ background: moisOffset === 0 ? 'var(--blue-pale)' : undefined, color: moisOffset === 0 ? '#60A5FA' : undefined }}>Aujourd'hui</button>
-              <button onClick={() => setMoisOffset(o => o + 1)} className="btn-ghost btn-sm">Suiv. →</button>
-            </>)}
-            {view === 'semaine' && (<>
-              <button onClick={() => setSemaine(s => s - 1)} className="btn-ghost btn-sm">← Semaine préc.</button>
-              <button onClick={() => setSemaine(0)} className="btn-ghost btn-sm" style={{ background: semaine === 0 ? 'var(--blue-pale)' : undefined, color: semaine === 0 ? '#60A5FA' : undefined }}>Aujourd'hui</button>
-              <button onClick={() => setSemaine(s => s + 1)} className="btn-ghost btn-sm">Semaine suiv. →</button>
-            </>)}
-            {view === 'jour' && (<>
-              <button onClick={() => { const d = new Date(selectedDate + 'T12:00:00'); d.setDate(d.getDate() - 1); setSelectedDate(toIso(d)) }} className="btn-ghost btn-sm">← Préc.</button>
-              <button onClick={() => setSelectedDate(todayIso())} className="btn-ghost btn-sm" style={{ background: selectedDate === todayIso() ? 'var(--blue-pale)' : undefined, color: selectedDate === todayIso() ? '#60A5FA' : undefined }}>Aujourd'hui</button>
-              <button onClick={() => { const d = new Date(selectedDate + 'T12:00:00'); d.setDate(d.getDate() + 1); setSelectedDate(toIso(d)) }} className="btn-ghost btn-sm">Suiv. →</button>
-            </>)}
-
-            <button onClick={() => setShowAddCours(true)} className="btn-ghost btn-sm">+ Cours</button>
-            <button onClick={() => { setEvtForm(f => ({ ...f, dateDebut: selectedDate })); setShowEvtModal(true) }} className="btn-primary btn-sm">+ Événement</button>
-            <button onClick={() => setShowAddNote(true)} className="btn-ghost btn-sm">+ Note</button>
+        {/* Calendar nav bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 24px', borderBottom: '1px solid rgba(15,35,65,0.08)', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', flexWrap: 'wrap' as const }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginRight: 4 }}>Calendrier</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{monthYear.year}-{monthYear.year + 1}</span>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: 'flex', background: 'rgba(108,92,231,0.08)', borderRadius: 8, padding: 3, gap: 2 }}>
+            {(['mois', 'semaine', 'jour'] as const).map(v => (
+              <button key={v} onClick={() => setView(v)}
+                style={{ padding: '5px 13px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, background: view === v ? 'var(--violet)' : 'transparent', color: view === v ? 'white' : 'var(--text-secondary)', cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit' }}>
+                {v === 'mois' ? 'Mois' : v === 'semaine' ? 'Semaine' : 'Jour'}
+              </button>
+            ))}
           </div>
+
+          {view === 'mois' && (<>
+            <button onClick={() => setMoisOffset(o => o - 1)} className="btn-ghost btn-sm">← Préc.</button>
+            <button onClick={() => setMoisOffset(0)} className="btn-ghost btn-sm" style={{ background: moisOffset === 0 ? 'rgba(108,92,231,0.1)' : undefined, color: moisOffset === 0 ? 'var(--violet)' : undefined }}>Aujourd&apos;hui</button>
+            <button onClick={() => setMoisOffset(o => o + 1)} className="btn-ghost btn-sm">Suiv. →</button>
+          </>)}
+          {view === 'semaine' && (<>
+            <button onClick={() => setSemaine(s => s - 1)} className="btn-ghost btn-sm">← Semaine préc.</button>
+            <button onClick={() => setSemaine(0)} className="btn-ghost btn-sm" style={{ background: semaine === 0 ? 'rgba(108,92,231,0.1)' : undefined, color: semaine === 0 ? 'var(--violet)' : undefined }}>Aujourd&apos;hui</button>
+            <button onClick={() => setSemaine(s => s + 1)} className="btn-ghost btn-sm">Semaine suiv. →</button>
+          </>)}
+          {view === 'jour' && (<>
+            <button onClick={() => { const d = new Date(selectedDate + 'T12:00:00'); d.setDate(d.getDate() - 1); setSelectedDate(toIso(d)) }} className="btn-ghost btn-sm">← Préc.</button>
+            <button onClick={() => setSelectedDate(todayIso())} className="btn-ghost btn-sm" style={{ background: selectedDate === todayIso() ? 'rgba(108,92,231,0.1)' : undefined, color: selectedDate === todayIso() ? 'var(--violet)' : undefined }}>Aujourd&apos;hui</button>
+            <button onClick={() => { const d = new Date(selectedDate + 'T12:00:00'); d.setDate(d.getDate() + 1); setSelectedDate(toIso(d)) }} className="btn-ghost btn-sm">Suiv. →</button>
+          </>)}
+
+          <button onClick={() => setShowAddCours(true)} className="btn-ghost btn-sm">+ Cours</button>
+          <button onClick={() => { setEvtForm((f: any) => ({ ...f, dateDebut: selectedDate })); setShowEvtModal(true) }} className="btn-primary btn-sm">+ Événement</button>
+          <button onClick={() => setShowAddNote(true)} className="btn-ghost btn-sm">+ Note</button>
+          <button onClick={() => setShowUploadEmploi(true)} className="btn-ghost btn-sm">📤 Importer mon emploi du temps</button>
+          <button onClick={() => setShowUploadCalendrier(true)} className="btn-ghost btn-sm">📅 Importer le calendrier scolaire</button>
         </div>
 
         <div className="page-content fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20 }}>
@@ -369,7 +438,7 @@ export default function CalendrierPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                   <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>{MOIS_NOMS[monthYear.month]} {monthYear.year}</h2>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {[{ label: 'Férié', color: HOLIDAY_COLORS.ferie }, { label: 'Scolaire', color: HOLIDAY_COLORS.scolaire }, { label: 'Fête', color: HOLIDAY_COLORS.fete }, { label: 'Ma note', color: '#6B3FA0' }, { label: 'Événement', color: '#A78BFA' }].map((l, i) => (
+                    {[{ label: 'Férié', color: HOLIDAY_COLORS.ferie }, { label: 'Scolaire', color: HOLIDAY_COLORS.scolaire }, { label: 'Fête', color: HOLIDAY_COLORS.fete }, { label: 'Ma note', color: '#6B3FA0' }, { label: 'Événement', color: '#A78BFA' }, { label: 'Cal. scolaire', color: '#818CF8' }].map((l, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <div style={{ width: 8, height: 8, borderRadius: '50%', background: l.color }} />
                         <span style={{ fontSize: 10, color: 'var(--text-4)' }}>{l.label}</span>
@@ -672,7 +741,12 @@ export default function CalendrierPage() {
                   </div>
                 </div>
               ))}
-              {upcomingHolidays.length === 0 && upcomingEvts.length === 0 && upcomingNotes.length === 0 && (
+              {!regionConnue && profil?.pays && (
+                <div style={{ fontSize: 11, color: 'var(--text-4)', textAlign: 'center', padding: '6px 0', fontStyle: 'italic' }}>
+                  Aucun jour férié configuré pour votre région
+                </div>
+              )}
+              {upcomingHolidays.length === 0 && upcomingEvts.length === 0 && upcomingNotes.length === 0 && regionConnue && (
                 <div style={{ fontSize: 12, color: 'var(--text-4)', textAlign: 'center', padding: '8px 0' }}>Aucun événement prévu</div>
               )}
             </div>
@@ -772,6 +846,38 @@ export default function CalendrierPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ── MODALS UPLOAD ── */}
+      {showUploadEmploi && (
+        <ModalUploadEmploiDuTemps
+          profil={profil}
+          classes={classes}
+          cours={cours}
+          onClose={() => setShowUploadEmploi(false)}
+          onSuccess={async (nouvellesClasses, nouveauxCours) => {
+            // Recharger les classes et cours après import
+            if (!profil?.id) return
+            const [clsRes, coursRes] = await Promise.all([
+              createClient().from('classes').select('*').eq('enseignant_id', profil.id),
+              createClient().from('cours_semaine').select('*').eq('enseignant_id', profil.id),
+            ])
+            setClasses(clsRes.data || [])
+            setCours(coursRes.data || [])
+          }}
+        />
+      )}
+      {showUploadCalendrier && (
+        <ModalUploadCalendrier
+          profil={profil}
+          classes={classes}
+          onClose={() => setShowUploadCalendrier(false)}
+          onSuccess={async () => {
+            if (!profil?.id) return
+            const evtRes = await createClient().from('evenements_calendrier').select('*').eq('enseignant_id', profil.id).order('date_debut')
+            setEvenements(evtRes.data || [])
+          }}
+        />
       )}
     </div>
   )
