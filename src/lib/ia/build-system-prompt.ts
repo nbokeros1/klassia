@@ -27,95 +27,107 @@ const NIVEAU_DETAIL: Record<string, NiveauDetail> = {
 
 export function getFormatSection(type_contenu: string): string {
   const formats: Record<string, string> = {
-    lecon_complete: `GABARIT OFFICIEL — utilise EXACTEMENT ces 18 sections H2, dans cet ordre. NE CRÉE AUCUNE autre section H2 hors de cette liste.
+    lecon_complete: `GABARIT LEÇON COMPLÈTE — 7 blocs en tableaux Markdown, dans cet ordre exact.
+Aucune section supplémentaire (pas de « Réflexion enseignant » séparée, pas de « Matériels » séparés — tout matériel dans la colonne droite de chaque bloc).
+Document 3-5 pages. Écriture efficace : puces d'action, sous-étapes concrètes, quelques répliques entre guillemets — jamais de script intégral mot-à-mot.
 
-## RAG
-## RAS
-## Intention
-## Avant
-## Avant matériel
-## Pendant
-## Pendant matériel
-## Après
-## Après matériel
-## Vocabulaire
-## Oral
-## Écrit
-## Visuel
-## Évaluation formative
-## Évaluation sommative
-## Autochtone
-## Différenciation
-## Réflexion
+| Nom | Niveau scolaire | Matière | Durée | Leçon # |
+|:---|:---|:---|:---|:---|
 
-CONTENU ATTENDU PAR SECTION :
-• ## RAG / ## RAS : objectifs SMART avec verbes de Bloom (analyser, créer, évaluer, appliquer)
-• ## Intention : ce que les élèves sauront/feront/comprendront à la fin de la leçon
-• ## Avant : situation-problème forte (ÉTAPE 4 — tension cognitive AVANT toute explication) + activation des connaissances antérieures + question-amorce
-• ## Pendant : enseignement explicite (ÉTAPE 3) + activité collaborative (Jigsaw/Think-Pair-Share/PBL) + pratique guidée → autonome (Énactif → Iconique → Symbolique)
-• ## Après : retour collectif + exit ticket / billet de sortie (ÉTAPE 6)
-• ## Avant matériel / ## Pendant matériel / ## Après matériel : liste du matériel physique/numérique pour chaque phase
-• ## Vocabulaire : mots clés et termes disciplinaires ; ## Oral / ## Écrit / ## Visuel : activités langagières intégrées
-• ## Évaluation formative : diagnostique + formative ; ## Évaluation sommative : rubrique avec critères
-• ## Autochtone : connexion FNMI/Premières Nations/Métis/Inuit — perspective générale, NE génère PAS de contenu culturel spécifique à une nation
-• ## Différenciation : universel · ciblé · spécialisé (EAL, TDAH, douance)
-• ## Réflexion : 3 questions de réflexion enseignant (ÉTAPE 7)
+| Programme d'étude — RAG et RAS (texte officiel exact) | Intention pédagogique |
+|:---|:---|
+| | Ce que les élèves sauront/feront/comprendront à la fin (1-2 phrases) |
 
-Utilise H3 pour sous-titrer chaque section. Utilise des tableaux Markdown (| col | col |) pour l'information comparative et les objectifs. Inclus des émojis pertinents. Ton bienveillant et professionnel.`,
+| Intégration de la langue (vocabulaire, oral, écrit, visuel) | Évaluation |
+|:---|:---|
+| 3-5 termes disciplinaires + activités langagières (oral, écrit, visuel) | Support CONCRET de la trace : billet de sortie / fiche écrite / présentation orale. Jamais « l'élève démontre » sans préciser le support. |
 
-    fiche_lecon: `GABARIT OFFICIEL — utilise EXACTEMENT ces 18 sections H2, dans cet ordre. NE CRÉE AUCUNE autre section H2 hors de cette liste.
+| Intégration de la perspective autochtone | Différenciation pédagogique |
+|:---|:---|
+| 2-3 puces — piste FNMI/Premières Nations/Métis/Inuit pertinente (ou « Non applicable pour cette leçon »). | **Universel :** ... **Ciblé :** ... **Spécialisé :** ... |
 
-## RAG
-## RAS
-## Intention
-## Avant
-## Avant matériel
-## Pendant
-## Pendant matériel
-## Après
-## Après matériel
-## Vocabulaire
-## Oral
-## Écrit
-## Visuel
-## Évaluation formative
-## Évaluation sommative
-## Autochtone
-## Différenciation
-## Réflexion
+**AVANT** — Préparation/activation (amorce, introduction)
+| Temps prévu | Connexion et connaissances antérieures | Matériaux/ressources |
+|:---|:---|:---|
+| __ min | • Activation des connaissances antérieures • Mise en situation (tension cognitive ou question-amorce) • Partage explicite de l'intention pédagogique AUX ÉLÈVES ⚠️ Jamais de contenu d'enseignement nouveau ici. | |
 
-CONTENU ATTENDU PAR SECTION :
-• ## RAG / ## RAS : objectifs SMART avec verbes de Bloom (analyser, créer, évaluer, appliquer)
-• ## Intention : ce que les élèves sauront/feront/comprendront à la fin de la leçon
-• ## Avant : situation-problème forte (ÉTAPE 4 — tension cognitive AVANT toute explication) + activation des connaissances antérieures + question-amorce
-• ## Pendant : enseignement explicite (ÉTAPE 3) + activité collaborative (Jigsaw/Think-Pair-Share/PBL) + pratique guidée → autonome (Énactif → Iconique → Symbolique)
-• ## Après : retour collectif + exit ticket / billet de sortie (ÉTAPE 6)
-• ## Avant matériel / ## Pendant matériel / ## Après matériel : liste du matériel physique/numérique pour chaque phase
-• ## Vocabulaire : mots clés et termes disciplinaires ; ## Oral / ## Écrit / ## Visuel : activités langagières intégrées
-• ## Évaluation formative : diagnostique + formative ; ## Évaluation sommative : rubrique avec critères
-• ## Autochtone : connexion FNMI/Premières Nations/Métis/Inuit — perspective générale, NE génère PAS de contenu culturel spécifique à une nation
-• ## Différenciation : universel · ciblé · spécialisé (EAL, TDAH, douance)
-• ## Réflexion : 3 questions de réflexion enseignant (ÉTAPE 7)
+**PENDANT** — Réalisation (développement)
+| Temps prévu | Déroulement | Matériaux/ressources |
+|:---|:---|:---|
+| __ min | **Modélisation :** [enseignement explicite — lié à un RAS déclaré] **Pratique guidée :** [activité avec l'enseignant] **Pratique autonome :** [élèves seuls] ⚠️ Chaque activité doit découler d'un RAS déclaré. Questions ouvertes : préciser le type de réponse attendu entre parenthèses. | |
 
-Utilise H3 pour sous-titrer chaque section. Utilise des tableaux Markdown (| col | col |) pour l'information comparative et les objectifs. Inclus des émojis pertinents. Ton bienveillant et professionnel.`,
+**APRÈS** — Intégration/évaluation (retour sur les apprentissages)
+| Temps prévu | Retour sur les apprentissages | Matériaux/ressources |
+|:---|:---|:---|
+| __ min | Retour collectif + lien avec le(s) RAS + évaluation formative/sommative avec trace concrète (préciser laquelle). | |`,
 
-    plan_lecon: `GABARIT PLAN DE LEÇON — utilise EXACTEMENT ces sections H2, dans cet ordre. NE CRÉE AUCUNE autre section H2.
+    fiche_lecon: `GABARIT FICHE DE LEÇON — 7 blocs en tableaux Markdown, dans cet ordre exact.
+Aucune section supplémentaire (pas de « Réflexion enseignant » séparée, pas de « Matériels » séparés — tout matériel dans la colonne droite de chaque bloc).
+Document 2-3 pages maximum. Écriture dense : puces courtes, directes, quelques répliques entre guillemets.
 
-## RAG
-## RAS
-## Intention
-## Avant
-## Avant matériel
-## Pendant
-## Pendant matériel
-## Après
-## Après matériel
-## Autochtone
-## Différenciation
-## Évaluation formative
-## Réflexion
+| Nom | Niveau scolaire | Matière | Durée | Leçon # |
+|:---|:---|:---|:---|:---|
 
-Contenu concis et directement utilisable. Utilise des tableaux Markdown pour les informations structurées. Ton professionnel.`,
+| Programme d'étude — RAG et RAS (texte officiel exact) | Intention pédagogique |
+|:---|:---|
+| | Ce que les élèves sauront/feront/comprendront à la fin (1-2 phrases) |
+
+| Intégration de la langue (vocabulaire, oral, écrit, visuel) | Évaluation |
+|:---|:---|
+| 3-5 termes disciplinaires + activités langagières | Support CONCRET de la trace : billet de sortie / fiche / présentation orale. Jamais « l'élève démontre » sans préciser le support. |
+
+| Intégration de la perspective autochtone | Différenciation pédagogique |
+|:---|:---|
+| 2-3 puces — piste FNMI pertinente (ou « Non applicable pour cette leçon »). | **Universel :** ... **Ciblé :** ... **Spécialisé :** ... |
+
+**AVANT** — Préparation/activation (amorce, introduction)
+| Temps prévu | Connexion et connaissances antérieures | Matériaux/ressources |
+|:---|:---|:---|
+| __ min | • Activation des connaissances antérieures • Mise en situation (tension cognitive ou question-amorce) • Partage explicite de l'intention pédagogique AUX ÉLÈVES ⚠️ Jamais de contenu d'enseignement nouveau ici. | |
+
+**PENDANT** — Réalisation (développement)
+| Temps prévu | Déroulement | Matériaux/ressources |
+|:---|:---|:---|
+| __ min | **Modélisation :** [enseignement explicite — lié à un RAS déclaré] **Pratique guidée :** [activité avec l'enseignant] **Pratique autonome :** [élèves seuls] ⚠️ Chaque activité doit découler d'un RAS déclaré. | |
+
+**APRÈS** — Intégration/évaluation (retour sur les apprentissages)
+| Temps prévu | Retour sur les apprentissages | Matériaux/ressources |
+|:---|:---|:---|
+| __ min | Retour collectif + lien avec le(s) RAS + évaluation formative avec trace concrète (préciser laquelle). | |`,
+
+    plan_lecon: `GABARIT PLAN DE LEÇON — 7 blocs en tableaux Markdown, dans cet ordre exact.
+Aucune section supplémentaire (pas de « Réflexion enseignant » séparée, pas de « Matériels » séparés — tout matériel dans la colonne droite de chaque bloc).
+Document 2-3 pages maximum. Écriture dense : puces d'action concises, quelques répliques entre guillemets — jamais de paragraphes explicatifs.
+
+| Nom | Niveau scolaire | Matière | Durée | Leçon # |
+|:---|:---|:---|:---|:---|
+
+| Programme d'étude — RAG et RAS (texte officiel exact) | Intention pédagogique |
+|:---|:---|
+| | Ce que les élèves sauront/feront/comprendront à la fin (1-2 phrases) |
+
+| Intégration de la langue (vocabulaire, oral, écrit, visuel) | Évaluation |
+|:---|:---|
+| 3-5 termes disciplinaires + activités langagières | Support CONCRET de la trace : billet de sortie / fiche écrite / présentation orale. Jamais « l'élève démontre » sans préciser le support. |
+
+| Intégration de la perspective autochtone | Différenciation pédagogique |
+|:---|:---|
+| 2-3 puces — piste FNMI pertinente (ou « Non applicable pour cette leçon »). | **Universel :** ... **Ciblé :** ... **Spécialisé :** ... |
+
+**AVANT** — Préparation/activation (amorce, introduction)
+| Temps prévu | Connexion et connaissances antérieures | Matériaux/ressources |
+|:---|:---|:---|
+| __ min | • Activation des connaissances antérieures • Mise en situation (tension cognitive ou question-amorce) • Partage explicite de l'intention pédagogique AUX ÉLÈVES ⚠️ Jamais de contenu d'enseignement nouveau ici. | |
+
+**PENDANT** — Réalisation (développement)
+| Temps prévu | Déroulement | Matériaux/ressources |
+|:---|:---|:---|
+| __ min | **Modélisation :** [enseignement explicite — lié à un RAS déclaré] **Pratique guidée :** [activité avec l'enseignant] **Pratique autonome :** [élèves seuls] ⚠️ Chaque activité doit découler d'un RAS déclaré. Questions ouvertes : préciser le type de réponse attendu entre parenthèses. | |
+
+**APRÈS** — Intégration/évaluation (retour sur les apprentissages)
+| Temps prévu | Retour sur les apprentissages | Matériaux/ressources |
+|:---|:---|:---|
+| __ min | Retour collectif + lien avec le(s) RAS + évaluation formative avec trace concrète (préciser laquelle). | |`,
 
     quiz: `IMPORTANT — Retourne UNIQUEMENT du JSON valide, aucun texte avant ou après, aucun bloc markdown, aucun backtick :
 {"questions":[{"ordre":1,"type":"qcm","enonce":"...","options":["A","B","C","D"],"bonne_reponse":"A","explication":"..."}]}`,
@@ -211,8 +223,7 @@ Inclure 3 questions de réflexion pour l'enseignant :
 2. Qu'est-ce qui doit être ajusté ou supprimé ?
 3. Quels élèves ont besoin de soutien supplémentaire ?
 
-MODÈLE DE BRUNER — progression obligatoire dans le contenu :
-Énactif (manipulation, expérience physique) → Iconique (schémas, images, graphiques) → Symbolique (texte, formules, concepts abstraits)` : ''
+Progression pédagogique : partir du concret (manipulation, expérience directe) → représentation visuelle (schémas, images) → abstraction (texte, formules, concepts).` : ''
 
   // FORMAT — selon le type (source unique : getFormatSection)
   const format = getFormatSection(type_contenu)

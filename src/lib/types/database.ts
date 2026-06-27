@@ -622,6 +622,33 @@ export type RappelClasse = {
   created_at: string
 }
 
+// ─── Conversations IA (page Préparer) ────────────────────────────────────────
+
+export type TypeContenuConversation =
+  | 'curriculum' | 'plan_annuel' | 'plan_lecon'
+  | 'lecon_complete' | 'fiche_lecon' | 'quiz'
+  | 'evaluation' | 'email_parents' | 'autre'
+
+export type MessageConversationIA = {
+  role:      'user' | 'assistant'
+  content:   string
+  timestamp: string
+}
+
+export type ConversationIA = {
+  id:                  string
+  enseignant_id:       string
+  classe_id?:          string | null
+  type_contenu?:       TypeContenuConversation | null
+  titre:               string
+  messages:            MessageConversationIA[]
+  fichier_dossier_id?: string | null
+  est_archivee?:       boolean
+  contexte_page?:      string | null
+  created_at:          string
+  updated_at:          string
+}
+
 // ─── Favoris enseignant ───────────────────────────────────────────────────────
 
 export type FavoriEnseignant = {

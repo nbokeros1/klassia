@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getMaxTokens } from '@/lib/ia/get-max-tokens'
 import { getFormatSection } from '@/lib/ia/build-system-prompt'
+import { construireSectionsSkills } from '@/lib/ia/skills-pedagogiques'
 
 const LESSON_TYPES_ASST = ['plan_lecon', 'lecon_complete', 'fiche_lecon'] as const
 
@@ -213,19 +214,19 @@ Classe active : ${classeActive ? `${classeActive.nom} (${classeActive.matiere ||
 ${memoireTexte}
 
 INSTRUCTIONS :
-- Génère du contenu en Markdown bien formaté (titres ##, tableaux, listes, émojis)
-- Pour les leçons, utilise l'approche socioconstructiviste en 7 étapes :
-  1. Objectifs SMART (tableau : # | Objectif | Mesurable | Délai)
-  2. Stratégie pédagogique explicite (Cône de Dale : concret → abstrait)
-  3. Pédagogie active (Think-Pair-Share, Jigsaw, PBL)
-  4. Situation-problème forte AVANT toute explication (paradoxe ou tension cognitive)
-  5. Co-construction du savoir (carte mentale, débat, galerie de solutions)
-  6. Évaluation sans biais négatif : diagnostique + formative + sommative
-  7. 3 questions de rétroaction pour l'enseignant
-  Progression Bruner obligatoire : Énactif → Iconique → Symbolique
-- Sois concis, actionnable et chaleureux
-- Anticipe les besoins de l'enseignant
-${isLecon ? getFormatSection(typeContenu) : svgFormatSection}`
+- Pour les plans de leçon et leçons : respecte STRICTEMENT le gabarit 7 blocs ci-dessous. Document 2-3 pages maximum. Écriture dense : puces courtes, quelques répliques entre guillemets — jamais de paragraphes explicatifs ni de script intégral.
+- Principes pédagogiques à intégrer dans le contenu du gabarit :
+  • Situation-problème forte (tension cognitive ou paradoxe) dans le bloc AVANT — jamais de contenu d'enseignement nouveau dans ce bloc
+  • Pédagogie active dans le bloc PENDANT : Think-Pair-Share, Jigsaw, PBL ou équivalent
+  • Progression naturelle du concret vers l'abstrait : Modélisation → Pratique guidée → Pratique autonome
+  • Chaque activité doit découler d'un RAS déclaré — aucune activité sans lien avec un RAS
+  • L'évaluation précise toujours le support concret de la trace (billet de sortie, fiche, oral, etc.) — jamais "l'élève démontre" sans dire comment
+  • Communiquer l'intention pédagogique explicitement AUX ÉLÈVES dans le bloc AVANT
+  • Toute question ouverte posée aux élèves : préciser entre parenthèses le type de réponse attendu ou le RAS visé
+- Pour les autres contenus (quiz, email, activité) : contenu concis et directement utilisable
+- Sois chaleureux, anticipe les besoins de l'enseignant
+${isLecon ? getFormatSection(typeContenu) : svgFormatSection}
+${isLecon ? construireSectionsSkills((profil as any).province, typeContenu, true) : ''}`
       : `${introLangue}
 
 You are KlassIA+, the most advanced AI teaching assistant for Canadian educators. Powered by Claude by Anthropic.
@@ -246,19 +247,19 @@ Active class: ${classeActive ? `${classeActive.nom} (${classeActive.matiere || '
 ${memoireTexte}
 
 INSTRUCTIONS:
-- Generate well-formatted Markdown content (## headings, tables, lists, emojis)
-- For lessons, use the 7-step socioconstructivist approach:
-  1. SMART Objectives (table: # | Objective | Measurable | Deadline)
-  2. Explicit pedagogical strategy (Dale's Cone: concrete → abstract)
-  3. Active learning (Think-Pair-Share, Jigsaw, PBL)
-  4. Problem situation BEFORE any explanation (paradox or cognitive tension)
-  5. Co-construction of knowledge (mind map, debate, solution gallery)
-  6. Bias-free assessment: diagnostic + formative + summative
-  7. 3 teacher reflection questions
-  Mandatory Bruner progression: Enactive → Iconic → Symbolic
-- Be concise, actionable, and warm
-- Anticipate the teacher's needs
-${isLecon ? getFormatSection(typeContenu) : svgFormatSection}`
+- For lesson plans and full lessons: follow STRICTLY the 7-bloc template below. Max 2-3 pages. Dense writing: short bullets, a few direct quotes — no explanatory paragraphs, no full scripts.
+- Pedagogical principles to embed in the content:
+  • Strong problem situation (cognitive tension or paradox) in the BEFORE block — never new teaching content here
+  • Active learning in the DURING block: Think-Pair-Share, Jigsaw, PBL or equivalent
+  • Natural progression from concrete to abstract: Modelling → Guided practice → Independent practice
+  • Every activity must stem from a declared SLO — never add an activity without a SLO link
+  • Assessment always specifies the concrete evidence tool (exit ticket, written sheet, oral presentation, etc.) — never "student demonstrates" without naming how
+  • Communicate the learning intention explicitly TO STUDENTS in the BEFORE block
+  • Open questions to students: specify in parentheses the expected response type or targeted SLO
+- For other content types (quiz, email, activity): concise, directly usable content
+- Be warm, anticipate the teacher's needs
+${isLecon ? getFormatSection(typeContenu) : svgFormatSection}
+${isLecon ? construireSectionsSkills((profil as any).province, typeContenu, false) : ''}`
 
     // ── Construire les messages ────────────────────────────────────────────────
     const messagesIA: Anthropic.MessageParam[] = [

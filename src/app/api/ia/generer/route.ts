@@ -122,7 +122,7 @@ SECTION 2 — Avant la leçon (Mise en contexte et activation)
 SECTION 3 — Pendant la leçon (Apprentissage actif)
 • Introduction / Situation-problème ou tension cognitive
 • Développement : enseignement explicite + activité collaborative (Jigsaw, Think-Pair-Share, PBL)
-• Pratique guidée → pratique autonome (Énactif → Iconique → Symbolique)
+• Pratique guidée → pratique autonome (concret → représentation → abstrait)
 
 SECTION 4 — Après la leçon (Consolidation et clôture)
 • Retour en groupe collectif (Qu'avons-nous appris ? En quoi est-ce important ? Et maintenant ?)
@@ -164,7 +164,7 @@ SECTION 2 — Before the Lesson (Setting the Stage & Activation)
 SECTION 3 — During the Lesson (Active Learning)
 • Introduction / Problem situation or cognitive tension
 • Development: explicit instruction + collaborative activity (Jigsaw, Think-Pair-Share, PBL)
-• Guided practice → independent practice (Enactive → Iconic → Symbolic)
+• Guided practice → independent practice (concrete → representational → abstract)
 
 SECTION 4 — After the Lesson (Consolidation & Closure)
 • Whole-group debrief (What did we learn? Why does it matter? What's next?)

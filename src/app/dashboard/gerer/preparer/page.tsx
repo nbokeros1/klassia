@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Sidebar from '@/components/Sidebar'
+import HistoriquePreparer from '@/components/preparer/HistoriquePreparer'
 import Topbar from '@/components/Topbar'
 import LoadingScreen from '@/components/LoadingScreen'
 import VoiceWaveform from '@/components/ui/VoiceWaveform'
@@ -12,6 +12,7 @@ import { nourrirIA } from '@/lib/utils/nourrir-ia'
 import LogoKlassIA from '@/components/ui/LogoKlassIA'
 import { contentToHtml } from '@/lib/utils/parser-svg-schema'
 import { Z } from '@/lib/constants/z-index'
+import type { ConversationIA } from '@/lib/types/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,12 +93,20 @@ function PreparerPageInner() {
   const [showVoice,   setShowVoice]   = useState(false)
 
   // Actions / Sauvegarde
-  const [actionSug,        setActionSug]        = useState<ActionSuggestion | null>(null)
-  const [saveModal,        setSaveModal]        = useState(false)
-  const [dossiers,         setDossiers]         = useState<any[]>([])
-  const [selectedDossier,  setSelectedDossier]  = useState<string>('')
-  const [saveLoading,      setSaveLoading]      = useState(false)
-  const [toast,            setToast]            = useState<{ msg: string; ok: boolean } | null>(null)
+  const [actionSug,          setActionSug]          = useState<ActionSuggestion | null>(null)
+  const [saveModal,          setSaveModal]          = useState(false)
+  const [dossiers,           setDossiers]           = useState<any[]>([])
+  const [selectedDossier,    setSelectedDossier]    = useState<string>('')
+  const [saveLoading,        setSaveLoading]        = useState(false)
+  const [toast,              setToast]              = useState<{ msg: string; ok: boolean; persist?: boolean } | null>(null)
+  // Bug 2 — conserver les boutons Word/Imprimer après sauvegarde
+  const [isSaved,            setIsSaved]            = useState(false)
+  // Bug 3 — ID de l'auto-sauvegarde brouillon créée dès la fin du streaming
+  const [autosaveFichierId,  setAutosaveFichierId]  = useState<string | null>(null)
+  // Persistance conversations en base — ref pour éviter les race conditions
+  const conversationIdRef = useRef<string | null>(null)
+  const [conversationId,         setConversationId]         = useState<string | null>(null)
+  const [conversationRefreshKey, setConversationRefreshKey] = useState(0)
 
   const textareaRef    = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -120,6 +129,25 @@ function PreparerPageInner() {
       // Valider que l'ID provient bien d'une classe réelle de l'enseignant
       const initClasse = list.find(c => c.id === candidate)?.id || list[0]?.id || ''
       setClasseId(initClasse)
+
+      // Charger une conversation existante depuis URL param ?conversation=UUID
+      const convId = searchParams?.get('conversation')
+      if (convId) {
+        const { data: conv } = await supabase.from('conversations_ia').select('*').eq('id', convId).single()
+        if (conv) {
+          conversationIdRef.current = conv.id
+          setConversationId(conv.id)
+          if (conv.classe_id) setClasseId(conv.classe_id)
+          const msgs: ChatMessage[] = ((conv.messages as any[]) || []).map((m: any) => ({
+            id:          uid(),
+            role:        (m.role === 'assistant' ? 'ia' : 'user') as 'ia' | 'user',
+            content:     m.content || '',
+            isStreaming: false,
+          }))
+          setMessages(msgs)
+        }
+      }
+
       const { count } = await supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('enseignant_id', p.id).eq('est_lue', false)
       setNotifCount(count || 0)
       setLoading(false)
@@ -163,9 +191,9 @@ function PreparerPageInner() {
     ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'
   }, [inputValue])
 
-  // ── Auto-dismiss toast ────────────────────────────────────────────────────
+  // ── Auto-dismiss toast (les erreurs persist:true restent jusqu'au clic) ──
   useEffect(() => {
-    if (!toast) return
+    if (!toast || toast.persist) return
     const t = setTimeout(() => setToast(null), 3500)
     return () => clearTimeout(t)
   }, [toast])
@@ -177,6 +205,61 @@ function PreparerPageInner() {
 
   // ── Toast helper ──────────────────────────────────────────────────────────
   const showToast = useCallback((msg: string, ok: boolean) => setToast({ msg, ok }), [])
+
+  // ── Persistance conversations IA en base ──────────────────────────────────
+  const createOrUpdateConversation = useCallback(async (
+    msgs: ChatMessage[],
+    typeContenu?: string,
+    titre?: string,
+  ) => {
+    if (!profil?.id) return
+    const dbMsgs = msgs.map(m => ({
+      role:      m.role === 'ia' ? 'assistant' : 'user',
+      content:   m.content,
+      timestamp: new Date().toISOString(),
+    }))
+    const currentId = conversationIdRef.current
+    if (!currentId) {
+      const titreInitial = titre || msgs.find(m => m.role === 'user')?.content.substring(0, 80) || 'Conversation'
+      const { data } = await supabase.from('conversations_ia').insert({
+        enseignant_id: profil.id,
+        classe_id:     classeId || null,
+        type_contenu:  typeContenu || 'autre',
+        titre:         titreInitial,
+        messages:      dbMsgs,
+        contexte_page: 'preparer',
+      }).select('id').single()
+      if (data?.id) {
+        conversationIdRef.current = data.id
+        setConversationId(data.id)
+      }
+    } else {
+      await supabase.from('conversations_ia').update({
+        messages: dbMsgs,
+        ...(typeContenu && typeContenu !== 'autre' ? { type_contenu: typeContenu } : {}),
+        ...(titre ? { titre } : {}),
+      }).eq('id', currentId)
+    }
+    setConversationRefreshKey(k => k + 1)
+  }, [profil?.id, classeId])
+
+  // ── Charger une conversation existante (depuis le menu ou URL param) ──────
+  const handleLoadConversation = useCallback((conv: ConversationIA) => {
+    conversationIdRef.current = conv.id
+    setConversationId(conv.id)
+    if (conv.classe_id) setClasseId(conv.classe_id)
+    const msgs: ChatMessage[] = ((conv.messages as any[]) || []).map((m: any) => ({
+      id:          uid(),
+      role:        (m.role === 'assistant' ? 'ia' : 'user') as 'ia' | 'user',
+      content:     m.content || '',
+      isStreaming: false,
+    }))
+    setMessages(msgs)
+    setActionSug(null)
+    setIsSaved(false)
+    setAutosaveFichierId(null)
+    setToast(null)
+  }, [])
 
   // ── Charger dossiers pour la classe active ────────────────────────────────
   const loadDossiers = useCallback(async (suggestion?: ActionSuggestion | null, forceClasseId?: string) => {
@@ -203,21 +286,31 @@ function PreparerPageInner() {
   const handleSaveConfirm = useCallback(async () => {
     if (!selectedDossier || !actionSug || !profil?.id) return
     setSaveLoading(true)
+    let fichierId: string | null = autosaveFichierId
     try {
-      const { error } = await supabase.from('fichiers_dossier').insert({
-        dossier_id:    selectedDossier,
-        classe_id:     classeId || null,
-        enseignant_id: profil.id,
-        nom:           actionSug.titre,
-        type_fichier:  TYPE_FICHIER[actionSug.type_contenu] || 'autre',
-        contenu_html:  actionSug.contenu,
-        statut:        'brouillon',
-      })
-      if (error) throw error
+      if (autosaveFichierId) {
+        // Bug 3 — Le fichier existe déjà en brouillon auto-sauvegardé : on le déplace
+        const { error } = await supabase.from('fichiers_dossier')
+          .update({ dossier_id: selectedDossier, classe_id: classeId || null, statut: 'brouillon' })
+          .eq('id', autosaveFichierId)
+        if (error) throw error
+      } else {
+        // Fallback si l'auto-sauvegarde n'a pas encore abouti
+        const { data: fd, error } = await supabase.from('fichiers_dossier').insert({
+          dossier_id:    selectedDossier,
+          classe_id:     classeId || null,
+          enseignant_id: profil.id,
+          nom:           actionSug.titre,
+          type_fichier:  TYPE_FICHIER[actionSug.type_contenu] || 'autre',
+          contenu_html:  actionSug.contenu,
+          statut:        'brouillon',
+        }).select('id').single()
+        if (error) throw error
+        fichierId = fd?.id || null
+      }
 
       const dossierNom = dossiers.find(d => d.id === selectedDossier)?.nom || ''
 
-      // Nourrir mémoire IA après confirmation de sauvegarde
       nourrirIA({
         enseignant_id: profil.id,
         classe_id:     classeId || undefined,
@@ -227,15 +320,25 @@ function PreparerPageInner() {
         contenu_texte: actionSug.contenu?.substring(0, 1200),
       }).catch(() => {})
 
+      // Lier la conversation à ce fichier (titre définitif)
+      if (conversationIdRef.current && fichierId) {
+        supabase.from('conversations_ia').update({
+          fichier_dossier_id: fichierId,
+          titre:              actionSug.titre,
+        }).eq('id', conversationIdRef.current)
+          .then(() => setConversationRefreshKey(k => k + 1))
+      }
+
       setSaveModal(false)
-      setActionSug(null)
+      setIsSaved(true)   // Bug 2 — ne pas effacer actionSug : Word/Imprimer restent accessibles
       showToast(`✓ Sauvegardé dans ${dossierNom}`, true)
-    } catch {
-      showToast('Erreur lors de la sauvegarde', false)
+    } catch (err: any) {
+      console.error('[preparer] erreur sauvegarde:', err)
+      setToast({ msg: `Erreur : ${err?.message || 'Sauvegarde impossible — réessayez'}`, ok: false, persist: true })
     } finally {
       setSaveLoading(false)
     }
-  }, [selectedDossier, actionSug, profil?.id, classeId, dossiers, showToast])
+  }, [selectedDossier, actionSug, profil?.id, classeId, dossiers, autosaveFichierId, showToast])
 
   // ── Export Word ───────────────────────────────────────────────────────────
   const handleExportWord = useCallback(async () => {
@@ -320,11 +423,15 @@ function PreparerPageInner() {
     setInputValue('')
     setShowVoice(false)
     setActionSug(null)
+    setIsSaved(false)
+    setAutosaveFichierId(null)
+    setToast(null)
 
-    const iaId = uid()
+    const userMsgId = uid()
+    const iaId      = uid()
     setMessages(prev => [...prev,
-      { id: uid(), role: 'user', content: text },
-      { id: iaId,  role: 'ia',   content: '', isStreaming: true },
+      { id: userMsgId, role: 'user', content: text },
+      { id: iaId,      role: 'ia',   content: '', isStreaming: true },
     ])
     setIsStreaming(true)
     abortRef.current = new AbortController()
@@ -375,9 +482,54 @@ function PreparerPageInner() {
 
       setMessages(prev => prev.map(m => m.id === iaId ? { ...m, content: finalDisplay, isStreaming: false } : m))
 
+      let parsedAction: ActionSuggestion | undefined
+
       if (actionRaw) {
-        try { setActionSug(JSON.parse(actionRaw) as ActionSuggestion) } catch {}
+        try {
+          parsedAction = JSON.parse(actionRaw) as ActionSuggestion
+
+          // Bug 1 — Si c'est une continuation, récupérer le texte tronqué et concaténer
+          const TRUNC_FR = '\n\n> ⚠️ *La génération a atteint'
+          const TRUNC_EN = '\n\n> ⚠️ *Generation reached'
+          const lastIa = [...messages].reverse().find(m => m.role === 'ia')
+          if (lastIa && (lastIa.content.includes(TRUNC_FR) || lastIa.content.includes(TRUNC_EN))) {
+            const prevContent = lastIa.content
+              .replace(/\n\n> ⚠️ \*La génération a atteint[\s\S]*?\*/, '')
+              .replace(/\n\n> ⚠️ \*Generation reached[\s\S]*?\*/, '')
+              .trimEnd()
+            parsedAction.contenu = prevContent + '\n\n' + parsedAction.contenu
+          }
+
+          setActionSug(parsedAction)
+
+          // Bug 3 + RÈGLE ABSOLUE — Auto-sauvegarde en base dès la fin du streaming
+          if (profil?.id) {
+            fetch('/api/ia/action', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action:       'sauvegarder',
+                classe_id:    classeId || undefined,
+                type_contenu: parsedAction.type_contenu,
+                titre:        parsedAction.titre,
+                contenu:      parsedAction.contenu,
+              }),
+            })
+              .then(r => r.ok ? r.json() : Promise.reject())
+              .then(data => { if (data?.fichier_id) setAutosaveFichierId(data.fichier_id) })
+              .catch(() => {})  // non-bloquant, silencieux — filet de sécurité uniquement
+          }
+        } catch {}
       }
+
+      // RÈGLE ABSOLUE — Persister la conversation en base après chaque échange
+      const allMsgs: ChatMessage[] = [
+        ...messages,
+        { id: userMsgId, role: 'user' as const, content: text },
+        { id: iaId,      role: 'ia'   as const, content: finalDisplay, isStreaming: false },
+      ]
+      createOrUpdateConversation(allMsgs, parsedAction?.type_contenu, parsedAction?.titre)
+        .catch(() => {})
 
     } catch (err: any) {
       const msg = err.name === 'AbortError'
@@ -388,7 +540,7 @@ function PreparerPageInner() {
       setIsStreaming(false)
       abortRef.current = null
     }
-  }, [inputValue, isStreaming, profil?.id, classeId, classe, messages, isFr])
+  }, [inputValue, isStreaming, profil?.id, classeId, classe, messages, isFr, createOrUpdateConversation])
 
   const handleStop   = () => { abortRef.current?.abort() }
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
@@ -399,7 +551,15 @@ function PreparerPageInner() {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'linear-gradient(160deg, #EEF5FF 0%, #FFFFFF 100%)' }}>
 
-      <Sidebar profil={profil} activeHref="/dashboard/gerer/preparer" onLogout={handleLogout} notifCount={notifCount} />
+      <HistoriquePreparer
+        profil={profil}
+        classes={classes}
+        activeConversationId={conversationId}
+        refreshKey={conversationRefreshKey}
+        onSelectConversation={handleLoadConversation}
+        onLogout={handleLogout}
+        notifCount={notifCount}
+      />
 
       <div style={{ marginLeft: 'var(--sidebar-w)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
@@ -455,7 +615,7 @@ function PreparerPageInner() {
             <div style={{ flexShrink: 0, padding: '10px 20px', borderBottom: '1px solid rgba(15,35,65,0.07)', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
               <select
                 value={classeId}
-                onChange={e => { setClasseId(e.target.value); setMessages([]); setActionSug(null) }}
+                onChange={e => { setClasseId(e.target.value); setMessages([]); setActionSug(null); conversationIdRef.current = null; setConversationId(null) }}
                 style={{ padding: '6px 12px', borderRadius: 20, border: '1.5px solid rgba(108,92,231,0.2)', background: 'var(--violet-soft, #EDE9FE)', color: 'var(--violet)', fontSize: 12, fontWeight: 600, cursor: 'pointer', outline: 'none', fontFamily: 'inherit', maxWidth: 220 }}>
                 {classes.map(c => <option key={c.id} value={c.id}>{c.nom}{c.niveau ? ` · ${c.niveau}` : ''}</option>)}
               </select>
@@ -466,7 +626,10 @@ function PreparerPageInner() {
               )}
               <div style={{ flex: 1 }} />
               {messages.length > 0 && (
-                <button onClick={() => { setMessages([]); setActionSug(null) }}
+                <button onClick={() => {
+                    setMessages([]); setActionSug(null); setIsSaved(false); setAutosaveFichierId(null)
+                    conversationIdRef.current = null; setConversationId(null); setToast(null)
+                  }}
                   style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 8, fontFamily: 'inherit' }}>
                   {isFr ? 'Effacer ✕' : 'Clear ✕'}
                 </button>
@@ -554,28 +717,32 @@ function PreparerPageInner() {
                         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginRight: 4 }}>
                           {isFr ? '✦ Généré :' : '✦ Generated:'}
                         </span>
+                        {/* Word & Imprimer — toujours accessibles, même après sauvegarde (Bug 2) */}
                         {[
-                          { label: '📥 Word',    onClick: handleExportWord },
-                          { label: '🖨️ Imprimer', onClick: handlePrint },
-                          { label: '💾 Sauvegarder', onClick: handleSaveOpen, primary: true },
+                          { label: '📥 Word',    onClick: handleExportWord, primary: false },
+                          { label: '🖨️ Imprimer', onClick: handlePrint,      primary: false },
                         ].map(btn => (
-                          <button
-                            key={btn.label}
-                            onClick={btn.onClick}
-                            style={{
-                              padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                              cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
-                              border: btn.primary ? 'none' : '1px solid rgba(15,35,65,0.1)',
-                              background: btn.primary ? 'linear-gradient(135deg, #6B3FA0, #4F46E5)' : 'rgba(255,255,255,0.85)',
-                              color: btn.primary ? '#fff' : 'var(--text-secondary)',
-                              boxShadow: btn.primary ? '0 3px 10px rgba(108,92,231,0.25)' : 'none',
-                            }}
-                            onMouseEnter={e => { if (!btn.primary) (e.currentTarget as HTMLElement).style.background = '#fff' }}
-                            onMouseLeave={e => { if (!btn.primary) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.85)' }}
-                          >
+                          <button key={btn.label} onClick={btn.onClick}
+                            style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', border: '1px solid rgba(15,35,65,0.1)', background: 'rgba(255,255,255,0.85)', color: 'var(--text-secondary)', boxShadow: 'none' }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fff' }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.85)' }}>
                             {btn.label}
                           </button>
                         ))}
+                        {/* Sauvegarder — indique ✓ une fois sauvegardé, reste visible pour re-sauvegarder ailleurs */}
+                        <button
+                          onClick={isSaved ? undefined : handleSaveOpen}
+                          disabled={isSaved}
+                          style={{
+                            padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                            cursor: isSaved ? 'default' : 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
+                            border: 'none',
+                            background: isSaved ? 'rgba(34,197,94,0.15)' : 'linear-gradient(135deg, #6B3FA0, #4F46E5)',
+                            color: isSaved ? '#16a34a' : '#fff',
+                            boxShadow: isSaved ? 'none' : '0 3px 10px rgba(108,92,231,0.25)',
+                          }}>
+                          {isSaved ? (isFr ? '✓ Sauvegardé' : '✓ Saved') : (isFr ? '💾 Sauvegarder' : '💾 Save')}
+                        </button>
                       </div>
                     </div>
                   )}
@@ -785,7 +952,7 @@ function PreparerPageInner() {
         </>
       )}
 
-      {/* ── Toast ── */}
+      {/* ── Toast (persist:true = erreur qui reste jusqu'au clic ✕) ── */}
       {toast && (
         <div style={{
           position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
@@ -798,8 +965,15 @@ function PreparerPageInner() {
           zIndex: Z.toast,
           whiteSpace: 'nowrap',
           animation: 'fadeIn 0.2s ease',
+          display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          {toast.msg}
+          <span>{toast.msg}</span>
+          {toast.persist && (
+            <button onClick={() => setToast(null)}
+              style={{ background: 'none', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', lineHeight: 1, padding: 0, opacity: 0.85 }}>
+              ✕
+            </button>
+          )}
         </div>
       )}
 

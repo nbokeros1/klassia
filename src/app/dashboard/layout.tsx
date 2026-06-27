@@ -1,5 +1,4 @@
-import OutilsFlottant          from '@/components/OutilsFlottant'
-import AssistantFlottant        from '@/components/AssistantFlottant'
+import DashboardFloats          from '@/components/DashboardFloats'
 import RealtimeNotifier         from '@/components/RealtimeNotifier'
 import BanniereImpersonation    from '@/components/BanniereImpersonation'
 
@@ -8,8 +7,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <>
       <BanniereImpersonation />
       {children}
-      <OutilsFlottant />
-      <AssistantFlottant />
+      <DashboardFloats />
       <RealtimeNotifier />
     </>
   )
