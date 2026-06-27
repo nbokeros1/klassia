@@ -1,9 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk'
+import mammoth from 'mammoth'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getMaxTokens } from '@/lib/ia/get-max-tokens'
 import { getFormatSection } from '@/lib/ia/build-system-prompt'
 import { construireSectionsSkills } from '@/lib/ia/skills-pedagogiques'
+
+// ── Types fichiers joints ──────────────────────────────────────────────────────
+interface FichierJoint {
+  nom:            string
+  type_mime:      string
+  contenu_base64: string
+}
 
 const LESSON_TYPES_ASST = ['plan_lecon', 'lecon_complete', 'fiche_lecon'] as const
 
@@ -64,9 +72,10 @@ export async function POST(req: NextRequest) {
     try { body = await req.json() }
     catch { return NextResponse.json({ error: 'Corps invalide' }, { status: 400 }) }
 
-    const { message, contexte = {}, historique = [], langue: bodyLangue } = body
+    const { message, contexte = {}, historique = [], langue: bodyLangue, fichiers_joints } = body
+    const fjArr: FichierJoint[] = Array.isArray(fichiers_joints) ? fichiers_joints.slice(0, 3) : []
 
-    if (!message?.trim()) {
+    if (!message?.trim() && fjArr.length === 0) {
       return NextResponse.json({ error: 'Message requis' }, { status: 400 })
     }
 
@@ -261,6 +270,67 @@ INSTRUCTIONS:
 ${isLecon ? getFormatSection(typeContenu) : svgFormatSection}
 ${isLecon ? construireSectionsSkills((profil as any).province, typeContenu, false) : ''}`
 
+    // ── Construire le contenu du dernier message (multimodal si fichiers joints) ──
+    let userContent: Anthropic.MessageParam['content']
+
+    if (fjArr.length > 0) {
+      const blocks: any[] = []
+
+      for (const f of fjArr) {
+        if (!f.contenu_base64) continue
+
+        if (f.type_mime?.startsWith('image/')) {
+          const mediaType = (
+            ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(f.type_mime)
+              ? f.type_mime : 'image/jpeg'
+          ) as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+          blocks.push({
+            type:   'image',
+            source: { type: 'base64', media_type: mediaType, data: f.contenu_base64 },
+          })
+
+        } else if (f.type_mime === 'application/pdf') {
+          blocks.push({
+            type:   'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: f.contenu_base64 },
+          } as any)
+
+        } else {
+          // DOCX / DOC — extraction texte via mammoth
+          const isDocx =
+            f.type_mime?.includes('wordprocessingml') ||
+            f.type_mime === 'application/msword'
+          if (isDocx) {
+            try {
+              const buf = Buffer.from(f.contenu_base64, 'base64')
+              const { value: texte } = await mammoth.extractRawText({ buffer: buf })
+              blocks.push({
+                type: 'text',
+                text: texte
+                  ? `[Contenu du fichier Word "${f.nom}"] :\n${texte.substring(0, 8000)}`
+                  : `[Fichier Word joint : "${f.nom}" — contenu vide]`,
+              })
+            } catch {
+              blocks.push({
+                type: 'text',
+                text: `[Fichier Word joint : "${f.nom}" — extraction impossible]`,
+              })
+            }
+          } else {
+            blocks.push({ type: 'text', text: `[Fichier joint : "${f.nom}" (${f.type_mime})]` })
+          }
+        }
+      }
+
+      if (message?.trim()) {
+        blocks.push({ type: 'text', text: message })
+      }
+
+      userContent = blocks
+    } else {
+      userContent = message
+    }
+
     // ── Construire les messages ────────────────────────────────────────────────
     const messagesIA: Anthropic.MessageParam[] = [
       ...(historique as any[])
@@ -270,7 +340,7 @@ ${isLecon ? construireSectionsSkills((profil as any).province, typeContenu, fals
           role:    m.role as 'user' | 'assistant',
           content: typeof m.content === 'string' ? m.content : String(m.content),
         })),
-      { role: 'user', content: message },
+      { role: 'user', content: userContent },
     ]
 
     // ── Streaming ─────────────────────────────────────────────────────────────

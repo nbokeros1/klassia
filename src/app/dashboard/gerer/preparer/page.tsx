@@ -16,11 +16,18 @@ import type { ConversationIA } from '@/lib/types/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface PieceJointeMsg {
+  nom:          string
+  type_mime:    string
+  url_storage?: string
+}
+
 interface ChatMessage {
-  id:          string
-  role:        'user' | 'ia'
-  content:     string
-  isStreaming?: boolean
+  id:             string
+  role:           'user' | 'ia'
+  content:        string
+  isStreaming?:   boolean
+  piecesJointes?: PieceJointeMsg[]
 }
 
 interface ActionSuggestion {
@@ -32,9 +39,27 @@ interface ActionSuggestion {
   contenu:         string
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants & helpers ──────────────────────────────────────────────────────
 
 function uid() { return Math.random().toString(36).substring(2, 10) }
+
+function nettoyerNomFichier(nom: string): string {
+  return nom
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload  = () => resolve((reader.result as string).split(',')[1])
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 // Délimiteurs que la route envoie après le contenu principal
 const ACTION_TAG   = '\n\n__ACTION__'
@@ -107,6 +132,10 @@ function PreparerPageInner() {
   const conversationIdRef = useRef<string | null>(null)
   const [conversationId,         setConversationId]         = useState<string | null>(null)
   const [conversationRefreshKey, setConversationRefreshKey] = useState(0)
+
+  // Fichiers joints
+  const [fichiersJoints, setFichiersJoints] = useState<File[]>([])
+  const fileInputRef   = useRef<HTMLInputElement>(null)
 
   const textareaRef    = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -217,6 +246,7 @@ function PreparerPageInner() {
       role:      m.role === 'ia' ? 'assistant' : 'user',
       content:   m.content,
       timestamp: new Date().toISOString(),
+      ...(m.piecesJointes?.length ? { pieces_jointes: m.piecesJointes } : {}),
     }))
     const currentId = conversationIdRef.current
     if (!currentId) {
@@ -249,10 +279,11 @@ function PreparerPageInner() {
     setConversationId(conv.id)
     if (conv.classe_id) setClasseId(conv.classe_id)
     const msgs: ChatMessage[] = ((conv.messages as any[]) || []).map((m: any) => ({
-      id:          uid(),
-      role:        (m.role === 'assistant' ? 'ia' : 'user') as 'ia' | 'user',
-      content:     m.content || '',
-      isStreaming: false,
+      id:             uid(),
+      role:           (m.role === 'assistant' ? 'ia' : 'user') as 'ia' | 'user',
+      content:        m.content || '',
+      isStreaming:    false,
+      piecesJointes:  m.pieces_jointes?.length ? (m.pieces_jointes as PieceJointeMsg[]) : undefined,
     }))
     setMessages(msgs)
     setActionSug(null)
@@ -260,6 +291,28 @@ function PreparerPageInner() {
     setAutosaveFichierId(null)
     setToast(null)
   }, [])
+
+  // ── Gestion des fichiers joints ───────────────────────────────────────────
+  const handleFileAttach = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    const MAX = 5 * 1024 * 1024 // 5 Mo par fichier
+    for (const f of files) {
+      if (f.size > MAX) {
+        setToast({ msg: isFr ? `"${f.name}" dépasse la limite de 5 Mo.` : `"${f.name}" exceeds the 5 MB limit.`, ok: false })
+        e.target.value = ''
+        return
+      }
+    }
+    setFichiersJoints(prev => {
+      const combined = [...prev, ...files]
+      if (combined.length > 3) {
+        setToast({ msg: isFr ? 'Maximum 3 fichiers par message.' : 'Maximum 3 files per message.', ok: false })
+      }
+      return combined.slice(0, 3)
+    })
+    e.target.value = ''
+  }, [isFr])
 
   // ── Charger dossiers pour la classe active ────────────────────────────────
   const loadDossiers = useCallback(async (suggestion?: ActionSuggestion | null, forceClasseId?: string) => {
@@ -418,19 +471,60 @@ function PreparerPageInner() {
 
   // ── Send message ──────────────────────────────────────────────────────────
   const handleSend = useCallback(async (overrideText?: string) => {
-    const text = (overrideText ?? inputValue).trim()
-    if (!text || isStreaming || !profil?.id) return
+    const text     = (overrideText ?? inputValue).trim()
+    const hasFiles = fichiersJoints.length > 0
+    if ((!text && !hasFiles) || isStreaming || !profil?.id) return
+
+    // Capturer et vider les fichiers avant tout traitement asynchrone
+    const filesSnapshot = [...fichiersJoints]
     setInputValue('')
     setShowVoice(false)
     setActionSug(null)
     setIsSaved(false)
     setAutosaveFichierId(null)
     setToast(null)
+    setFichiersJoints([])
+
+    // ── Traiter les fichiers : base64 + upload Storage ──────────────────────
+    const fichiersAPI:   Array<{nom: string, type_mime: string, contenu_base64: string}> = []
+    const piecesJointes: PieceJointeMsg[] = []
+
+    for (const file of filesSnapshot) {
+      const nom = nettoyerNomFichier(file.name) || file.name
+      try {
+        const base64 = await fileToBase64(file)
+        fichiersAPI.push({ nom, type_mime: file.type, contenu_base64: base64 })
+
+        const path = `${profil.id}/chat/${uid()}_${nom}`
+        const { error: uploadErr } = await supabase.storage
+          .from('ressources')
+          .upload(path, file, { upsert: false })
+
+        let urlStorage: string | undefined
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from('ressources').getPublicUrl(path)
+          urlStorage = urlData.publicUrl
+          nourrirIA({
+            enseignant_id: profil.id,
+            classe_id:     classeId || undefined,
+            source:        'fichier_joint_chat',
+            titre:         file.name,
+            type:          file.type.startsWith('image/') ? 'image' : 'document',
+            url_storage:   urlStorage,
+          }).catch(() => {})
+        }
+
+        piecesJointes.push({ nom: file.name, type_mime: file.type, url_storage: urlStorage })
+      } catch {
+        piecesJointes.push({ nom: file.name, type_mime: file.type })
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     const userMsgId = uid()
     const iaId      = uid()
     setMessages(prev => [...prev,
-      { id: userMsgId, role: 'user', content: text },
+      { id: userMsgId, role: 'user', content: text, piecesJointes: piecesJointes.length ? piecesJointes : undefined },
       { id: iaId,      role: 'ia',   content: '', isStreaming: true },
     ])
     setIsStreaming(true)
@@ -444,6 +538,7 @@ function PreparerPageInner() {
           message:   text,
           contexte:  { page_courante: 'preparer', classe_id: classeId || undefined, classe_nom: classe?.nom, matiere: classe?.matiere, niveau: classe?.niveau },
           historique: messages.slice(-8).map(m => ({ role: m.role === 'ia' ? 'assistant' : 'user', content: m.content })),
+          ...(fichiersAPI.length ? { fichiers_joints: fichiersAPI } : {}),
         }),
         signal: abortRef.current.signal,
       })
@@ -525,7 +620,7 @@ function PreparerPageInner() {
       // RÈGLE ABSOLUE — Persister la conversation en base après chaque échange
       const allMsgs: ChatMessage[] = [
         ...messages,
-        { id: userMsgId, role: 'user' as const, content: text },
+        { id: userMsgId, role: 'user' as const, content: text, piecesJointes: piecesJointes.length ? piecesJointes : undefined },
         { id: iaId,      role: 'ia'   as const, content: finalDisplay, isStreaming: false },
       ]
       createOrUpdateConversation(allMsgs, parsedAction?.type_contenu, parsedAction?.titre)
@@ -540,7 +635,7 @@ function PreparerPageInner() {
       setIsStreaming(false)
       abortRef.current = null
     }
-  }, [inputValue, isStreaming, profil?.id, classeId, classe, messages, isFr, createOrUpdateConversation])
+  }, [inputValue, fichiersJoints, isStreaming, profil?.id, classeId, classe, messages, isFr, createOrUpdateConversation])
 
   const handleStop   = () => { abortRef.current?.abort() }
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
@@ -699,7 +794,35 @@ function PreparerPageInner() {
                         ) : msg.role === 'ia' ? (
                           <MarkdownMessage content={msg.content} isStreaming={!!msg.isStreaming} />
                         ) : (
-                          msg.content
+                          <>
+                            {msg.content}
+                            {msg.piecesJointes?.length ? (
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const, marginTop: msg.content ? 8 : 0 }}>
+                                {msg.piecesJointes.map((pj, i) =>
+                                  pj.type_mime.startsWith('image/') && pj.url_storage ? (
+                                    <a key={i} href={pj.url_storage} target="_blank" rel="noopener noreferrer">
+                                      <img src={pj.url_storage} alt={pj.nom}
+                                        style={{ maxWidth: 180, maxHeight: 130, borderRadius: 8, display: 'block', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.25)', cursor: 'pointer' }}
+                                      />
+                                    </a>
+                                  ) : (
+                                    <a key={i}
+                                      href={pj.url_storage || '#'}
+                                      target={pj.url_storage ? '_blank' : undefined}
+                                      rel="noopener noreferrer"
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 6, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 11, textDecoration: 'none', maxWidth: 200 }}>
+                                      <span style={{ flexShrink: 0 }}>
+                                        {pj.nom.toLowerCase().endsWith('.pdf') ? '📄' : '📝'}
+                                      </span>
+                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {pj.nom}
+                                      </span>
+                                    </a>
+                                  )
+                                )}
+                              </div>
+                            ) : null}
+                          </>
                         )}
                       </div>
                     </div>
@@ -755,10 +878,57 @@ function PreparerPageInner() {
             {/* Input area — glass */}
             <div style={{ flexShrink: 0, padding: '10px 24px 16px', borderTop: '1px solid rgba(15,35,65,0.07)', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
 
+              {/* Input file caché */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".pdf,.doc,.docx,image/*"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleFileAttach}
+              />
+
               {/* Voice waveform */}
               {showVoice && (
                 <div style={{ marginBottom: 10, padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(108,92,231,0.05)', border: '1px solid rgba(108,92,231,0.15)' }}>
                   <VoiceWaveform onStop={transcript => { setShowVoice(false); if (transcript) setInputValue(transcript) }} />
+                </div>
+              )}
+
+              {/* Chips de prévisualisation des fichiers en attente */}
+              {fichiersJoints.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 8 }}>
+                  {fichiersJoints.map((file, i) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '4px 8px 4px 6px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(108,92,231,0.22)',
+                      background: 'rgba(108,92,231,0.07)',
+                      fontSize: 11, color: 'var(--text-secondary)',
+                      maxWidth: 200,
+                    }}>
+                      {file.type.startsWith('image/') ? (
+                        <img
+                          src={URL.createObjectURL(file)}
+                          style={{ width: 20, height: 20, borderRadius: 3, objectFit: 'cover', flexShrink: 0 }}
+                          alt=""
+                        />
+                      ) : (
+                        <span style={{ fontSize: 13, flexShrink: 0 }}>
+                          {file.name.toLowerCase().endsWith('.pdf') ? '📄' : '📝'}
+                        </span>
+                      )}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                        {file.name}
+                      </span>
+                      <button
+                        onClick={() => setFichiersJoints(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -776,6 +946,15 @@ function PreparerPageInner() {
                   🎤
                 </button>
 
+                {/* Attacher un fichier */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isStreaming || fichiersJoints.length >= 3}
+                  title={isFr ? 'Joindre un fichier (PDF, Word, image — max 5 Mo)' : 'Attach a file (PDF, Word, image — max 5 MB)'}
+                  style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: isStreaming || fichiersJoints.length >= 3 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, background: fichiersJoints.length > 0 ? 'rgba(108,92,231,0.12)' : 'rgba(15,35,65,0.05)', color: fichiersJoints.length > 0 ? 'var(--violet)' : 'var(--text-muted)', transition: 'all 0.15s', opacity: isStreaming ? 0.4 : 1 }}>
+                  📎
+                </button>
+
                 {/* Textarea */}
                 <textarea
                   ref={textareaRef}
@@ -790,8 +969,8 @@ function PreparerPageInner() {
                 {/* Send / Stop */}
                 <button
                   onClick={isStreaming ? handleStop : () => handleSend()}
-                  disabled={!isStreaming && !inputValue.trim()}
-                  style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: isStreaming || inputValue.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#fff', flexShrink: 0, transition: 'background 0.15s', background: isStreaming ? '#EF4444' : !inputValue.trim() ? 'rgba(15,35,65,0.12)' : 'var(--violet)' }}>
+                  disabled={!isStreaming && !inputValue.trim() && fichiersJoints.length === 0}
+                  style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: isStreaming || inputValue.trim() || fichiersJoints.length > 0 ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#fff', flexShrink: 0, transition: 'background 0.15s', background: isStreaming ? '#EF4444' : (!inputValue.trim() && fichiersJoints.length === 0) ? 'rgba(15,35,65,0.12)' : 'var(--violet)' }}>
                   {isStreaming ? '⬛' : '▶'}
                 </button>
               </div>

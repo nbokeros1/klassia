@@ -7,6 +7,7 @@ type SourceNourrissage =
   | 'feedback_lecon'
   | 'curriculum'
   | 'gabarit'
+  | 'fichier_joint_chat'
 
 export async function nourrirIA(params: {
   enseignant_id: string
