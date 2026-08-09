@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import AuthBranding from '@/components/auth/AuthBranding'
 
 export default function SignupPage() {
   const [step, setStep] = useState(1)
@@ -109,15 +110,10 @@ export default function SignupPage() {
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '480px' }}>
 
         {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', background: 'linear-gradient(135deg, #1B3F6E, #7C3AED)', borderRadius: '13px', fontSize: '22px', fontWeight: 800, color: 'white', boxShadow: '0 0 32px rgba(124,58,237,0.5)', marginBottom: '14px' }}>K</div>
-          <div style={{ fontSize: '26px', fontWeight: 700, color: 'white', letterSpacing: '-0.5px' }}>
-            Klass<span style={{ color: '#A78BFA' }}>IA</span>
-          </div>
-          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)', marginTop: '4px' }}>
-            Crée ton espace pédagogique gratuit
-          </div>
-        </div>
+        <AuthBranding
+          slogan="Créez votre espace pédagogique gratuit"
+          style={{ marginBottom: '28px' }}
+        />
 
         {/* Card */}
         <div style={{

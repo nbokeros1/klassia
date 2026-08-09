@@ -79,10 +79,23 @@ function PresenterPageInner() {
 
   useEffect(() => {
     const init = async () => {
+      // Vérification auth + appartenance avant tout chargement
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+
+      const { data: profil } = await supabase
+        .from('utilisateurs')
+        .select('id')
+        .eq('user_id', user.id)
+        .single()
+      if (!profil) { router.push('/login'); return }
+
       const { data: lecon } = await supabase
         .from('lecons')
         .select('*, classes(nom, matiere, niveau)')
         .eq('id', leconId)
+        .eq('classe_id', classeId)
+        .eq('enseignant_id', profil.id)
         .single()
       if (!lecon) { setLoading(false); return }
       setLecon(lecon)

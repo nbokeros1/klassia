@@ -138,7 +138,7 @@ export default function VoiceWaveform({ onStop }: VoiceWaveformProps) {
         ) : (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#EF4444', display: 'inline-block', animation: 'prepDots 1.2s ease-in-out infinite' }} />
-            KlassIA+ vous écoute…
+            ScorgIA vous écoute…
           </div>
         )}
       </div>

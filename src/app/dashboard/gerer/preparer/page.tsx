@@ -1,47 +1,67 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import HistoriquePreparer from '@/components/preparer/HistoriquePreparer'
-import Topbar from '@/components/Topbar'
+import PedagogiqueExplorer from '@/components/preparer/explorer/PedagogiqueExplorer'
+import KlassIAFilePicker, { type FichierKlassia } from '@/components/preparer/KlassIAFilePicker'
+import { WorkspaceHeader } from '@/components/preparer/workspace/WorkspaceHeader'
+import { WorkspaceLayout } from '@/components/preparer/workspace/WorkspaceLayout'
+import { AIAssistantPanel } from '@/components/preparer/assistant/AIAssistantPanel'
+import { ActionBar } from '@/components/preparer/toolbar/ActionBar'
+import { PreparationCanvas } from '@/components/preparer/canvas/PreparationCanvas'
+import { InspectorPanel } from '@/components/preparer/inspector/InspectorPanel'
+import {
+  NoClassesState,
+  ClassPickerState,
+  LoadingConversationState,
+  WelcomeState,
+} from '@/components/preparer/workspace/WorkspaceStates'
 import LoadingScreen from '@/components/LoadingScreen'
 import VoiceWaveform from '@/components/ui/VoiceWaveform'
 import MarkdownMessage from '@/components/ui/MarkdownMessage'
+import PlanLeconView, { buildPlanLeconPrintHtml } from '@/components/PlanLeconView'
 import { nourrirIA } from '@/lib/utils/nourrir-ia'
-import LogoKlassIA from '@/components/ui/LogoKlassIA'
+import { ScorgiaLogo } from '@/components/branding/scorgia-logo'
 import { contentToHtml } from '@/lib/utils/parser-svg-schema'
 import { Z } from '@/lib/constants/z-index'
-import type { ConversationIA } from '@/lib/types/database'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface PieceJointeMsg {
-  nom:          string
-  type_mime:    string
-  url_storage?: string
-}
-
-interface ChatMessage {
-  id:             string
-  role:           'user' | 'ia'
-  content:        string
-  isStreaming?:   boolean
-  piecesJointes?: PieceJointeMsg[]
-}
-
-interface ActionSuggestion {
-  type:            string
-  action:          string
-  type_contenu:    string
-  titre:           string
-  dossier_suggere: string
-  contenu:         string
-}
+import type { ConversationIA, ConversationIAResume } from '@/lib/types/database'
+import { DOSSIER_PAR_TYPE_CONTENU } from '@/lib/constants/mapping-dossiers'
+// Types centralisés — définis dans workspace.ts, importés ici pour éviter la duplication
+import type {
+  ChatMessage,
+  ActionSuggestion,
+  PieceJointeMsg,
+  FichierKlassiaRef,
+  FichierKlassiaIgnore,
+} from '@/lib/types/workspace'
+// Constantes centralisées — définis dans preparer.ts
+import { ACTION_TAG, TYPE_FICHIER } from '@/lib/constants/preparer'
+import { buildPedagogyContextWithPlan } from '@/lib/ia/teacher-reasoning-engine'
+import { buildMemoryContext, extractMemoriesFromGeneration } from '@/lib/ia/teacher-memory-engine'
+import type { MemoryEntry } from '@/lib/ia/teacher-memory-engine'
 
 // ─── Constants & helpers ──────────────────────────────────────────────────────
 
 function uid() { return Math.random().toString(36).substring(2, 10) }
+
+function getMissionBandeauLabel(action: string | null, sujet: string | null, isFr: boolean): string {
+  if (!action) return ''
+  if (isFr) {
+    switch (action) {
+      case 'create_annual_plan':   return 'Créer le programme annuel'
+      case 'prepare_first_lesson': return sujet ? `Préparer : ${sujet}` : 'Préparer la première leçon'
+      case 'prepare_next_lesson':  return sujet ? `Préparer : ${sujet}` : 'Préparer la prochaine leçon'
+      default: return action
+    }
+  }
+  switch (action) {
+    case 'create_annual_plan':   return 'Create annual plan'
+    case 'prepare_first_lesson': return sujet ? `Prepare: ${sujet}` : 'Prepare first lesson'
+    case 'prepare_next_lesson':  return sujet ? `Prepare: ${sujet}` : 'Prepare next lesson'
+    default: return action
+  }
+}
 
 function nettoyerNomFichier(nom: string): string {
   return nom
@@ -61,33 +81,7 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-// Délimiteurs que la route envoie après le contenu principal
-const ACTION_TAG   = '\n\n__ACTION__'
-const TRUNCATED_TAG = '\n\n__TRUNCATED__'
-
-// type_contenu → type_fichier (schéma fichiers_dossier)
-const TYPE_FICHIER: Record<string, string> = {
-  lecon_complete: 'lecon_complete',
-  plan_lecon:     'plan_lecon',
-  quiz:           'quiz',
-  evaluation:     'evaluation_sommative',
-  activite:       'activite',
-  email_parents:  'communication',
-  curriculum:     'curriculum',
-  ressource:      'ressource',
-}
-
-// type_contenu → nom du dossier pré-sélectionné
-const DOSSIER_SUGGERE: Record<string, string> = {
-  lecon_complete: 'Plans de leçons',
-  plan_lecon:     'Plans de leçons',
-  quiz:           'Évaluations sommatives',
-  evaluation:     'Évaluations sommatives',
-  curriculum:     'Curriculum',
-  email_parents:  'Parents',
-  activite:       'Leçons',
-  ressource:      'Ressources',
-}
+// ACTION_TAG et TYPE_FICHIER importés depuis @/lib/constants/preparer
 
 const SUGGESTIONS = (isFr: boolean) => [
   { id: 'curriculum', emoji: '📘', label: isFr ? 'Curriculum'      : 'Curriculum',   prompt: isFr ? 'Génère le curriculum pour ma classe cette année.'           : 'Generate the curriculum for my class this year.'           },
@@ -108,8 +102,19 @@ function PreparerPageInner() {
   const [profil,      setProfil]      = useState<any>(null)
   const [classes,     setClasses]     = useState<any[]>([])
   const [classeId,    setClasseId]    = useState<string>('')
+  const [matiereActive, setMatiereActive] = useState<string>('')
   const [loading,     setLoading]     = useState(true)
   const [notifCount,  setNotifCount]  = useState(0)
+
+  // Mission bandeau (depuis ?mission= + ?sujet= + ?mission_key= URL params)
+  const missionParam    = searchParams?.get('mission')     ?? null
+  const sujetParam      = searchParams?.get('sujet')       ?? null
+  const missionKeyParam = searchParams?.get('mission_key')
+    ? decodeURIComponent(searchParams.get('mission_key')!)
+    : null
+  const [showMissionBandeau,   setShowMissionBandeau]   = useState(() => !!searchParams?.get('mission'))
+  const [missionCompleting,    setMissionCompleting]    = useState(false)
+  const [missionCompleteToast, setMissionCompleteToast] = useState<string | null>(null)
 
   // Chat
   const [messages,    setMessages]    = useState<ChatMessage[]>([])
@@ -118,28 +123,37 @@ function PreparerPageInner() {
   const [showVoice,   setShowVoice]   = useState(false)
 
   // Actions / Sauvegarde
-  const [actionSug,          setActionSug]          = useState<ActionSuggestion | null>(null)
+  const [pendingSave,        setPendingSave]        = useState<{ action: ActionSuggestion; msgId: string; autosave_fichier_id?: string | null; indexation_ok?: boolean | null } | null>(null)
   const [saveModal,          setSaveModal]          = useState(false)
   const [dossiers,           setDossiers]           = useState<any[]>([])
   const [selectedDossier,    setSelectedDossier]    = useState<string>('')
   const [saveLoading,        setSaveLoading]        = useState(false)
   const [toast,              setToast]              = useState<{ msg: string; ok: boolean; persist?: boolean } | null>(null)
-  // Bug 2 — conserver les boutons Word/Imprimer après sauvegarde
-  const [isSaved,            setIsSaved]            = useState(false)
-  // Bug 3 — ID de l'auto-sauvegarde brouillon créée dès la fin du streaming
-  const [autosaveFichierId,  setAutosaveFichierId]  = useState<string | null>(null)
   // Persistance conversations en base — ref pour éviter les race conditions
   const conversationIdRef = useRef<string | null>(null)
-  const [conversationId,         setConversationId]         = useState<string | null>(null)
-  const [conversationRefreshKey, setConversationRefreshKey] = useState(0)
+  const [conversationId,          setConversationId]          = useState<string | null>(null)
+  const [conversationRefreshKey,  setConversationRefreshKey]  = useState(0)
+  const [loadingConversation,     setLoadingConversation]     = useState(false)
 
-  // Fichiers joints
-  const [fichiersJoints, setFichiersJoints] = useState<File[]>([])
+  // Fichiers joints (local) + sélecteur KlassIA
+  const [fichiersJoints,   setFichiersJoints]   = useState<File[]>([])
+  const [fichiersKlassia,  setFichiersKlassia]  = useState<FichierKlassia[]>([])
+  const [showAttachMenu,   setShowAttachMenu]    = useState(false)
+  const [showKlassIAPicker, setShowKlassIAPicker] = useState(false)
   const fileInputRef   = useRef<HTMLInputElement>(null)
+  const attachMenuRef  = useRef<HTMLDivElement>(null)
 
-  const textareaRef    = useRef<HTMLTextAreaElement>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const abortRef       = useRef<AbortController | null>(null)
+  const textareaRef        = useRef<HTMLTextAreaElement>(null)
+  const messagesEndRef     = useRef<HTMLDivElement>(null)
+  const messagesScrollRef  = useRef<HTMLDivElement>(null)
+  const abortRef           = useRef<AbortController | null>(null)
+  const [showScrollBtn,    setShowScrollBtn]    = useState(false)
+  const [aiPanelOpen,       setAiPanelOpen]       = useState(false)
+  const [inspectorOpen,     setInspectorOpen]     = useState(false)
+  const [explorerOpen,      setExplorerOpen]      = useState(true)
+
+  // SC-02H — Teacher Memory
+  const [teacherMemory, setTeacherMemory] = useState<MemoryEntry[]>([])
 
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -158,6 +172,15 @@ function PreparerPageInner() {
       // Valider que l'ID provient bien d'une classe réelle de l'enseignant
       const initClasse = list.find(c => c.id === candidate)?.id || list[0]?.id || ''
       setClasseId(initClasse)
+
+      const matiereParam = searchParams?.get('matiere') || ''
+      if (matiereParam) {
+        const foundClasse = list.find(c => c.id === initClasse)
+        const validMatieres: string[] = Array.isArray(foundClasse?.matieres) && (foundClasse.matieres as string[]).length > 0
+          ? foundClasse.matieres as string[]
+          : foundClasse?.matiere ? [foundClasse.matiere] : []
+        if (validMatieres.includes(matiereParam)) setMatiereActive(matiereParam)
+      }
 
       // Charger une conversation existante depuis URL param ?conversation=UUID
       const convId = searchParams?.get('conversation')
@@ -179,6 +202,13 @@ function PreparerPageInner() {
 
       const { count } = await supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('enseignant_id', p.id).eq('est_lue', false)
       setNotifCount(count || 0)
+
+      // SC-02H — Charger la mémoire pédagogique (fire-and-forget, ne bloque pas)
+      fetch('/api/ia/memory')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.memories) setTeacherMemory(d.memories) })
+        .catch(() => {})
+
       setLoading(false)
     }
     init()
@@ -207,10 +237,27 @@ function PreparerPageInner() {
     }
   }, [profil, classeId])
 
-  // ── Scroll to bottom ──────────────────────────────────────────────────────
+  // ── Scroll to bottom — seulement si l'utilisateur est déjà en bas ────────
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = messagesScrollRef.current
+    if (!el) return
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (distFromBottom < 120) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
+
+  // ── Détecter si l'utilisateur a scrollé vers le haut ─────────────────────
+  useEffect(() => {
+    const el = messagesScrollRef.current
+    if (!el) return
+    const handler = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      setShowScrollBtn(isStreaming && distFromBottom > 200)
+    }
+    el.addEventListener('scroll', handler, { passive: true })
+    return () => el.removeEventListener('scroll', handler)
+  }, [isStreaming])
 
   // ── Auto-resize textarea ──────────────────────────────────────────────────
   useEffect(() => {
@@ -227,10 +274,62 @@ function PreparerPageInner() {
     return () => clearTimeout(t)
   }, [toast])
 
+  // Fermer le menu pièce jointe si streaming démarre ou si la classe change
+  useEffect(() => { setShowAttachMenu(false) }, [isStreaming, classeId])
+
+  // Fermer le picker KlassIA si la classe change
+  useEffect(() => { setShowKlassIAPicker(false) }, [classeId])
+
+  // Fermer le menu pièce jointe au clic extérieur et avec Escape
+  useEffect(() => {
+    if (!showAttachMenu) return
+    const onOutside = (e: MouseEvent) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) setShowAttachMenu(false)
+    }
+    const onEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowAttachMenu(false) }
+    document.addEventListener('mousedown', onOutside)
+    document.addEventListener('keydown',   onEscape)
+    return () => { document.removeEventListener('mousedown', onOutside); document.removeEventListener('keydown', onEscape) }
+  }, [showAttachMenu])
+
   const isFr    = (profil as any)?.langue_interface !== 'en'
+  const missionBandeauLabel = getMissionBandeauLabel(missionParam, sujetParam, isFr)
+
+  const handleCompleteMission = async () => {
+    if (!missionKeyParam || missionCompleting) return
+    setMissionCompleting(true)
+    try {
+      const { updateMissionAction } = await import('@/lib/mission-engine/client')
+      const result = await updateMissionAction(missionKeyParam, 'complete')
+      if (result.ok) {
+        setShowMissionBandeau(false)
+        setMissionCompleteToast(isFr ? '✓ Mission marquée comme terminée.' : '✓ Mission marked complete.')
+        setTimeout(() => setMissionCompleteToast(null), 3500)
+      } else {
+        setMissionCompleteToast(
+          result.status === 409
+            ? (isFr ? 'Cette mission a déjà changé d\'état.' : 'This mission already changed state.')
+            : (isFr ? 'Impossible de terminer la mission.' : 'Unable to complete mission.'),
+        )
+        setTimeout(() => setMissionCompleteToast(null), 4000)
+      }
+    } catch {
+      setMissionCompleteToast(isFr ? 'Erreur réseau.' : 'Network error.')
+      setTimeout(() => setMissionCompleteToast(null), 4000)
+    } finally {
+      setMissionCompleting(false)
+    }
+  }
+
   const prenom  = profil?.prenom ?? (profil as any)?.first_name ?? ''
   const initiales = prenom ? prenom[0].toUpperCase() : (profil?.email?.[0] ?? 'E').toUpperCase()
   const classe  = classes.find(c => c.id === classeId)
+  const matiereEffective = (() => {
+    const validMats: string[] = Array.isArray(classe?.matieres) && (classe.matieres as string[]).length > 0
+      ? classe.matieres as string[]
+      : classe?.matiere ? [classe.matiere] : []
+    return validMats.includes(matiereActive) ? matiereActive : (classe?.matiere || '')
+  })()
 
   // ── Toast helper ──────────────────────────────────────────────────────────
   const showToast = useCallback((msg: string, ok: boolean) => setToast({ msg, ok }), [])
@@ -246,7 +345,8 @@ function PreparerPageInner() {
       role:      m.role === 'ia' ? 'assistant' : 'user',
       content:   m.content,
       timestamp: new Date().toISOString(),
-      ...(m.piecesJointes?.length ? { pieces_jointes: m.piecesJointes } : {}),
+      ...(m.piecesJointes?.length        ? { pieces_jointes:      m.piecesJointes }        : {}),
+      ...(m.fichiersKlassiaRefs?.length  ? { fichiers_klassia_refs: m.fichiersKlassiaRefs.map(r => ({ fichier_id: r.fichier_id, nom: r.nom, source: 'klassia' })) } : {}),
     }))
     const currentId = conversationIdRef.current
     if (!currentId) {
@@ -274,23 +374,68 @@ function PreparerPageInner() {
   }, [profil?.id, classeId])
 
   // ── Charger une conversation existante (depuis le menu ou URL param) ──────
-  const handleLoadConversation = useCallback((conv: ConversationIA) => {
-    conversationIdRef.current = conv.id
-    setConversationId(conv.id)
-    if (conv.classe_id) setClasseId(conv.classe_id)
-    const msgs: ChatMessage[] = ((conv.messages as any[]) || []).map((m: any) => ({
-      id:             uid(),
-      role:           (m.role === 'assistant' ? 'ia' : 'user') as 'ia' | 'user',
-      content:        m.content || '',
-      isStreaming:    false,
-      piecesJointes:  m.pieces_jointes?.length ? (m.pieces_jointes as PieceJointeMsg[]) : undefined,
-    }))
-    setMessages(msgs)
-    setActionSug(null)
-    setIsSaved(false)
-    setAutosaveFichierId(null)
+  // HistoriquePreparer ne sélectionne pas `messages` (trop lourd pour 200 items).
+  // On re-fetch la conversation complète au clic pour obtenir les messages.
+  const handleLoadConversation = useCallback(async (conv: ConversationIAResume) => {
+    setLoadingConversation(true)
+    setMessages([])
+    setPendingSave(null)
     setToast(null)
-  }, [])
+
+    const { data: full, error } = await supabase
+      .from('conversations_ia')
+      .select('*')
+      .eq('id', conv.id)
+      .single()
+
+    if (error || !full) {
+      console.error('[handleLoadConversation] fetch failed:', error?.message)
+      setToast({
+        msg:     isFr ? 'Impossible de charger cette conversation.' : 'Could not load this conversation.',
+        ok:      false,
+        persist: true,
+      })
+      setLoadingConversation(false)
+      return
+    }
+
+    conversationIdRef.current = full.id
+    setConversationId(full.id)
+    if (full.classe_id) setClasseId(full.classe_id)
+    const msgs: ChatMessage[] = ((full.messages as any[]) || []).map((m: any) => ({
+      id:            uid(),
+      role:          (m.role === 'assistant' ? 'ia' : 'user') as 'ia' | 'user',
+      content:       m.content || '',
+      isStreaming:   false,
+      piecesJointes: m.pieces_jointes?.length ? (m.pieces_jointes as PieceJointeMsg[]) : undefined,
+    }))
+
+    // Reconstruire action_sug pour le dernier message IA si c'était un document
+    if (full.type_contenu && full.type_contenu !== 'autre') {
+      const lastIaIdx = msgs.reduceRight((acc: number, m, i) => acc === -1 && m.role === 'ia' ? i : acc, -1)
+      if (lastIaIdx >= 0) {
+        const c = msgs[lastIaIdx].content
+        const looksLikeDoc = (c.match(/^\|.+\|.*$/gm) || []).length >= 2 || c.length > 300
+        if (looksLikeDoc) {
+          msgs[lastIaIdx] = {
+            ...msgs[lastIaIdx],
+            type_contenu: full.type_contenu,
+            action_sug: {
+              type:            'document',
+              action:          'sauvegarder',
+              type_contenu:    full.type_contenu,
+              titre:           (full as any).titre || 'Document',
+              dossier_suggere: DOSSIER_PAR_TYPE_CONTENU[full.type_contenu] || 'Documents',
+              contenu:         c,
+            },
+          }
+        }
+      }
+    }
+
+    setMessages(msgs)
+    setLoadingConversation(false)
+  }, [isFr])
 
   // ── Gestion des fichiers joints ───────────────────────────────────────────
   const handleFileAttach = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -324,28 +469,33 @@ function PreparerPageInner() {
       .order('ordre')
     const ds = data || []
     setDossiers(ds)
-    const nomCible = DOSSIER_SUGGERE[(suggestion ?? actionSug)?.type_contenu ?? ''] ?? ''
+    const nomCible = DOSSIER_PAR_TYPE_CONTENU[suggestion?.type_contenu ?? ''] ?? ''
     const found = ds.find((d: any) => d.nom === nomCible)
     setSelectedDossier(found?.id || ds.find((d: any) => d.nom === 'Plans de leçons')?.id || ds[0]?.id || '')
-  }, [classeId, actionSug])
+  }, [classeId])
 
   // ── Ouvrir le modal de sauvegarde ─────────────────────────────────────────
-  const handleSaveOpen = useCallback(async () => {
-    await loadDossiers(actionSug)
+  const handleSaveOpen = useCallback(async (action: ActionSuggestion, msgId: string, autosave_fichier_id?: string | null, indexation_ok?: boolean | null) => {
+    setPendingSave({ action, msgId, autosave_fichier_id: autosave_fichier_id ?? null, indexation_ok: indexation_ok ?? null })
+    await loadDossiers(action)
     setSaveModal(true)
-  }, [loadDossiers, actionSug])
+  }, [loadDossiers])
 
   // ── Confirmer la sauvegarde ───────────────────────────────────────────────
   const handleSaveConfirm = useCallback(async () => {
-    if (!selectedDossier || !actionSug || !profil?.id) return
+    if (!selectedDossier || !pendingSave?.action || !profil?.id) return
+    const { action: actionSug, msgId, autosave_fichier_id, indexation_ok: savedIndexationOk } = pendingSave
     setSaveLoading(true)
-    let fichierId: string | null = autosaveFichierId
+    let fichierId: string | null = autosave_fichier_id ?? null
+    // Pour le chemin UPDATE (autosave existant), on hérite du statut réel de l'auto-save.
+    // Pour le chemin INSERT (fallback), indexationOk sera mis à jour par l'upsert.
+    let indexationOk = autosave_fichier_id ? (savedIndexationOk ?? true) : true
     try {
-      if (autosaveFichierId) {
-        // Bug 3 — Le fichier existe déjà en brouillon auto-sauvegardé : on le déplace
+      if (autosave_fichier_id) {
+        // Le fichier existe déjà en brouillon auto-sauvegardé : on le déplace
         const { error } = await supabase.from('fichiers_dossier')
           .update({ dossier_id: selectedDossier, classe_id: classeId || null, statut: 'brouillon' })
-          .eq('id', autosaveFichierId)
+          .eq('id', autosave_fichier_id)
         if (error) throw error
       } else {
         // Fallback si l'auto-sauvegarde n'a pas encore abouti
@@ -360,6 +510,23 @@ function PreparerPageInner() {
         }).select('id').single()
         if (error) throw error
         fichierId = fd?.id || null
+        if (fd?.id) {
+          const { error: errIdx } = await supabase
+            .from('fichiers_indexation')
+            .upsert({
+              fichier_id:         fd.id,
+              enseignant_id:      profil.id,
+              mime_type:          'text/markdown',
+              statut:             'indexe',
+              texte_extrait:      actionSug.contenu || '',
+              version_extracteur: 'html-direct-1.0',
+              processed_at:       new Date().toISOString(),
+            }, { onConflict: 'fichier_id' })
+          if (errIdx) {
+            console.error('[KLASSIA][DOCUMENTS][INDEXATION_GENERATED]', errIdx.message)
+            indexationOk = false
+          }
+        }
       }
 
       const dossierNom = dossiers.find(d => d.id === selectedDossier)?.nom || ''
@@ -383,31 +550,36 @@ function PreparerPageInner() {
       }
 
       setSaveModal(false)
-      setIsSaved(true)   // Bug 2 — ne pas effacer actionSug : Word/Imprimer restent accessibles
-      showToast(`✓ Sauvegardé dans ${dossierNom}`, true)
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, is_saved: true } : m))
+      if (indexationOk) {
+        showToast(`✓ Sauvegardé dans ${dossierNom}`, true)
+      } else {
+        showToast('Document sauvegardé, mais son contexte IA sera disponible plus tard.', false)
+      }
     } catch (err: any) {
       console.error('[preparer] erreur sauvegarde:', err)
       setToast({ msg: `Erreur : ${err?.message || 'Sauvegarde impossible — réessayez'}`, ok: false, persist: true })
     } finally {
       setSaveLoading(false)
     }
-  }, [selectedDossier, actionSug, profil?.id, classeId, dossiers, autosaveFichierId, showToast])
+  }, [selectedDossier, pendingSave, profil?.id, classeId, dossiers, showToast])
 
   // ── Export Word ───────────────────────────────────────────────────────────
-  const handleExportWord = useCallback(async () => {
-    if (!actionSug || !profil) return
+  const handleExportWord = useCallback(async (action: ActionSuggestion, contenuJson?: Record<string, unknown> | null) => {
+    if (!profil) return
     try {
       const res = await fetch('/api/export/docx', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contenu:        actionSug.contenu,
-          type_contenu:   actionSug.type_contenu,
-          titre:          actionSug.titre,
+          contenu:        action.contenu,
+          contenu_json:   contenuJson ?? undefined,
+          type_contenu:   action.type_contenu,
+          titre:          action.titre,
           langue:         profil.langue ?? 'fr',
           enseignant_nom: `${profil.prenom ?? ''} ${profil.nom ?? ''}`.trim(),
           classe:         classe?.nom,
-          matiere:        classe?.matiere,
+          matiere:        matiereEffective,
           niveau:         classe?.niveau,
         }),
       })
@@ -416,25 +588,60 @@ function PreparerPageInner() {
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = `${actionSug.titre ?? 'klassia'}.docx`
+      a.download = `${action.titre ?? 'klassia'}.docx`
       a.click()
       URL.revokeObjectURL(url)
       showToast('✓ Document Word téléchargé', true)
     } catch {
       showToast("Erreur lors de l'export Word", false)
     }
-  }, [actionSug, profil, classe, showToast])
+  }, [profil, classe, showToast])
+
+  // ── Export PowerPoint ────────────────────────────────────────────────────
+  const handleExportPptx = useCallback(async (action: ActionSuggestion, contenuJson?: Record<string, unknown> | null) => {
+    if (!profil || !contenuJson) return
+    try {
+      const res = await fetch('/api/export/pptx', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contenu_json:   contenuJson,
+          titre:          action.titre,
+          enseignant_nom: `${profil.prenom ?? ''} ${profil.nom ?? ''}`.trim(),
+          classe:         classe?.nom,
+          matiere:        matiereEffective,
+          niveau:         classe?.niveau,
+        }),
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `${action.titre ?? 'klassia'}.pptx`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast('✓ Présentation téléchargée', true)
+    } catch {
+      showToast("Erreur lors de l'export PowerPoint", false)
+    }
+  }, [profil, classe, showToast])
 
   // ── Imprimer ──────────────────────────────────────────────────────────────
-  const handlePrint = useCallback(() => {
-    if (!actionSug) return
+  const handlePrint = useCallback((action: ActionSuggestion) => {
     const fenetre = window.open('', '_blank')
     if (!fenetre) return
-    const date = new Date().toLocaleDateString('fr-CA', { year: 'numeric', month: 'long', day: 'numeric' })
-    fenetre.document.write(`<!DOCTYPE html><html lang="fr">
+
+    const estPlan = ['plan_lecon', 'plan_de_lecon', 'fiche_lecon', 'lecon_complete'].includes(action.type_contenu)
+
+    if (estPlan) {
+      fenetre.document.write(buildPlanLeconPrintHtml(action.contenu, action.titre))
+    } else {
+      const date = new Date().toLocaleDateString('fr-CA', { year: 'numeric', month: 'long', day: 'numeric' })
+      fenetre.document.write(`<!DOCTYPE html><html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>KlassIA+ — ${actionSug.titre}</title>
+  <title>ScorgIA — ${action.titre}</title>
   <style>
     @page { margin: 2cm; }
     body { font-family: Georgia,'Times New Roman',serif; font-size: 11pt; color: #000; margin: 0; }
@@ -457,17 +664,18 @@ function PreparerPageInner() {
 <body>
   <div class="header">
     <div>
-      <div style="font-size:18pt;font-weight:800;color:#1e1b4b;">${actionSug.titre}</div>
+      <div style="font-size:18pt;font-weight:800;color:#1e1b4b;">${action.titre}</div>
       <div style="font-size:10pt;color:#9ca3af;margin-top:4pt;">${date}</div>
     </div>
-    <div class="logo">✦ KlassIA+</div>
+    <div class="logo">✦ ScorgIA</div>
   </div>
-  <div id="content" style="font-family:Georgia,serif;font-size:11pt;line-height:1.7;">${contentToHtml(actionSug.contenu)}</div>
-  <div class="footer">Généré par KlassIA+ — klassia.app</div>
+  <div id="content" style="font-family:Georgia,serif;font-size:11pt;line-height:1.7;">${contentToHtml(action.contenu)}</div>
+  <div class="footer">Généré par ScorgIA — scorgia.app</div>
 </body></html>`)
+    }
     fenetre.document.close()
     setTimeout(() => fenetre.print(), 350)
-  }, [actionSug])
+  }, [])
 
   // ── Send message ──────────────────────────────────────────────────────────
   const handleSend = useCallback(async (overrideText?: string) => {
@@ -476,14 +684,13 @@ function PreparerPageInner() {
     if ((!text && !hasFiles) || isStreaming || !profil?.id) return
 
     // Capturer et vider les fichiers avant tout traitement asynchrone
-    const filesSnapshot = [...fichiersJoints]
+    const filesSnapshot         = [...fichiersJoints]
+    const fichiersKlassiaSnap   = [...fichiersKlassia]
     setInputValue('')
     setShowVoice(false)
-    setActionSug(null)
-    setIsSaved(false)
-    setAutosaveFichierId(null)
     setToast(null)
     setFichiersJoints([])
+    setFichiersKlassia([])
 
     // ── Traiter les fichiers : base64 + upload Storage ──────────────────────
     const fichiersAPI:   Array<{nom: string, type_mime: string, contenu_base64: string}> = []
@@ -523,22 +730,42 @@ function PreparerPageInner() {
 
     const userMsgId = uid()
     const iaId      = uid()
+    const klassiaRefs: FichierKlassiaRef[] = fichiersKlassiaSnap.map(f => ({ fichier_id: f.id, nom: f.nom }))
     setMessages(prev => [...prev,
-      { id: userMsgId, role: 'user', content: text, piecesJointes: piecesJointes.length ? piecesJointes : undefined },
-      { id: iaId,      role: 'ia',   content: '', isStreaming: true },
+      {
+        id:                   userMsgId,
+        role:                 'user',
+        content:              text,
+        piecesJointes:        piecesJointes.length ? piecesJointes : undefined,
+        fichiersKlassiaRefs:  klassiaRefs.length   ? klassiaRefs   : undefined,
+      },
+      { id: iaId, role: 'ia', content: '', isStreaming: true },
     ])
     setIsStreaming(true)
     abortRef.current = new AbortController()
 
     try {
+      // ── SC-02G : Teacher Reasoning Engine ────────────────────────────────
+      // ── SC-02H : Teacher Memory Engine ───────────────────────────────────
+      const { text: pedagogyCtx, methode: lastMethode, duree: lastDuree } =
+        buildPedagogyContextWithPlan(text, {
+          classe_nom: classe?.nom,
+          matiere:    matiereEffective,
+          niveau:     classe?.niveau,
+        }, isFr)
+      const memoryCtx    = buildMemoryContext(teacherMemory, { classeId: classeId || null, matiere: matiereEffective || null })
+      const enrichedMessage = [memoryCtx, pedagogyCtx, text].filter(Boolean).join('\n')
+      // ─────────────────────────────────────────────────────────────────────
+
       const res = await fetch('/api/ia/assistant', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message:   text,
-          contexte:  { page_courante: 'preparer', classe_id: classeId || undefined, classe_nom: classe?.nom, matiere: classe?.matiere, niveau: classe?.niveau },
+          message:   enrichedMessage,
+          contexte:  { page_courante: 'preparer', classe_id: classeId || undefined, classe_nom: classe?.nom, matiere: matiereEffective, niveau: classe?.niveau },
           historique: messages.slice(-8).map(m => ({ role: m.role === 'ia' ? 'assistant' : 'user', content: m.content })),
-          ...(fichiersAPI.length ? { fichiers_joints: fichiersAPI } : {}),
+          ...(fichiersAPI.length     ? { fichiers_joints:   fichiersAPI }                                                : {}),
+          ...(klassiaRefs.length     ? { fichiers_klassia:  klassiaRefs.map(r => ({ fichier_id: r.fichier_id, source: 'klassia' })) } : {}),
         }),
         signal: abortRef.current.signal,
       })
@@ -548,56 +775,70 @@ function PreparerPageInner() {
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
       let   buffer  = ''
+      const CTX_TAG = '__KLASSIA_CTX__'
+      let   ctxParsed = false
+      let   ctxResult: { fichiers_utilises?: any[]; fichiers_ignores?: any[] } | null = null
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
-        // Masquer les payloads __ACTION__ et __TRUNCATED__ du rendu chat
-        const actionIdx  = buffer.indexOf(ACTION_TAG)
-        const truncIdx   = buffer.indexOf(TRUNCATED_TAG)
-        const firstEnd   = [actionIdx, truncIdx].filter(i => i >= 0).reduce((a, b) => Math.min(a, b), buffer.length)
-        const display    = buffer.substring(0, firstEnd)
+
+        // Stripping du header CONTEXT (première ligne du flux, uniquement quand des fichiers KlassIA ont été envoyés)
+        if (!ctxParsed) {
+          if (buffer.startsWith(CTX_TAG)) {
+            const nlIdx = buffer.indexOf('\n')
+            if (nlIdx >= 0) {
+              try { ctxResult = JSON.parse(buffer.substring(CTX_TAG.length, nlIdx)) } catch {}
+              buffer = buffer.substring(nlIdx + 1)
+              ctxParsed = true
+            } else {
+              // Header pas encore complet — ne pas afficher
+              continue
+            }
+          } else {
+            ctxParsed = true // pas de header CTX dans ce flux
+          }
+        }
+
+        // Masquer le payload __ACTION__ du rendu chat (continuation gérée côté serveur)
+        const actionIdx = buffer.indexOf(ACTION_TAG)
+        const display   = actionIdx >= 0 ? buffer.substring(0, actionIdx) : buffer
         setMessages(prev => prev.map(m => m.id === iaId ? { ...m, content: display } : m))
       }
 
-      // Extraire les payloads action / truncated après la fin du stream
+      // Extraire le payload __ACTION__ après la fin du stream
       const actionIdx    = buffer.indexOf(ACTION_TAG)
-      const truncIdx     = buffer.indexOf(TRUNCATED_TAG)
-      const isTruncated  = truncIdx >= 0
-      const firstEnd     = [actionIdx, truncIdx].filter(i => i >= 0).reduce((a, b) => Math.min(a, b), buffer.length)
-      let   finalDisplay = buffer.substring(0, firstEnd)
+      const finalDisplay = actionIdx >= 0 ? buffer.substring(0, actionIdx) : buffer
       const actionRaw    = actionIdx >= 0 ? buffer.substring(actionIdx + ACTION_TAG.length) : ''
 
-      if (isTruncated) {
-        finalDisplay += isFr
-          ? '\n\n> ⚠️ *La génération a atteint sa limite de longueur. La leçon peut être incomplète. Demandez à KlassIA+ de continuer si nécessaire.*'
-          : '\n\n> ⚠️ *Generation reached the length limit. The lesson may be incomplete. Ask KlassIA+ to continue if needed.*'
-      }
-
-      setMessages(prev => prev.map(m => m.id === iaId ? { ...m, content: finalDisplay, isStreaming: false } : m))
+      setMessages(prev => prev.map(m => m.id === iaId ? {
+        ...m,
+        content:                  finalDisplay,
+        isStreaming:              false,
+        fichiersKlassiaIgnores:   ctxResult?.fichiers_ignores?.map((f: any) => ({
+          fichier_id: f.fichier_id,
+          raison:     f.raison,
+          nom:        klassiaRefs.find(r => r.fichier_id === f.fichier_id)?.nom || '',
+        })) || [],
+        fichiersKlassiaUtilises:  ctxResult?.fichiers_utilises?.map((f: any) => ({
+          fichier_id: f.fichier_id,
+          nom:        f.nom || klassiaRefs.find(r => r.fichier_id === f.fichier_id)?.nom || '',
+        })) || [],
+      } : m))
 
       let parsedAction: ActionSuggestion | undefined
 
       if (actionRaw) {
         try {
           parsedAction = JSON.parse(actionRaw) as ActionSuggestion
+          // Stocker action_sug + type_contenu sur le message directement (pas d'état global)
+          setMessages(prev => prev.map(m => m.id === iaId
+            ? { ...m, action_sug: parsedAction, type_contenu: parsedAction!.type_contenu }
+            : m
+          ))
 
-          // Bug 1 — Si c'est une continuation, récupérer le texte tronqué et concaténer
-          const TRUNC_FR = '\n\n> ⚠️ *La génération a atteint'
-          const TRUNC_EN = '\n\n> ⚠️ *Generation reached'
-          const lastIa = [...messages].reverse().find(m => m.role === 'ia')
-          if (lastIa && (lastIa.content.includes(TRUNC_FR) || lastIa.content.includes(TRUNC_EN))) {
-            const prevContent = lastIa.content
-              .replace(/\n\n> ⚠️ \*La génération a atteint[\s\S]*?\*/, '')
-              .replace(/\n\n> ⚠️ \*Generation reached[\s\S]*?\*/, '')
-              .trimEnd()
-            parsedAction.contenu = prevContent + '\n\n' + parsedAction.contenu
-          }
-
-          setActionSug(parsedAction)
-
-          // Bug 3 + RÈGLE ABSOLUE — Auto-sauvegarde en base dès la fin du streaming
+          // Auto-sauvegarde — filet de sécurité non-bloquant
           if (profil?.id) {
             fetch('/api/ia/action', {
               method:  'POST',
@@ -610,9 +851,25 @@ function PreparerPageInner() {
                 contenu:      parsedAction.contenu,
               }),
             })
-              .then(r => r.ok ? r.json() : Promise.reject())
-              .then(data => { if (data?.fichier_id) setAutosaveFichierId(data.fichier_id) })
-              .catch(() => {})  // non-bloquant, silencieux — filet de sécurité uniquement
+              .then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e)))
+              .then(data => {
+                if (data?.fichier_id) {
+                  setMessages(prev => prev.map(m => m.id === iaId
+                    ? {
+                        ...m,
+                        autosave_fichier_id: data.fichier_id,
+                        indexation_ok:       data.indexation_ok ?? true,
+                        contenu_json:        data.contenu_json ?? null,
+                      }
+                    : m
+                  ))
+                }
+                if (data?.indexation_ok === false) {
+                  console.error('[KLASSIA][DOCUMENTS][INDEXATION_GENERATED] auto-save: indexation échouée pour', data?.fichier_id)
+                  showToast('Document sauvegardé, mais son contexte IA sera disponible plus tard.', false)
+                }
+              })
+              .catch(err => console.error('[auto-save] échec silencieux résolu:', err?.error ?? err))
           }
         } catch {}
       }
@@ -626,6 +883,34 @@ function PreparerPageInner() {
       createOrUpdateConversation(allMsgs, parsedAction?.type_contenu, parsedAction?.titre)
         .catch(() => {})
 
+      // SC-02H — Extraire la mémoire et l'enrichir (fire-and-forget)
+      if (parsedAction?.type_contenu) {
+        const deltas = extractMemoriesFromGeneration(
+          parsedAction.type_contenu,
+          lastMethode,
+          lastDuree,
+          classeId || null,
+          matiereEffective || null,
+          classe?.niveau || null,
+        )
+        if (deltas.length > 0) {
+          fetch('/api/ia/memory', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ deltas }),
+          })
+            .then(r => r.ok ? r.json() : null)
+            .then(() => {
+              // Recharger silencieusement la mémoire mise à jour
+              fetch('/api/ia/memory')
+                .then(r => r.ok ? r.json() : null)
+                .then(d => { if (d?.memories) setTeacherMemory(d.memories) })
+                .catch(() => {})
+            })
+            .catch(() => {})
+        }
+      }
+
     } catch (err: any) {
       const msg = err.name === 'AbortError'
         ? (isFr ? 'Génération interrompue.' : 'Generation stopped.')
@@ -635,10 +920,30 @@ function PreparerPageInner() {
       setIsStreaming(false)
       abortRef.current = null
     }
-  }, [inputValue, fichiersJoints, isStreaming, profil?.id, classeId, classe, messages, isFr, createOrUpdateConversation])
+  }, [inputValue, fichiersJoints, fichiersKlassia, isStreaming, profil?.id, classeId, classe, messages, isFr, createOrUpdateConversation])
 
   const handleStop   = () => { abortRef.current?.abort() }
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
+
+  // ── Dérivés export global (dernière réponse IA exportable) ───────────────
+  const lastExportableMsg = useMemo(
+    () => [...messages].reverse().find(m => m.role === 'ia' && m.action_sug && !m.isStreaming),
+    [messages],
+  )
+  const canExport     = !!lastExportableMsg
+  const canExportPptx = !!(
+    lastExportableMsg?.contenu_json &&
+    ['plan_lecon', 'fiche_lecon', 'lecon_complete', 'lecon_developpee', 'activite'].includes(
+      lastExportableMsg?.action_sug?.type_contenu ?? '',
+    )
+  )
+  const handleGlobalExportWord = useCallback(() => {
+    if (lastExportableMsg?.action_sug) handleExportWord(lastExportableMsg.action_sug, lastExportableMsg.contenu_json)
+  }, [lastExportableMsg, handleExportWord])
+  const handleGlobalExportPptx = useCallback(() => {
+    if (lastExportableMsg?.action_sug && lastExportableMsg.contenu_json)
+      handleExportPptx(lastExportableMsg.action_sug, lastExportableMsg.contenu_json)
+  }, [lastExportableMsg, handleExportPptx])
 
   if (loading) return <LoadingScreen />
 
@@ -646,234 +951,310 @@ function PreparerPageInner() {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'linear-gradient(160deg, #EEF5FF 0%, #FFFFFF 100%)' }}>
 
-      <HistoriquePreparer
+      <PedagogiqueExplorer
         profil={profil}
         classes={classes}
         activeConversationId={conversationId}
         refreshKey={conversationRefreshKey}
+        isFr={isFr}
+        explorerOpen={explorerOpen}
         onSelectConversation={handleLoadConversation}
+        onNewDocument={(prompt, classeIdHint) => {
+          if (classeIdHint && classeIdHint !== classeId) setClasseId(classeIdHint)
+          setInputValue(prompt)
+          setTimeout(() => textareaRef.current?.focus(), 80)
+        }}
+        onToggleExplorer={() => setExplorerOpen(v => !v)}
         onLogout={handleLogout}
         notifCount={notifCount}
       />
 
-      <div style={{ marginLeft: 'var(--sidebar-w)', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-        <Topbar notifCount={notifCount} initiales={initiales} creditsIa={{ used: 0, total: 20 }} isFr={isFr} />
+      <WorkspaceLayout
+        explorerOpen={explorerOpen}
+        explorerWidth={272}
+        isFr={isFr}
+        onOpenExplorer={() => setExplorerOpen(true)}
+        header={
+          <WorkspaceHeader
+            classes={classes}
+            classeId={classeId || null}
+            matiere={matiereEffective || null}
+            hasMessages={messages.length > 0}
+            isStreaming={isStreaming}
+            isFr={isFr}
+            notifCount={notifCount}
+            initiales={initiales}
+            creditsIa={{ used: 0, total: 20 }}
+            canExport={canExport}
+            canExportPptx={canExportPptx}
+            assistantOpen={aiPanelOpen}
+            inspectorOpen={inspectorOpen}
+            hasDocument={!!lastExportableMsg}
+            onClasseChange={id => { setClasseId(id); setMessages([]); setPendingSave(null); conversationIdRef.current = null; setConversationId(null) }}
+            onClear={() => { setMessages([]); setPendingSave(null); conversationIdRef.current = null; setConversationId(null); setToast(null); setInspectorOpen(false) }}
+            onToggleAssistant={() => setAiPanelOpen(v => !v)}
+            onToggleInspector={() => setInspectorOpen(v => !v)}
+            onExportWord={handleGlobalExportWord}
+            onExportPptx={handleGlobalExportPptx}
+          />
+        }
+        inspectorPanel={inspectorOpen && lastExportableMsg ? (
+          <InspectorPanel
+            lastGenerated={lastExportableMsg}
+            classe={classe ?? null}
+            matiere={matiereEffective || null}
+            conversationId={conversationId}
+            messageCount={messages.length}
+            isFr={isFr}
+            onClose={() => setInspectorOpen(false)}
+          />
+        ) : undefined}
+        rightPanel={aiPanelOpen ? (
+          <AIAssistantPanel
+            messages={messages}
+            contextFiles={fichiersKlassia.map(f => ({ id: f.id, nom: f.nom }))}
+            isFr={isFr}
+            isStreaming={isStreaming}
+            onQuickAction={prompt => handleSend(prompt)}
+            onClose={() => setAiPanelOpen(false)}
+          />
+        ) : undefined}
+      >
 
         {/* ── No classes at all ── */}
         {classes.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <div className="glass-strong" style={{ padding: '48px 44px', borderRadius: 'var(--radius-lg)', maxWidth: 480, textAlign: 'center' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>🏫</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
-                {isFr ? 'Créez d\'abord une classe' : 'Create a class first'}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
-                {isFr ? 'Vous pourrez ensuite préparer des leçons pour vos élèves.' : 'You\'ll then be able to prepare lessons for your students.'}
-              </div>
-              <button onClick={() => router.push('/dashboard/classes')}
-                style={{ padding: '10px 24px', fontSize: 13, fontWeight: 600, background: 'var(--violet)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', boxShadow: '0 4px 12px var(--violet-glow)', fontFamily: 'inherit' }}>
-                {isFr ? '+ Créer ma première classe' : '+ Create my first class'}
-              </button>
-            </div>
-          </div>
+          <NoClassesState
+            isFr={isFr}
+            onCreateClass={() => router.push('/dashboard/classes')}
+          />
 
         ) : !classeId ? (
-          /* ── Class picker ── */
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <div className="glass-strong" style={{ padding: '40px 44px', borderRadius: 'var(--radius-lg)', maxWidth: 540, width: '100%', textAlign: 'center' }}>
-              <div style={{ fontSize: 44, marginBottom: 16 }}>🎓</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8, lineHeight: 1.3 }}>
-                {isFr ? 'Pour quelle classe préparez-vous du contenu ?' : 'Which class are you preparing content for?'}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 28 }}>
-                {isFr ? 'Choisissez une classe pour ouvrir KlassIA+' : 'Choose a class to open KlassIA+'}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 10, justifyContent: 'center' }}>
-                {classes.map(c => (
-                  <button key={c.id} onClick={() => setClasseId(c.id)}
-                    style={{ padding: '10px 22px', borderRadius: 'var(--radius-md)', border: `2px solid ${c.couleur || 'var(--violet)'}`, background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = c.couleur || 'var(--violet)'; (e.currentTarget as HTMLElement).style.color = '#fff' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)' }}>
-                    {c.nom}{c.niveau ? ` · ${c.niveau}` : ''}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <ClassPickerState
+            isFr={isFr}
+            classes={classes}
+            onSelectClasse={id => setClasseId(id)}
+          />
 
         ) : (
           /* ── Chat interface ── */
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-            {/* Sticky chat header — glass */}
-            <div style={{ flexShrink: 0, padding: '10px 20px', borderBottom: '1px solid rgba(15,35,65,0.07)', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-              <select
-                value={classeId}
-                onChange={e => { setClasseId(e.target.value); setMessages([]); setActionSug(null); conversationIdRef.current = null; setConversationId(null) }}
-                style={{ padding: '6px 12px', borderRadius: 20, border: '1.5px solid rgba(108,92,231,0.2)', background: 'var(--violet-soft, #EDE9FE)', color: 'var(--violet)', fontSize: 12, fontWeight: 600, cursor: 'pointer', outline: 'none', fontFamily: 'inherit', maxWidth: 220 }}>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.nom}{c.niveau ? ` · ${c.niveau}` : ''}</option>)}
-              </select>
-              {classe?.matiere && (
-                <span style={{ padding: '5px 12px', borderRadius: 20, background: 'rgba(15,35,65,0.05)', border: '1px solid rgba(15,35,65,0.08)', fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {classe.matiere}
-                </span>
-              )}
-              <div style={{ flex: 1 }} />
-              {messages.length > 0 && (
-                <button onClick={() => {
-                    setMessages([]); setActionSug(null); setIsSaved(false); setAutosaveFichierId(null)
-                    conversationIdRef.current = null; setConversationId(null); setToast(null)
-                  }}
-                  style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 8, fontFamily: 'inherit' }}>
-                  {isFr ? 'Effacer ✕' : 'Clear ✕'}
-                </button>
-              )}
-            </div>
+            {/* Messages area — ou canvas pédagogique si document généré */}
+            <div
+              ref={messagesScrollRef}
+              style={{ flex: 1, overflowY: 'auto', padding: lastExportableMsg?.action_sug && !loadingConversation ? 0 : '24px 32px', position: 'relative' }}>
 
-            {/* Messages area */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
+              {/* ── Canvas pédagogique (SC-02F) ── */}
+              {lastExportableMsg?.action_sug && !loadingConversation ? (
+                <PreparationCanvas
+                  content={lastExportableMsg.action_sug.contenu}
+                  titre={lastExportableMsg.action_sug.titre}
+                  typeContenu={lastExportableMsg.action_sug.type_contenu}
+                  isFr={isFr}
+                  isStreaming={isStreaming}
+                  onSuggestPrompt={prompt => setInputValue(prompt)}
+                />
+              ) : loadingConversation ? (
+                <LoadingConversationState isFr={isFr} />
 
-              {messages.length === 0 ? (
+              ) : messages.length === 0 ? (
                 /* Welcome state */
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 56, gap: 20, maxWidth: 680, margin: '0 auto' }}>
-                  <LogoKlassIA variant="icone" taille={60} />
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
-                      {isFr ? `Bonjour${prenom ? ` ${prenom}` : ''} ! Que préparez-vous aujourd'hui ?` : `Hello${prenom ? ` ${prenom}` : ''}! What are you preparing today?`}
-                    </div>
-                    {classe && (
-                      <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                        {classe.nom}{classe.niveau ? ` · ${classe.niveau}` : ''}{classe.matiere ? ` · ${classe.matiere}` : ''}
-                      </div>
-                    )}
-                  </div>
-                  <div className="prep-suggestion-grid" style={{ width: '100%', marginTop: 8 }}>
-                    {SUGGESTIONS(isFr).map(s => (
-                      <button key={s.id}
-                        onClick={() => handleSend(s.prompt)}
-                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6, padding: '14px 16px', borderRadius: 'var(--radius-md)', border: '1.5px solid rgba(108,92,231,0.12)', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', boxShadow: '0 2px 8px rgba(15,35,65,0.05)', transition: 'all 0.15s' }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--violet)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(108,92,231,0.12)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(108,92,231,0.12)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(15,35,65,0.05)'; (e.currentTarget as HTMLElement).style.transform = 'none' }}>
-                        <span style={{ fontSize: 20 }}>{s.emoji}</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{s.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <WelcomeState
+                  isFr={isFr}
+                  prenom={prenom}
+                  classe={classe ?? null}
+                  matiere={matiereEffective}
+                  suggestions={SUGGESTIONS(isFr)}
+                  onSend={handleSend}
+                />
 
               ) : (
                 /* Messages list */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 780, margin: '0 auto' }}>
                   {messages.map(msg => (
                     <div key={msg.id} className="prep-msg-in"
-                      style={{ display: 'flex', flexDirection: msg.role === 'user' ? 'row-reverse' : 'row', gap: 10, alignItems: 'flex-start' }}>
+                      style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-                      {msg.role === 'ia' && (
-                        <div style={{ flexShrink: 0, marginTop: 2 }}>
-                          <LogoKlassIA variant="icone" taille={32} />
+                      {/* Rangée logo + bulle */}
+                      <div style={{ display: 'flex', flexDirection: msg.role === 'user' ? 'row-reverse' : 'row', gap: 10, alignItems: 'flex-start' }}>
+
+                        {msg.role === 'ia' && (
+                          <div style={{ flexShrink: 0, marginTop: 2 }}>
+                            <ScorgiaLogo variant="icon" width={32} height={32} />
+                          </div>
+                        )}
+
+                        <div style={{
+                          maxWidth: msg.role === 'user' ? '72%' : '100%',
+                          padding: msg.role === 'user' ? '10px 16px' : '4px 0 16px',
+                          borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : 0,
+                          background: msg.role === 'user' ? 'var(--violet, #6C5CE7)' : 'transparent',
+                          color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
+                          fontSize: 14,
+                          lineHeight: 1.65,
+                        }}>
+                          {msg.role === 'ia' && msg.isStreaming && !msg.content ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
+                              <span style={{ fontStyle: 'italic', marginRight: 4 }}>ScorgIA {isFr ? 'rédige' : 'is writing'}</span>
+                              <span className="prep-dot" />
+                              <span className="prep-dot" />
+                              <span className="prep-dot" />
+                            </span>
+                          ) : msg.role === 'ia' ? (
+                            !msg.isStreaming && ['plan_lecon', 'plan_de_lecon', 'fiche_lecon', 'lecon_complete'].includes(msg.type_contenu || '') ? (
+                              <PlanLeconView content={msg.content} />
+                            ) : (
+                              <MarkdownMessage content={msg.content} isStreaming={!!msg.isStreaming} />
+                            )
+                          ) : (
+                            <>
+                              {msg.content}
+                              {msg.piecesJointes?.length ? (
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const, marginTop: msg.content ? 8 : 0 }}>
+                                  {msg.piecesJointes.map((pj, i) =>
+                                    pj.type_mime.startsWith('image/') && pj.url_storage ? (
+                                      <a key={i} href={pj.url_storage} target="_blank" rel="noopener noreferrer">
+                                        <img src={pj.url_storage} alt={pj.nom}
+                                          style={{ maxWidth: 180, maxHeight: 130, borderRadius: 8, display: 'block', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.25)', cursor: 'pointer' }}
+                                        />
+                                      </a>
+                                    ) : (
+                                      <a key={i}
+                                        href={pj.url_storage || '#'}
+                                        target={pj.url_storage ? '_blank' : undefined}
+                                        rel="noopener noreferrer"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 6, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 11, textDecoration: 'none', maxWidth: 200 }}>
+                                        <span style={{ flexShrink: 0 }}>
+                                          {pj.nom.toLowerCase().endsWith('.pdf') ? '📄' : '📝'}
+                                        </span>
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {pj.nom}
+                                        </span>
+                                      </a>
+                                    )
+                                  )}
+                                </div>
+                              ) : null}
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ── Refs fichiers KlassIA sur le message user ── */}
+                      {msg.role === 'user' && msg.fichiersKlassiaRefs?.length ? (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' as const, marginTop: 4, justifyContent: 'flex-end' }}>
+                          {msg.fichiersKlassiaRefs.map(ref => (
+                            <div key={ref.fichier_id} style={{
+                              display: 'flex', alignItems: 'center', gap: 4,
+                              padding: '2px 8px', borderRadius: 6,
+                              background: 'rgba(255,255,255,0.2)',
+                              border: '1px solid rgba(255,255,255,0.3)',
+                              fontSize: 10, color: '#fff',
+                            }}>
+                              <span style={{ fontWeight: 700 }}>✦</span>
+                              <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ref.nom}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {/* ── Fichiers KlassIA ignorés — note sous la réponse IA ── */}
+                      {msg.role === 'ia' && !msg.isStreaming && msg.fichiersKlassiaIgnores?.length ? (
+                        <div style={{ paddingLeft: 42, marginTop: 4, display: 'flex', flexDirection: 'column' as const, gap: 2 }}>
+                          {msg.fichiersKlassiaIgnores.map(f => (
+                            <div key={f.fichier_id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#F59E0B' }}>
+                              <span>⚠</span>
+                              <span>
+                                {f.nom ? `« ${f.nom} » — ` : ''}
+                                {isFr ? 'Ce document n\'a pas encore pu être utilisé par l\'IA.' : 'This document could not be used by the AI yet.'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {/* ── Barre d'actions par message (liée à ce message uniquement) ── */}
+                      {msg.role === 'ia' && msg.action_sug && !msg.isStreaming && (
+                        <div style={{ paddingLeft: 42, marginTop: 6 }}>
+                          <div className="glass-light" style={{
+                            borderRadius: 'var(--radius-md)',
+                            padding: '10px 14px',
+                            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const,
+                            boxShadow: '0 2px 8px rgba(15,35,65,0.05)',
+                          }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginRight: 4 }}>
+                              {isFr ? '✦ Généré :' : '✦ Generated:'}
+                            </span>
+                            {[
+                              { label: '📥 Word',     onClick: () => handleExportWord(msg.action_sug!, msg.contenu_json) },
+                              ...(msg.contenu_json && ['plan_lecon','fiche_lecon','lecon_complete','lecon_developpee','activite'].includes(msg.action_sug?.type_contenu ?? '')
+                                ? [{ label: '📊 PowerPoint', onClick: () => handleExportPptx(msg.action_sug!, msg.contenu_json) }]
+                                : []),
+                              { label: '🖨️ Imprimer', onClick: () => handlePrint(msg.action_sug!) },
+                            ].map(btn => (
+                              <button key={btn.label} onClick={btn.onClick}
+                                style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', border: '1px solid rgba(15,35,65,0.1)', background: 'rgba(255,255,255,0.85)', color: 'var(--text-secondary)', boxShadow: 'none' }}
+                                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fff' }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.85)' }}>
+                                {btn.label}
+                              </button>
+                            ))}
+                            <button
+                              onClick={msg.is_saved ? undefined : () => handleSaveOpen(msg.action_sug!, msg.id, msg.autosave_fichier_id, msg.indexation_ok)}
+                              disabled={!!msg.is_saved}
+                              style={{
+                                padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                                cursor: msg.is_saved ? 'default' : 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
+                                border: 'none',
+                                background: msg.is_saved ? 'rgba(34,197,94,0.15)' : 'linear-gradient(135deg, #6B3FA0, #4F46E5)',
+                                color: msg.is_saved ? '#16a34a' : '#fff',
+                                boxShadow: msg.is_saved ? 'none' : '0 3px 10px rgba(108,92,231,0.25)',
+                              }}>
+                              {msg.is_saved ? (isFr ? '✓ Sauvegardé' : '✓ Saved') : (isFr ? '💾 Sauvegarder' : '💾 Save')}
+                            </button>
+                          </div>
                         </div>
                       )}
-
-                      <div style={{
-                        maxWidth: msg.role === 'user' ? '72%' : '100%',
-                        padding: msg.role === 'user' ? '10px 16px' : '4px 0 16px',
-                        borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : 0,
-                        background: msg.role === 'user' ? 'var(--violet, #6C5CE7)' : 'transparent',
-                        color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
-                        fontSize: 14,
-                        lineHeight: 1.65,
-                      }}>
-                        {msg.role === 'ia' && msg.isStreaming && !msg.content ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-                            <span style={{ fontStyle: 'italic', marginRight: 4 }}>KlassIA+ {isFr ? 'rédige' : 'is writing'}</span>
-                            <span className="prep-dot" />
-                            <span className="prep-dot" />
-                            <span className="prep-dot" />
-                          </span>
-                        ) : msg.role === 'ia' ? (
-                          <MarkdownMessage content={msg.content} isStreaming={!!msg.isStreaming} />
-                        ) : (
-                          <>
-                            {msg.content}
-                            {msg.piecesJointes?.length ? (
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const, marginTop: msg.content ? 8 : 0 }}>
-                                {msg.piecesJointes.map((pj, i) =>
-                                  pj.type_mime.startsWith('image/') && pj.url_storage ? (
-                                    <a key={i} href={pj.url_storage} target="_blank" rel="noopener noreferrer">
-                                      <img src={pj.url_storage} alt={pj.nom}
-                                        style={{ maxWidth: 180, maxHeight: 130, borderRadius: 8, display: 'block', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.25)', cursor: 'pointer' }}
-                                      />
-                                    </a>
-                                  ) : (
-                                    <a key={i}
-                                      href={pj.url_storage || '#'}
-                                      target={pj.url_storage ? '_blank' : undefined}
-                                      rel="noopener noreferrer"
-                                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 6, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 11, textDecoration: 'none', maxWidth: 200 }}>
-                                      <span style={{ flexShrink: 0 }}>
-                                        {pj.nom.toLowerCase().endsWith('.pdf') ? '📄' : '📝'}
-                                      </span>
-                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {pj.nom}
-                                      </span>
-                                    </a>
-                                  )
-                                )}
-                              </div>
-                            ) : null}
-                          </>
-                        )}
-                      </div>
                     </div>
                   ))}
-
-                  {/* ── Barre d'actions après fin de génération ── */}
-                  {actionSug && !isStreaming && (
-                    <div className="prep-msg-in" style={{ paddingLeft: 42 }}>
-                      <div className="glass-light" style={{
-                        borderRadius: 'var(--radius-md)',
-                        padding: '10px 14px',
-                        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const,
-                        boxShadow: '0 2px 8px rgba(15,35,65,0.05)',
-                      }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginRight: 4 }}>
-                          {isFr ? '✦ Généré :' : '✦ Generated:'}
-                        </span>
-                        {/* Word & Imprimer — toujours accessibles, même après sauvegarde (Bug 2) */}
-                        {[
-                          { label: '📥 Word',    onClick: handleExportWord, primary: false },
-                          { label: '🖨️ Imprimer', onClick: handlePrint,      primary: false },
-                        ].map(btn => (
-                          <button key={btn.label} onClick={btn.onClick}
-                            style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', border: '1px solid rgba(15,35,65,0.1)', background: 'rgba(255,255,255,0.85)', color: 'var(--text-secondary)', boxShadow: 'none' }}
-                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fff' }}
-                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.85)' }}>
-                            {btn.label}
-                          </button>
-                        ))}
-                        {/* Sauvegarder — indique ✓ une fois sauvegardé, reste visible pour re-sauvegarder ailleurs */}
-                        <button
-                          onClick={isSaved ? undefined : handleSaveOpen}
-                          disabled={isSaved}
-                          style={{
-                            padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                            cursor: isSaved ? 'default' : 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
-                            border: 'none',
-                            background: isSaved ? 'rgba(34,197,94,0.15)' : 'linear-gradient(135deg, #6B3FA0, #4F46E5)',
-                            color: isSaved ? '#16a34a' : '#fff',
-                            boxShadow: isSaved ? 'none' : '0 3px 10px rgba(108,92,231,0.25)',
-                          }}>
-                          {isSaved ? (isFr ? '✓ Sauvegardé' : '✓ Saved') : (isFr ? '💾 Sauvegarder' : '💾 Save')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
 
                   <div ref={messagesEndRef} />
                 </div>
               )}
+
+              {/* ── Bouton Revenir en bas (visible quand scrollé vers le haut pendant la génération) ── */}
+              {showScrollBtn && (
+                <div style={{ position: 'sticky', bottom: 12, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+                  <button
+                    onClick={() => {
+                      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+                      setShowScrollBtn(false)
+                    }}
+                    style={{
+                      pointerEvents: 'all',
+                      padding: '7px 16px', borderRadius: 99,
+                      background: 'var(--violet, #6C5CE7)',
+                      color: '#fff', border: 'none', cursor: 'pointer',
+                      fontSize: 12, fontWeight: 700, boxShadow: '0 4px 16px rgba(108,92,231,0.4)',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      transition: 'transform 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.04)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+                    ↓ Revenir au contenu en cours
+                  </button>
+                </div>
+              )}
             </div>
+
+            {/* ── ActionBar contextuelle (visible avec des messages) ── */}
+            {messages.length > 0 && !isStreaming && (
+              <ActionBar
+                isFr={isFr}
+                isStreaming={isStreaming}
+                onAction={prompt => handleSend(prompt)}
+              />
+            )}
 
             {/* Input area — glass */}
             <div style={{ flexShrink: 0, padding: '10px 24px 16px', borderTop: '1px solid rgba(15,35,65,0.07)', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
@@ -895,7 +1276,7 @@ function PreparerPageInner() {
                 </div>
               )}
 
-              {/* Chips de prévisualisation des fichiers en attente */}
+              {/* Chips fichiers locaux en attente */}
               {fichiersJoints.length > 0 && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 8 }}>
                   {fichiersJoints.map((file, i) => (
@@ -932,6 +1313,72 @@ function PreparerPageInner() {
                 </div>
               )}
 
+              {/* Chips fichiers KlassIA sélectionnés */}
+              {fichiersKlassia.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 8 }}>
+                  {fichiersKlassia.map((fk, i) => (
+                    <div key={fk.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '4px 8px 4px 8px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(108,92,231,0.35)',
+                      background: 'rgba(108,92,231,0.1)',
+                      fontSize: 11, color: 'var(--violet)',
+                      maxWidth: 220,
+                    }}>
+                      <span style={{ fontSize: 12, flexShrink: 0, fontWeight: 700 }}>✦</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontWeight: 600 }}>
+                        {fk.nom}
+                      </span>
+                      <button
+                        onClick={() => setFichiersKlassia(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--violet)', fontSize: 14, padding: '0 2px', lineHeight: 1, flexShrink: 0, opacity: 0.7 }}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Bandeau Mission KlassIA */}
+              {showMissionBandeau && missionParam && missionBandeauLabel && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '8px 14px', borderRadius: 'var(--radius-sm)', background: 'rgba(108,92,231,0.07)', border: '1px solid rgba(108,92,231,0.18)' }}>
+                  {/* Label + badge En cours si mission_key présent */}
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--violet)', letterSpacing: '0.04em', flex: 1, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
+                    ✦ Mission ScorgIA — {missionBandeauLabel}
+                    {missionKeyParam && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', background: 'rgba(16,185,129,0.1)', padding: '1px 7px', borderRadius: 99, letterSpacing: '0.04em', whiteSpace: 'nowrap' as const }}>
+                        {isFr ? 'En cours' : 'In progress'}
+                      </span>
+                    )}
+                  </span>
+                  {/* Marquer terminée (seulement si mission_key connu) */}
+                  {missionKeyParam && (
+                    <button
+                      onClick={handleCompleteMission}
+                      disabled={missionCompleting}
+                      style={{ fontSize: 11, fontWeight: 600, color: '#10B981', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 6, padding: '3px 10px', cursor: missionCompleting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: missionCompleting ? 0.5 : 1, whiteSpace: 'nowrap' as const, flexShrink: 0 }}>
+                      {missionCompleting ? '…' : (isFr ? '✓ Terminée' : '✓ Done')}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowMissionBandeau(false)}
+                    aria-label={isFr ? 'Ignorer la mission' : 'Dismiss mission'}
+                    style={{ fontSize: 12, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4, fontFamily: 'inherit', opacity: 0.7, flexShrink: 0 }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '0.7' }}>
+                    {isFr ? 'Ignorer' : 'Dismiss'}
+                  </button>
+                </div>
+              )}
+
+              {/* Toast terminaison mission */}
+              {missionCompleteToast && (
+                <div style={{ marginBottom: 8, padding: '7px 12px', borderRadius: 8, fontSize: 12, color: 'var(--text-primary)', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  {missionCompleteToast}
+                </div>
+              )}
+
               {/* Glass input pill */}
               <div className="glass-strong"
                 style={{ borderRadius: 'var(--radius-md)', padding: '10px 14px', display: 'flex', alignItems: 'flex-end', gap: 8, boxShadow: 'var(--shadow-card)' }}
@@ -946,14 +1393,60 @@ function PreparerPageInner() {
                   🎤
                 </button>
 
-                {/* Attacher un fichier */}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isStreaming || fichiersJoints.length >= 3}
-                  title={isFr ? 'Joindre un fichier (PDF, Word, image — max 5 Mo)' : 'Attach a file (PDF, Word, image — max 5 MB)'}
-                  style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: isStreaming || fichiersJoints.length >= 3 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, background: fichiersJoints.length > 0 ? 'rgba(108,92,231,0.12)' : 'rgba(15,35,65,0.05)', color: fichiersJoints.length > 0 ? 'var(--violet)' : 'var(--text-muted)', transition: 'all 0.15s', opacity: isStreaming ? 0.4 : 1 }}>
-                  📎
-                </button>
+                {/* Ajouter un contexte — point d'entrée V1 */}
+                <div ref={attachMenuRef} style={{ position: 'relative', flexShrink: 0 }}>
+                  <button
+                    onClick={() => setShowAttachMenu(v => !v)}
+                    disabled={isStreaming || fichiersJoints.length >= 3}
+                    aria-label={isFr ? 'Ajouter un contexte' : 'Add context'}
+                    title={isFr ? 'Ajouter un contexte' : 'Add context'}
+                    style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: isStreaming || fichiersJoints.length >= 3 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, background: showAttachMenu || fichiersJoints.length > 0 ? 'rgba(108,92,231,0.12)' : 'rgba(15,35,65,0.05)', color: showAttachMenu || fichiersJoints.length > 0 ? 'var(--violet)' : 'var(--text-muted)', transition: 'all 0.15s', opacity: isStreaming ? 0.4 : 1 }}>
+                    📎
+                  </button>
+
+                  {showAttachMenu && (
+                    <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 120, minWidth: 240, background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(15,35,65,0.1)', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 32px rgba(15,35,65,0.12)', overflow: 'hidden' }}>
+                      <div style={{ padding: '8px 14px 6px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>
+                        {isFr ? 'Ajouter un contexte' : 'Add context'}
+                      </div>
+
+                      {/* 1 — Mes fichiers KlassIA */}
+                      <button
+                        onClick={() => { setShowAttachMenu(false); setShowKlassIAPicker(true) }}
+                        disabled={fichiersKlassia.length >= 5}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: fichiersKlassia.length >= 5 ? 'not-allowed' : 'pointer', textAlign: 'left' as const, fontSize: 13, color: 'var(--text-secondary)', transition: 'background 0.1s', opacity: fichiersKlassia.length >= 5 ? 0.5 : 1 }}
+                        onMouseEnter={e => { if (fichiersKlassia.length < 5) (e.currentTarget.style.background = 'rgba(108,92,231,0.06)') }}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                        <span style={{ fontSize: 16 }}>📂</span>
+                        <div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{isFr ? 'Mes fichiers ScorgIA' : 'My ScorgIA files'}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                            {fichiersKlassia.length >= 5
+                              ? (isFr ? 'Limite atteinte (5)' : 'Limit reached (5)')
+                              : (isFr ? `${fichiersKlassia.length}/5 sélectionné${fichiersKlassia.length !== 1 ? 's' : ''}` : `${fichiersKlassia.length}/5 selected`)
+                            }
+                          </div>
+                        </div>
+                      </button>
+
+                      <div style={{ height: 1, background: 'rgba(15,35,65,0.06)', margin: '0 14px' }} />
+
+                      {/* 2 — Mon ordinateur */}
+                      <button
+                        onClick={() => { setShowAttachMenu(false); fileInputRef.current?.click() }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' as const, fontSize: 13, color: 'var(--text-secondary)', transition: 'background 0.1s' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(108,92,231,0.06)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                        <span style={{ fontSize: 16 }}>🖥️</span>
+                        <div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{isFr ? 'Mon ordinateur' : 'My computer'}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>PDF, Word, image — max 5 Mo</div>
+                        </div>
+                      </button>
+                      <div style={{ height: 6 }} />
+                    </div>
+                  )}
+                </div>
 
                 {/* Textarea */}
                 <textarea
@@ -961,7 +1454,7 @@ function PreparerPageInner() {
                   value={inputValue}
                   onChange={e => setInputValue(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-                  placeholder={isFr ? `Demandez à KlassIA+ pour ${classe?.nom || 'votre classe'}…` : `Ask KlassIA+ for ${classe?.nom || 'your class'}…`}
+                  placeholder={isFr ? `Demandez à ScorgIA pour ${classe?.nom || 'votre classe'}…` : `Ask ScorgIA for ${classe?.nom || 'your class'}…`}
                   rows={1}
                   style={{ flex: 1, resize: 'none', minHeight: 28, maxHeight: 140, fontSize: 14, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', lineHeight: 1.5, overflowY: 'auto', padding: '3px 0' }}
                 />
@@ -976,14 +1469,14 @@ function PreparerPageInner() {
               </div>
 
               <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', margin: '6px 0 0' }}>
-                KlassIA+ · {isFr ? 'Contenu éducatif généré par IA · Vérifiez avant d\'utiliser' : 'AI-generated educational content · Review before using'}
+                ScorgIA · {isFr ? 'Contenu éducatif généré par IA · Vérifiez avant d\'utiliser' : 'AI-generated educational content · Review before using'}
               </p>
             </div>
 
           </div>
         )}
 
-      </div>
+      </WorkspaceLayout>
 
       {/* ── Modal de sauvegarde ── */}
       {saveModal && (
@@ -1011,9 +1504,9 @@ function PreparerPageInner() {
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
                   {isFr ? 'Où ranger cette leçon ?' : 'Where to save this lesson?'}
                 </div>
-                {actionSug?.titre && (
+                {pendingSave?.action.titre && (
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontStyle: 'italic', maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    <span style={{ color: 'var(--text-muted)', fontStyle: 'normal' }}>{isFr ? 'Leçon :' : 'Lesson:'} </span>« {actionSug.titre} »
+                    <span style={{ color: 'var(--text-muted)', fontStyle: 'normal' }}>{isFr ? 'Leçon :' : 'Lesson:'} </span>« {pendingSave.action.titre} »
                   </div>
                 )}
                 {classe && (
@@ -1040,7 +1533,7 @@ function PreparerPageInner() {
                   <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
                     {classes.map(c => (
                       <button key={c.id}
-                        onClick={() => { setClasseId(c.id); loadDossiers(actionSug, c.id) }}
+                        onClick={() => { setClasseId(c.id); loadDossiers(pendingSave?.action, c.id) }}
                         style={{
                           padding: '9px 14px', borderRadius: 10, textAlign: 'left',
                           border: `1.5px solid ${classeId === c.id ? 'var(--violet)' : 'rgba(15,35,65,0.1)'}`,
@@ -1129,6 +1622,22 @@ function PreparerPageInner() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── Sélecteur fichiers KlassIA (DCE-03) ── */}
+      {showKlassIAPicker && classeId && (
+        <KlassIAFilePicker
+          classeId={classeId}
+          matiere={matiereEffective}
+          maxFiles={5}
+          initialSelectedIds={fichiersKlassia.map(f => f.id)}
+          classes={classes.map(c => ({ id: c.id, nom: c.nom, niveau: c.niveau, matiere: c.matiere, matieres: c.matieres }))}
+          onConfirm={selection => {
+            setFichiersKlassia(selection)
+            setShowKlassIAPicker(false)
+          }}
+          onClose={() => setShowKlassIAPicker(false)}
+        />
       )}
 
       {/* ── Toast (persist:true = erreur qui reste jusqu'au clic ✕) ── */}

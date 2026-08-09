@@ -263,6 +263,10 @@ export type ProgrammeAnnuel = {
   nb_semaines: number
   contenu_json: ContenuProgramme
   genere_par_ia: boolean
+  // ── Champs migration 036 ──────────────────────────────────────────────────
+  teaching_pack_id?: string
+  calendrier_json?: Record<string, unknown>
+  syllabus_json?: Record<string, unknown>
   created_at: string
 }
 
@@ -648,6 +652,11 @@ export type ConversationIA = {
   created_at:          string
   updated_at:          string
 }
+
+// Version sans messages — utilisée dans les listes (ex: HistoriquePreparer).
+// Force un re-fetch explicite avant d'accéder au contenu, évitant les
+// undefined silencieux quand messages est absent du SELECT.
+export type ConversationIAResume = Omit<ConversationIA, 'messages'>
 
 // ─── Favoris enseignant ───────────────────────────────────────────────────────
 

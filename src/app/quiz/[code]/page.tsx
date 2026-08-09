@@ -334,8 +334,8 @@ export default function QuizElevePage() {
         <div style={{ width: '100%', maxWidth: 440, animation: 'fadeUp 0.4s ease' }}>
           {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#6B3FA0,#A78BFA)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, margin: '0 auto 12px' }}>K</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', letterSpacing: 2, textTransform: 'uppercase' }}>KlassIA+ · Quiz Live</div>
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#6B3FA0,#A78BFA)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, margin: '0 auto 12px' }}>S</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', letterSpacing: 2, textTransform: 'uppercase' }}>ScorgIA · Quiz Live</div>
             <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>{quiz.titre}</div>
           </div>
 
@@ -378,7 +378,7 @@ export default function QuizElevePage() {
             </button>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>Propulsé par KlassIA+</div>
+          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>Propulsé par ScorgIA</div>
         </div>
       )}
 
@@ -629,7 +629,7 @@ export default function QuizElevePage() {
             🔄 Rejouer
           </button>
 
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)', marginTop: 16, position: 'relative', zIndex: 6 }}>Propulsé par KlassIA+</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)', marginTop: 16, position: 'relative', zIndex: 6 }}>Propulsé par ScorgIA</div>
         </div>
       )}
     </div>

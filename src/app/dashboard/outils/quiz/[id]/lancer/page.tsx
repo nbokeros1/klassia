@@ -306,7 +306,7 @@ function LancerInner() {
     : 0
 
   const top5 = classement().slice(0, 5)
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://klassia.ca'
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://scorgia.app'
   const quizUrl = `${baseUrl}/quiz/${quiz?.code_session}`
 
   if (loading) return (
@@ -325,7 +325,7 @@ function LancerInner() {
           <div style={{ fontSize: 16, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, textTransform: 'uppercase' }}>
             {quiz?.titre}
           </div>
-          <div style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)' }}>Rejoins sur klassia.ca/quiz</div>
+          <div style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)' }}>Rejoins sur scorgia.app/quiz</div>
           <div style={{ fontSize: 88, fontWeight: 900, letterSpacing: 12, color: '#A78BFA', fontVariantNumeric: 'tabular-nums', textShadow: '0 0 60px rgba(167,139,250,0.5)' }}>
             {quiz?.code_session}
           </div>

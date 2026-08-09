@@ -1,6 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
+﻿import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
+
+export const maxDuration = 60
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

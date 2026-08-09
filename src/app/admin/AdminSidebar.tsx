@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import LogoKlassIA from '@/components/ui/LogoKlassIA'
+import { ScorgiaLogo } from '@/components/branding/scorgia-logo'
 
 const NAV = [
   { href: '/admin',             icon: '📊', label: 'Vue d\'ensemble' },
@@ -27,11 +27,11 @@ export default function AdminSidebar() {
       {/* Logo */}
       <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <LogoKlassIA variant="icone" taille={28} />
+          <ScorgiaLogo variant="icon" width={28} height={28} />
           <span style={{ color: 'rgba(255,255,255,0.6)', fontWeight: 400, fontSize: 13 }}>Admin</span>
         </div>
         <div style={{ fontSize: 10, color: '#EF4444', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', marginTop: 3 }}>
-          Panneau d'administration
+          Panneau d&apos;administration
         </div>
       </div>
 
@@ -66,7 +66,7 @@ export default function AdminSidebar() {
             textDecoration: 'none', color: 'rgba(255,255,255,0.35)',
             fontSize: 12, transition: 'color 0.15s',
           }}>
-          ← Retour à KlassIA+
+          ← Retour à Scorgia
         </Link>
       </div>
     </div>

@@ -42,3 +42,8 @@ next-env.d.ts
 
 # Claude Code local settings
 .claude/
+
+# Rapports de session générés
+sc0*.html
+sc0*.md
+setup-docs.ps1

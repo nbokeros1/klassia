@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import RichEditor from '@/components/RichEditor'
@@ -19,10 +19,10 @@ export default function LeconPage() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [leconStatut, setLeconStatut] = useState('brouillon')
-  const [autoSaveMsg, setAutoSaveMsg] = useState('')
+  const [isDirty,    setIsDirty]    = useState(false)
+  const [savedAt,    setSavedAt]    = useState<string | null>(null)
   const [exportingPptx, setExportingPptx] = useState(false)
   const [isPrintOpen, setIsPrintOpen] = useState(false)
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [exportMsg, setExportMsg] = useState('')
   const [iaGenerating, setIaGenerating] = useState(false)
   const [iaMsg, setIaMsg] = useState('')
@@ -138,13 +138,25 @@ export default function LeconPage() {
     vocabulaire: form.vocabulaire,
   })
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<{ success: boolean; lesson_id?: string; saved_at?: string; error?: string }> => {
     setSaving(true)
-    const contenu_json = buildContenujson()
-    await supabase.from('lecons').update({ titre: form.titre, contenu_json }).eq('id', leconId)
-    setLecon({ ...lecon, titre: form.titre, contenu_json })
-    setEditing(false)
-    setSaving(false)
+    try {
+      const contenu_json = buildContenujson()
+      const now = new Date().toISOString()
+      const { error } = await supabase.from('lecons')
+        .update({ titre: form.titre, contenu_json, updated_at: now })
+        .eq('id', leconId)
+      if (error) throw error
+      setLecon((prev: any) => ({ ...prev, titre: form.titre, contenu_json }))
+      setIsDirty(false)
+      setSavedAt(now)
+      setEditing(false)
+      return { success: true, lesson_id: leconId, saved_at: now }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Erreur de sauvegarde' }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleStatutChange = async (newStatut: string) => {
@@ -159,18 +171,21 @@ export default function LeconPage() {
     setLecon((prev: any) => ({ ...prev, type_document: newType }))
   }
 
-  // Auto-save with 2.5s debounce while editing
+  // Marquer comme non sauvegardé quand le formulaire change en mode édition
   useEffect(() => {
-    if (!editing || loading) return
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
-    autoSaveTimer.current = setTimeout(async () => {
-      const contenu_json = buildContenujson()
-      await supabase.from('lecons').update({ titre: form.titre, contenu_json }).eq('id', leconId)
-      setAutoSaveMsg('✓ Sauvegardé')
-      setTimeout(() => setAutoSaveMsg(''), 2000)
-    }, 2500)
-    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
-  }, [form, editing])
+    if (editing && !loading) setIsDirty(true)
+  }, [form])
+
+  // Avertir l'utilisateur avant de quitter l'onglet si des modifications sont en attente
+  useEffect(() => {
+    if (!isDirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
 
   const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim()
 
@@ -215,7 +230,7 @@ export default function LeconPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `KlassIA+_${form.titre.replace(/\s+/g, '_')}.pptx`
+      a.download = `ScorgIA_${form.titre.replace(/\s+/g, '_')}.pptx`
       a.click()
       URL.revokeObjectURL(url)
       setExportMsg('✓ PowerPoint téléchargé !')
@@ -257,7 +272,7 @@ const handleExportDocx = async () => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `KlassIA+_${form.titre.replace(/\s+/g, '_')}.docx`
+    a.download = `ScorgIA_${form.titre.replace(/\s+/g, '_')}.docx`
     a.click()
     URL.revokeObjectURL(url)
     setExportMsg('✓ Word téléchargé !')
@@ -363,11 +378,13 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
             criteres:                   parsed.criteres                 || f.criteres,
           }))
           setEditing(true)
+          setIsDirty(true)
           setIaMsg('✓ Leçon générée — vérifiez et ajustez le contenu')
         } catch {
           // Fallback: put content in modélisation if JSON parse fails
           setForm(f => ({ ...f, pendant_modelisation: `<p>${data.contenu}</p>` }))
           setEditing(true)
+          setIsDirty(true)
           setIaMsg('✓ Contenu généré dans Modélisation')
         }
       }
@@ -388,6 +405,7 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
       if (data.contenu) {
         setForm(f => ({ ...f, differentiation: `<p>${data.contenu.replace(/\n/g, '</p><p>')}</p>` }))
         setEditing(true)
+        setIsDirty(true)
         setIaMsg('✓ Différenciation générée')
       }
     } catch { setIaMsg('Erreur') }
@@ -464,7 +482,14 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
       { v: 'archivee',  l: 'Archivée'   },
     ].map(s => <option key={s.v} value={s.v} style={{ background: '#0D0D1A' }}>{s.l}</option>)}
   </select>
-  {autoSaveMsg && <span style={{ fontSize: '11px', color: '#34D399' }}>{autoSaveMsg}</span>}
+  {isDirty && !saving && (
+    <span style={{ fontSize: '11px', color: '#F59E0B', fontWeight: 600 }}>● Non enregistré</span>
+  )}
+  {!isDirty && savedAt && (
+    <span style={{ fontSize: '11px', color: '#34D399' }}>
+      ✓ Sauvegardé à {new Date(savedAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+    </span>
+  )}
   {exportMsg && (
     <span style={{
       fontSize: '12px', padding: '6px 12px',
@@ -500,14 +525,22 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
   </button>
   {editing ? (
     <>
-      <button onClick={() => setEditing(false)} className="btn-ghost btn-sm">Annuler</button>
+      <button
+        onClick={() => {
+          if (isDirty && !window.confirm('Annuler les modifications ?\nLes changements non sauvegardés seront perdus.')) return
+          setEditing(false)
+          setIsDirty(false)
+        }}
+        className="btn-ghost btn-sm">
+        Annuler
+      </button>
       <button onClick={handleSave} disabled={saving} className="btn-primary btn-sm"
         style={{ opacity: saving ? 0.7 : 1 }}>
         {saving ? 'Sauvegarde...' : '✓ Sauvegarder'}
       </button>
     </>
   ) : (
-    <button onClick={() => setEditing(true)} className="btn-primary btn-sm">✏️ Modifier</button>
+    <button onClick={() => { setEditing(true); setIsDirty(false) }} className="btn-primary btn-sm">✏️ Modifier</button>
   )}
 </div>
         </div>
@@ -754,7 +787,14 @@ Réponds UNIQUEMENT avec le JSON valide, sans aucun markdown.`
                 <button onClick={handlePrint} className="btn-ghost btn-sm">🖨️ Imprimer</button>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {autoSaveMsg && <span style={{ fontSize: '11px', color: '#34D399' }}>{autoSaveMsg}</span>}
+                {isDirty && !saving && (
+                  <span style={{ fontSize: '11px', color: '#F59E0B', fontWeight: 600 }}>● Non enregistré</span>
+                )}
+                {!isDirty && savedAt && (
+                  <span style={{ fontSize: '11px', color: '#34D399' }}>
+                    ✓ {new Date(savedAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
                 {exportMsg && <span style={{ fontSize: '12px', color: exportMsg.includes('✓') ? '#34D399' : '#60A5FA' }}>{exportMsg}</span>}
                 <button onClick={() => router.push(`/dashboard/classes/${classeId}/lecons/${leconId}/tableau`)} className="btn-ghost btn-sm">🖍 Tableau blanc</button>
                 <button onClick={() => router.push(`/dashboard/classes/${classeId}/lecons/${leconId}/presenter`)}

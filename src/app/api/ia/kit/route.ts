@@ -1,7 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk'
+﻿import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getMaxTokens } from '@/lib/ia/get-max-tokens'
+
+export const maxDuration = 60
 
 export async function POST(request: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY

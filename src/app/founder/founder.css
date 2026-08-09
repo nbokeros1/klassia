@@ -1,0 +1,84 @@
+/* Founder Operating Center — hover & focus styles */
+
+/* Table rows */
+.foc-tr:hover {
+  background: rgba(255, 255, 255, 0.025) !important;
+}
+
+/* Interactive buttons */
+.foc-btn:hover {
+  opacity: 0.85;
+  transition: opacity 0.1s;
+}
+
+/* Primary CTA buttons */
+.foc-btn-primary:hover {
+  filter: brightness(1.1);
+  transition: filter 0.15s;
+}
+
+/* Nav links in sidebar */
+.foc-nav-link:hover {
+  background: rgba(99, 102, 241, 0.08) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Table cells */
+.foc-table th {
+  white-space: nowrap;
+}
+
+/* Cards */
+.foc-card {
+  transition: border-color 0.15s;
+}
+.foc-card:hover {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Input focus */
+.foc-input:focus {
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+/* Select focus */
+.foc-select:focus {
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  outline: none;
+}
+
+/* Scrollbars slim (webkit) */
+.foc-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.foc-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.foc-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+.foc-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Responsive — compact layout under 1200px */
+@media (max-width: 1100px) {
+  .foc-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .foc-grid-3 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .foc-grid-4,
+  .foc-grid-3,
+  .foc-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}

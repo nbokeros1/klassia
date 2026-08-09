@@ -93,12 +93,6 @@ export default function Topbar({
         flexWrap: 'wrap',
       }}
     >
-      {/* ── Powered by Claude ─────────────────────────────────── */}
-      <Pill style={{ fontSize: 10.5, color: 'var(--text-muted, #8B97AC)', padding: '4px 10px 4px 8px' }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--violet, #6C5CE7)', display: 'inline-block', flexShrink: 0 }} />
-        Powered by Claude
-      </Pill>
-
       <div style={{ flex: 1 }} />
 
       {/* ── Classe + matière (si dispo) ───────────────────────── */}

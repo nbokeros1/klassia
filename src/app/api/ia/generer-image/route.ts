@@ -1,7 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk'
+﻿import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/api-auth'
+
+export const maxDuration = 60
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -150,9 +152,9 @@ export async function POST(request: Request) {
     const placeholder = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
   <rect width="${w}" height="${h}" fill="#F8F9FF" rx="12"/>
   <rect x="20" y="20" width="${w - 40}" height="${h - 40}" fill="none" stroke="#7F77DD" stroke-width="2" stroke-dasharray="8,4" rx="8"/>
-  <text x="${w / 2}" y="${h / 2 - 20}" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#7F77DD" font-weight="bold">✦ KlassIA+</text>
+  <text x="${w / 2}" y="${h / 2 - 20}" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#7F77DD" font-weight="bold">✦ ScorgIA</text>
   <text x="${w / 2}" y="${h / 2 + 10}" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#94A3B8">${description.substring(0, 60)}</text>
-  <text x="${w / 2}" y="${h / 2 + 35}" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#CBD5E1">Schéma pédagogique — KlassIA+</text>
+  <text x="${w / 2}" y="${h / 2 + 35}" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#CBD5E1">Schéma pédagogique — ScorgIA</text>
 </svg>`
     const b64 = Buffer.from(placeholder, 'utf-8').toString('base64')
     return NextResponse.json({

@@ -684,7 +684,7 @@ function StudioContent() {
           style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}>
           <span style={{ fontSize: 18, color: 'var(--color-accent-violet)' }}>✦</span>
           <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--color-text-primary)', letterSpacing: '-0.3px' }}>
-            KlassIA+ <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>Studio</span>
+            ScorgIA <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>Studio</span>
           </span>
         </button>
 
@@ -789,7 +789,7 @@ function StudioContent() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     {/* Badge type + indicateur streaming */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)' }}>KlassIA+</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)' }}>ScorgIA</span>
                       {ti && (
                         <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, fontWeight: 700, background: `${ti.color}22`, color: ti.color }}>
                           {ti.icon} {ti.label}
@@ -893,7 +893,7 @@ function StudioContent() {
                 value={inputValue}
                 onChange={e => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={`Demandez à KlassIA+ de générer du contenu…\nEx: Génère une leçon sur les fractions pour ${selectedClasse?.niveau || 'votre classe'}`}
+                placeholder={`Demandez à ScorgIA de générer du contenu…\nEx: Génère une leçon sur les fractions pour ${selectedClasse?.niveau || 'votre classe'}`}
                 rows={1}
                 style={{
                   width: '100%', boxSizing: 'border-box',

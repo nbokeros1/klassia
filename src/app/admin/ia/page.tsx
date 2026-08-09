@@ -62,7 +62,7 @@ export default function AdminIAPage() {
     <div style={{ padding: '32px 36px' }}>
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontSize: 22, fontWeight: 800, color: '#F1F5F9', marginBottom: 4 }}>🤖 IA & API</div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Utilisation de l'API Anthropic · Coûts · Types de contenu</div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Utilisation de l&apos;API Anthropic · Coûts · Types de contenu</div>
       </div>
 
       {loading ? (
@@ -110,7 +110,7 @@ export default function AdminIAPage() {
             {/* Distribution par heure (auj.) */}
             <div style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '22px 24px' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#F1F5F9', marginBottom: 16 }}>
-                Activité par heure — Aujourd'hui
+                Activité par heure — Aujourd&apos;hui
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 80 }}>
                 {Array.from({ length: 24 }, (_, h) => {

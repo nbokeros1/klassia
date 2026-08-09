@@ -38,7 +38,7 @@ const FORFAITS = [
     prix_cad: '0',
     prix_usd: '0',
     periode:  '',
-    desc:     'Pour découvrir KlassIA+',
+    desc:     'Pour découvrir ScorgIA',
     features: [
       '3 générations IA / mois',
       '2 classes',
@@ -196,6 +196,16 @@ function ProfilContent() {
 
   // ── Forfaits ──────────────────────────────────────────────────────────────
   const [monnaie, setMonnaie] = useState<'cad' | 'usd'>('cad')
+
+  // ── Préférences UI ────────────────────────────────────────────────────────
+  const [showAssistant, setShowAssistant] = useState(true)
+  useEffect(() => {
+    setShowAssistant(localStorage.getItem('scorgia_show_assistant_btn') !== 'false')
+  }, [])
+  const handleToggleAssistant = (v: boolean) => {
+    setShowAssistant(v)
+    localStorage.setItem('scorgia_show_assistant_btn', String(v))
+  }
 
   // ── Toast ─────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
@@ -586,7 +596,7 @@ function ProfilContent() {
 
                 <div className="pcard">
                   <h3>Gabarit de leçon</h3>
-                  <p className="sub">Uploader un de vos plans de leçon existants — KlassIA+ imitera votre style</p>
+                  <p className="sub">Uploader un de vos plans de leçon existants — ScorgIA imitera votre style</p>
                   <GabaritUpload
                     profilId={profil?.id || ''}
                     currentUrl={iaGabaritUrl}
@@ -637,7 +647,7 @@ function ProfilContent() {
               <>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-text-primary)' }}>Plans KlassIA+</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-text-primary)' }}>Plans ScorgIA</div>
                     <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 3 }}>Conçus pour les enseignants canadiens</div>
                   </div>
                   <div style={{ display: 'flex', background: 'var(--color-bg-card)', borderRadius: 10, border: '1.5px solid var(--color-border)', overflow: 'hidden' }}>
@@ -702,7 +712,7 @@ function ProfilContent() {
                   <h3>Questions ?</h3>
                   <p className="sub">Contactez-nous pour l'offre Établissement ou pour tout besoin spécifique</p>
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <button className="btn-ghost-sm" onClick={() => window.open('mailto:contact@klassia.app', '_blank')}>📧 contact@klassia.app</button>
+                    <button className="btn-ghost-sm" onClick={() => window.open('mailto:contact@scorgia.app', '_blank')}>📧 contact@scorgia.app</button>
                   </div>
                 </div>
               </>
@@ -719,7 +729,7 @@ function ProfilContent() {
                   <ToggleSwitch on={notifs.email_rappels} onChange={v => setNotifs(n => ({ ...n, email_rappels: v }))}
                     label="Rappels de cours" desc="Alertes 24 h avant chaque cours au calendrier" />
                   <ToggleSwitch on={notifs.email_nouveautes} onChange={v => setNotifs(n => ({ ...n, email_nouveautes: v }))}
-                    label="Nouveautés KlassIA+" desc="Nouvelles fonctionnalités et mises à jour de la plateforme" />
+                    label="Nouveautés ScorgIA" desc="Nouvelles fonctionnalités et mises à jour de la plateforme" />
                 </div>
 
                 <div className="pcard">
@@ -784,6 +794,13 @@ function ProfilContent() {
                   <div style={{ marginTop: 10, fontSize: 11, color: 'var(--color-text-muted)' }}>
                     Densité personnalisée bientôt disponible
                   </div>
+                </div>
+
+                <div className="pcard">
+                  <h3>Assistant IA</h3>
+                  <p className="sub">Bouton ✦ d'accès rapide à ScorgIA, affiché en bas à droite de chaque page</p>
+                  <ToggleSwitch on={showAssistant} onChange={handleToggleAssistant}
+                    label="Afficher le bouton assistant" desc="Le bouton ✦ apparaît en bas à droite de toutes les pages" />
                 </div>
               </>
             )}

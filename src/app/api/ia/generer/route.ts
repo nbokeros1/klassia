@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+
+export const maxDuration = 120
 import { getMaxTokens } from '@/lib/ia/get-max-tokens'
 import { buildSystemPrompt } from '@/lib/ia/build-system-prompt'
 import { construireSectionsSkills } from '@/lib/ia/skills-pedagogiques'
@@ -102,138 +104,8 @@ export async function POST(request: Request) {
       ? `LANGUE DE TRAVAIL : Français canadien. Tu dois TOUJOURS répondre en français canadien et utiliser la terminologie pédagogique albertaine/québécoise.`
       : `WORKING LANGUAGE: Canadian English. You must ALWAYS respond in English using Alberta/Canadian pedagogical terminology.`
 
-    // ── Gabarit provincial Alberta (leçons uniquement) ────────────────────
-    const LESSON_TYPES = ['lecon_complete', 'fiche_lecon', 'plan_lecon', 'plan_sequence', 'activite_groupe']
-    const albertaSection = LESSON_TYPES.includes(type_contenu || '') ? (isFr ? `
-
-GABARIT PROVINCIAL ALBERTA — 8 SECTIONS OBLIGATOIRES :
-Ce gabarit est obligatoire pour toutes les leçons destinées aux enseignants de l'Alberta.
-
-SECTION 1 — Informations générales
-• Matière | Niveau scolaire | Durée | Date prévue
-• RAG (Résultats d'apprentissage généraux) : objectifs du programme d'études de l'Alberta
-• RAS (Résultats d'apprentissage spécifiques) : objectifs mesurables et observables pour cette leçon
-
-SECTION 2 — Avant la leçon (Mise en contexte et activation)
-• Activation des connaissances antérieures (sondage diagnostique, KWL, question-amorce)
-• Matériels et ressources requises
-• Préparation de l'espace d'apprentissage
-
-SECTION 3 — Pendant la leçon (Apprentissage actif)
-• Introduction / Situation-problème ou tension cognitive
-• Développement : enseignement explicite + activité collaborative (Jigsaw, Think-Pair-Share, PBL)
-• Pratique guidée → pratique autonome (concret → représentation → abstrait)
-
-SECTION 4 — Après la leçon (Consolidation et clôture)
-• Retour en groupe collectif (Qu'avons-nous appris ? En quoi est-ce important ? Et maintenant ?)
-• Exit ticket / billet de sortie / question de fermeture
-
-SECTION 5 — Différenciation et adaptation
-• Soutien pour les élèves en difficulté (étayage, simplification, regroupement flexible)
-• Enrichissement pour les élèves avancés (extension, approfondissement)
-• Adaptations : EAL/ÉLS, TDAH, douance, difficultés d'apprentissage
-
-SECTION 6 — Perspective autochtone (obligatoire — Programme d'études de l'Alberta)
-• Connexion avec les savoirs, traditions ou perspectives des Premières Nations, Métis et Inuit
-• Territoire Treaty concerné (Treaty 6, 7 ou 8)
-• Ressource recommandée : Alberta Education FNMI Learning Resources
-
-SECTION 7 — Matériels et ressources
-• Matériels physiques / numériques / manipulatifs
-• Références au programme d'études de l'Alberta (lien ou section précise)
-• Sites recommandés : LearnAlberta.ca, ERLC.ca
-
-SECTION 8 — Réflexion de l'enseignant (à compléter après la leçon)
-1. Ce qui a bien fonctionné et pourquoi
-2. Ce qui doit être ajusté ou supprimé
-3. Prochaines étapes pour les élèves qui ont besoin d'un soutien supplémentaire` : `
-
-ALBERTA PROVINCIAL TEMPLATE — 8 MANDATORY SECTIONS:
-This template is mandatory for all lessons for Alberta teachers.
-
-SECTION 1 — General Information
-• Subject | Grade Level | Duration | Planned Date
-• GLO (General Learning Outcomes): Alberta Program of Studies objectives
-• SLO (Specific Learning Outcomes): measurable, observable objectives for this lesson
-
-SECTION 2 — Before the Lesson (Setting the Stage & Activation)
-• Activating prior knowledge (diagnostic survey, KWL chart, hook question)
-• Required materials and resources
-• Learning environment preparation
-
-SECTION 3 — During the Lesson (Active Learning)
-• Introduction / Problem situation or cognitive tension
-• Development: explicit instruction + collaborative activity (Jigsaw, Think-Pair-Share, PBL)
-• Guided practice → independent practice (concrete → representational → abstract)
-
-SECTION 4 — After the Lesson (Consolidation & Closure)
-• Whole-group debrief (What did we learn? Why does it matter? What's next?)
-• Exit ticket / closing question
-
-SECTION 5 — Differentiation and Adaptation
-• Support for struggling students (scaffolding, simplification, flexible grouping)
-• Enrichment for advanced students (extension, deepening)
-• Adaptations: ELL, ADHD, giftedness, learning disabilities
-
-SECTION 6 — Indigenous Perspectives (required — Alberta Program of Studies)
-• Connection to First Nations, Métis, and Inuit knowledge, traditions, or perspectives
-• Treaty territory (Treaty 6, 7, or 8)
-• Recommended resource: Alberta Education FNMI Learning Resources
-
-SECTION 7 — Materials and Resources
-• Physical / digital / manipulative materials
-• Alberta Program of Studies references (link or specific section)
-• Recommended sites: LearnAlberta.ca, ERLC.ca
-
-SECTION 8 — Teacher Reflection (to be completed after the lesson)
-1. What worked well and why
-2. What needs to be adjusted or removed
-3. Next steps for students who need additional support`) : ''
-
-    // ── Marqueurs pédagogiques BienEnseigner (leçons uniquement) ─────────────
-    const bepSection = LESSON_TYPES.includes(type_contenu || '') ? (isFr ? `
-
-MARQUEURS BIENENSEIGNER — INSTRUCTION DE FORMATAGE UNIQUEMENT :
-Pour cette leçon, insère exactement ces 5 commentaires HTML, chacun sur sa propre ligne au DÉBUT de la section pédagogique correspondante. Ne modifie ni la structure ni le contenu pédagogique.
-
-<!-- bep-step:1:Objectifs SMART -->
-(placer avant les RAG/RAS et les intentions d'apprentissage — Section 1)
-
-<!-- bep-step:2:Amorce -->
-(placer avant la mise en contexte et l'activation des connaissances — Section 2)
-
-<!-- bep-step:3:Présentation progressive -->
-(placer avant l'enseignement explicite et la modélisation — Section 3 début)
-
-<!-- bep-step:4:Pratique -->
-(placer avant la pratique guidée et autonome — Section 3 suite)
-
-<!-- bep-step:5:Clôture -->
-(placer avant le retour collectif et l'exit ticket — Section 4)
-
-Ces marqueurs sont invisibles dans le rendu final et ne doivent PAS modifier le contenu pédagogique.` : `
-
-BIENENSEIGNER MARKERS — FORMATTING INSTRUCTION ONLY:
-For this lesson, insert exactly these 5 HTML comment markers, each on its own line AT THE START of the corresponding pedagogical section. Do not alter structure or pedagogical content.
-
-<!-- bep-step:1:Objectives SMART -->
-(place before GLO/SLO and learning intentions — Section 1)
-
-<!-- bep-step:2:Hook -->
-(place before context setting and prior knowledge activation — Section 2)
-
-<!-- bep-step:3:Progressive Presentation -->
-(place before explicit instruction and modelling — Section 3 start)
-
-<!-- bep-step:4:Practice -->
-(place before guided and independent practice — Section 3 continued)
-
-<!-- bep-step:5:Closure -->
-(place before whole-group debrief and exit ticket — Section 4)
-
-These markers are invisible in the final render and must NOT alter pedagogical structure or content.`) : ''
-
     // ── System prompt ─────────────────────────────────────────────────────────
+    const LESSON_TYPES = ['lecon_complete', 'fiche_lecon', 'plan_lecon', 'plan_sequence', 'activite_groupe']
     const sectionsSkillsRaw = construireSectionsSkills(provinceEnseignant, type_contenu, isFr)
 
     // Enveloppe d'intégration : indiquer à l'IA où placer les skills (jamais en sections séparées)
@@ -249,14 +121,30 @@ RÈGLE ABSOLUE : aucun contenu culturel spécifique à une nation particulière.
 ABSOLUTE RULE: never generate cultural content specific to any particular nation.${sectionsSkillsRaw}`)
       : sectionsSkillsRaw
 
+    // Override de format — doit être EN DERNIER pour écraser les emojis de construireSectionsSkills
+    const formatOverride = LESSON_TYPES.includes(type_contenu || '') ? (isFr ? `
+
+⚠️ PRIORITÉ ABSOLUE — FORMAT FINAL (écrase toute autre instruction) :
+• Utilise UNIQUEMENT la structure 7 blocs en tableaux Markdown définie ci-dessus (AVANT / PENDANT / APRÈS).
+• AUCUN emoji dans ta réponse — ni dans les en-têtes, ni dans les cellules, nulle part.
+• AUCUNE section hors gabarit (pas de "Réflexion", pas de "Section 5", pas de titre standalone, pas de liste hors tableaux).
+• AUCUN schéma SVG.
+• Les compétences et perspectives listées ci-dessus sont un CONTEXTE de contenu : intègre leur SUBSTANCE dans les cellules du gabarit — ne les recopie jamais comme sections séparées.` : `
+
+⚠️ ABSOLUTE PRIORITY — FINAL FORMAT (overrides all previous instructions):
+• Use ONLY the 7-block Markdown table structure defined above (BEFORE / DURING / AFTER).
+• NO emojis anywhere — not in headers, not in cells.
+• NO sections outside the template.
+• NO inline SVG.
+• Competencies and perspectives listed above are CONTENT CONTEXT only: integrate their substance into the template cells.`) : ''
+
     const systemPrompt =
       introLangue + '\n\n' +
       buildSystemPrompt(type_contenu, profil_ia, profil_ia?.gabarit_lecon_analyse) +
       differenciationSection +
       memoireSection +
-      albertaSection +
-      bepSection +
-      sectionsSkills
+      sectionsSkills +
+      formatOverride
 
     // ── User prompt ───────────────────────────────────────────────────────────
     const classeCtx = contexte?.classe

@@ -1,0 +1,11 @@
+// All Préparer workspace hooks
+export { usePreparation } from './usePreparation'
+export { useWorkspace } from './useWorkspace'
+export { useBlocks } from './useBlocks'
+export { useAutosave } from './useAutosave'
+export { useVersions } from './useVersions'
+export { useResources } from './useResources'
+export { useAIAssistant } from './useAIAssistant'
+export { useConversation } from './useConversation'
+export { usePresentation } from './usePresentation'
+export { useKeyboardShortcuts } from './useKeyboardShortcuts'

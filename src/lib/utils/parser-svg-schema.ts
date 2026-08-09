@@ -59,10 +59,12 @@ function inlineFormat(text: string): string {
 
 export function markdownToHtmlSimple(md: string): string {
   const lines = md.split('\n')
-  let html = ''
-  let inUl = false
-  let inOl = false
-  let inBq = false
+  let html    = ''
+  let inUl    = false
+  let inOl    = false
+  let inBq    = false
+  let inTable = false
+  let tableRows: string[][] = []
 
   const closeList = () => {
     if (inUl) { html += '</ul>'; inUl = false }
@@ -71,14 +73,41 @@ export function markdownToHtmlSimple(md: string): string {
   const closeBq = () => {
     if (inBq) { html += '</blockquote>'; inBq = false }
   }
+  const closeTable = () => {
+    if (!inTable || !tableRows.length) { inTable = false; tableRows = []; return }
+    let out = '<table style="border-collapse:collapse;width:100%">'
+    tableRows.forEach((row, idx) => {
+      const tag = idx === 0 ? 'th' : 'td'
+      const style = idx === 0
+        ? 'style="background:#1a56db;color:#fff;padding:6px 10px;border:1px solid #93c5fd;text-align:left"'
+        : 'style="padding:5px 10px;border:1px solid #d1d5db;vertical-align:top"'
+      out += `<tr>${row.map(c => `<${tag} ${style}>${inlineFormat(c)}</${tag}>`).join('')}</tr>`
+    })
+    out += '</table>'
+    html += out
+    tableRows = []
+    inTable   = false
+  }
 
   for (const line of lines) {
     const t = line.trim()
 
     if (t === '') {
-      closeList(); closeBq()
+      closeTable(); closeList(); closeBq()
       continue
     }
+
+    // ── Tableau Markdown pipe
+    if (t.startsWith('|')) {
+      // Ligne séparateur (|:---|:---|) : définit la frontière header/body — ignorer
+      if (t.replace(/[|:\s-]/g, '') === '') continue
+      closeList(); closeBq()
+      inTable = true
+      const cells = t.split('|').filter(c => c.trim() !== '').map(c => c.trim())
+      tableRows.push(cells)
+      continue
+    }
+    if (inTable) closeTable()
 
     if (/^-{3,}$/.test(t) || /^\*{3,}$/.test(t)) {
       closeList(); closeBq(); html += '<hr>'; continue
@@ -120,7 +149,7 @@ export function markdownToHtmlSimple(md: string): string {
     html += `<p>${inlineFormat(t)}</p>`
   }
 
-  closeList(); closeBq()
+  closeTable(); closeList(); closeBq()
   return html
 }
 

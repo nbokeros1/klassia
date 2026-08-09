@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
+import Anthropic from '@anthropic-ai/sdk'
+
+export const maxDuration = 120
 import {
   Document, Packer, Paragraph, TextRun, Table,
   TableRow, TableCell, Header, Footer,
@@ -8,12 +11,67 @@ import {
   PageNumber,
 } from 'docx'
 
+// ── Extraction ContenuLecon depuis Markdown (fallback DOCX) ──────────────────
+// Utilisé quand le client ne passe pas contenu_json — assure JSON-first pour
+// tous les exports de leçon quelle que soit l'origine de l'appel.
+const PROMPT_DOCX_EXTRACTION = `Extrait les sections pédagogiques de ce Markdown et retourne UNIQUEMENT un objet JSON valide. Aucun texte avant ou après. Pas de backticks.
+
+Schéma attendu :
+{
+  "intention": "intention pédagogique",
+  "rag": "résultats généraux d'apprentissage",
+  "ras": "résultats d'apprentissage spécifiques",
+  "integration_langue": { "vocabulaire": "", "oral": "", "ecrit": "", "visuel": "" },
+  "evaluation_formative": "support concret de la trace",
+  "perspective_autochtone": "intégration FNMI ou vide",
+  "differentiation_universelle": "",
+  "differentiation_ciblee": "",
+  "differentiation_specialisee": "",
+  "avant_amorce": "contenu complet phase AVANT",
+  "avant_duree": "chiffre seulement ex: 10",
+  "pendant_modelisation": "enseignement explicite",
+  "pendant_pratique_guidee": "pratique avec l'enseignant",
+  "pendant_pratique_autonome": "pratique autonome",
+  "pendant_duree": "chiffre seulement ex: 45",
+  "apres_cloture": "retour sur les apprentissages",
+  "apres_billet": "billet de sortie ou évaluation",
+  "apres_duree": "chiffre seulement ex: 15",
+  "materiel": []
+}
+
+Règles : champ vide ("") si absent. "materiel" est un tableau de strings.`
+
+async function extraireContenuLeconPourDocx(markdown: string): Promise<Record<string, unknown> | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey || markdown.length < 80) return null
+  try {
+    const client = new Anthropic({ apiKey })
+    const md = markdown.length > 6000 ? markdown.substring(0, 6000) : markdown
+    const response = await client.messages.create({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 1200,
+      system:     PROMPT_DOCX_EXTRACTION,
+      messages:   [{ role: 'user', content: md }],
+    })
+    const texte   = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+    const jsonBrut = texte.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    const contenu  = JSON.parse(jsonBrut)
+    if (contenu && (contenu.avant_amorce || contenu.pendant_modelisation || contenu.intention)) {
+      return contenu
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export async function POST(req: NextRequest) {
   const { error } = await requireAuth()
   if (error) return error
 
   const {
     contenu,
+    contenu_json,   // ContenuLecon structuré — prioritaire sur contenu si fourni
     type_contenu,
     titre,
     classe,
@@ -28,9 +86,8 @@ export async function POST(req: NextRequest) {
 
   const estAnglais = (langue ?? 'fr') === 'en'
 
-  // Couleurs KlassIA+
-  const VIOLET      = '7F77DD'
-  const GRIS_HEADER = 'F3F4F6'
+  // Couleurs ScorgIA
+  const VIOLET       = '7F77DD'
   const BLEU_SECTION = 'DBEAFE'
   const VERT_SECTION = 'DCFCE7'
   const AMBRE_SECTION = 'FEF9C3'
@@ -126,9 +183,53 @@ export async function POST(req: NextRequest) {
       : [new TextRun({ text: ligne, size: 20, font: 'Calibri' })]
   }
 
+  // Supprimer les blocs ```code``` (SVG schemas, etc.) — pas rendables en DOCX
+  function stripCodeBlocks(md: string): string {
+    return md.replace(/```[\s\S]*?```/g, '[Schéma pédagogique — voir version web]')
+  }
+
+  // Inline bold pour cellules de tableau (size cohérent, sans passer par parseMarkdownLine)
+  function parseCellRuns(text: string, size = 18, color = '1F2937'): TextRun[] {
+    const parts  = text.split(/(\*\*[^*]+\*\*)/)
+    const result: TextRun[] = []
+    for (const p of parts) {
+      if (!p) continue
+      if (p.startsWith('**') && p.endsWith('**') && p.length > 4) {
+        result.push(new TextRun({ text: p.slice(2, -2), bold: true, size, font: 'Calibri', color }))
+      } else {
+        result.push(new TextRun({ text: p, size, font: 'Calibri', color }))
+      }
+    }
+    return result.length > 0 ? result : [new TextRun({ text, size, font: 'Calibri', color })]
+  }
+
+  // Extraire les tableaux Markdown en séquence positionnelle
+  function parseMarkdownTables(md: string): Array<{ header: string[]; rows: string[][] }> {
+    const tables: Array<{ header: string[]; rows: string[][] }> = []
+    const lines  = md.split('\n')
+    let cur: { header: string[]; rows: string[][] } | null = null
+
+    for (const line of lines) {
+      const t = line.trim()
+      if (!t.startsWith('|')) {
+        if (cur) { tables.push(cur); cur = null }
+        continue
+      }
+      if (t.replace(/[|:\s-]/g, '') === '') continue  // ligne séparateur (:---:)
+      const cells = t.split('|').filter(c => c.trim() !== '').map(c => c.trim())
+      if (!cur) {
+        cur = { header: cells, rows: [] }
+      } else {
+        cur.rows.push(cells)
+      }
+    }
+    if (cur) tables.push(cur)
+    return tables
+  }
+
   // Convertir Markdown en paragraphes Word
   function markdownToParagraphs(md: string): Paragraph[] {
-    const lignes      = md.split('\n')
+    const lignes      = stripCodeBlocks(md).split('\n')
     const paragraphes: Paragraph[] = []
     let dansTableau   = false
     let lignesTableau: TableRow[] = []
@@ -174,13 +275,9 @@ export async function POST(req: NextRequest) {
             },
             margins: { top: 80, bottom: 80, left: 120, right: 120 },
             children: [new Paragraph({
-              children: [new TextRun({
-                text:  c.replace(/\*\*/g, ''),
-                bold:  estHeader,
-                size:  18,
-                color: estHeader ? 'FFFFFF' : '1F2937',
-                font:  'Calibri',
-              })]
+              children: estHeader
+                ? [new TextRun({ text: c.replace(/\*\*/g, ''), bold: true, size: 18, color: 'FFFFFF', font: 'Calibri' })]
+                : parseCellRuns(c, 18, '1F2937'),
             })]
           }))
         }))
@@ -292,54 +389,18 @@ export async function POST(req: NextRequest) {
     return paragraphes
   }
 
-  // ─── GABARIT PLAN DE LEÇON ALBERTA ────────────────────────────────────────
-
-  function extraireSections(md: string): Record<string, string> {
-    const sections: Record<string, string> = {}
-    const regex = /^#{1,3}\s+(.+)$/gm
-    const titres: { titre: string; index: number }[] = []
-    let match: RegExpExecArray | null
-
-    while ((match = regex.exec(md)) !== null) {
-      titres.push({ titre: match[1], index: match.index })
-    }
-
-    for (let i = 0; i < titres.length; i++) {
-      const debut = md.indexOf('\n', titres[i].index) + 1
-      const fin   = i < titres.length - 1 ? titres[i + 1].index : md.length
-      const cle   = titres[i].titre
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
-        .replace(/[^a-z0-9]/g, '_')
-        .replace(/_+/g, '_')
-      sections[cle] = md.substring(debut, fin).trim()
-    }
-
-    // Mappings synonymes
-    const mappings: Record<string, string[]> = {
-      avant:   ['avant', 'before', 'amorce', 'introduction', 'hook'],
-      pendant: ['pendant', 'during', 'realisation', 'developpement', 'development'],
-      apres:   ['apres', 'after', 'integration', 'cloture', 'closure'],
-      rag:     ['rag', 'resultat_d_apprentissage_general', 'glo', 'general_learning'],
-      ras:     ['ras', 'resultat_d_apprentissage_specifique', 'slo', 'specific_learning'],
-    }
-    for (const [cible, sources] of Object.entries(mappings)) {
-      if (!sections[cible]) {
-        for (const src of sources) {
-          if (sections[src]) { sections[cible] = sections[src]; break }
-        }
-      }
-    }
-    return sections
-  }
+  // ─── GABARIT PLAN DE LEÇON USJ (Campus Saint-Jean) ─────────────────────────
+  // Reproduit la structure exacte : identification 5-col, sections info 2-col
+  // avec en-têtes vert foncé, phases AVANT/PENDANT/APRÈS avec en-tête jaune.
+  // Parsing positionnel : le 1er tableau MD = identification, les 3 suivants =
+  // sections info, les 3 derniers = phases — conforme à getFormatSection().
 
   type InfosDoc = {
-    enseignant?: string
-    niveau?: string
-    matiere?: string
-    duree?: string | number
-    nb_eleves?: string | number
+    enseignant?:   string
+    niveau?:       string
+    matiere?:      string
+    duree?:        string | number
+    nb_eleves?:    string | number
     numero_lecon?: string
   }
 
@@ -348,235 +409,279 @@ export async function POST(req: NextRequest) {
     infos: InfosDoc
   ): Array<Paragraph | Table> {
     const elements: Array<Paragraph | Table> = []
-    const sections = extraireSections(contenuMd)
-    const espacement = new Paragraph({ spacing: { after: 160 }, children: [] })
+    const md     = stripCodeBlocks(contenuMd)
+    const tables = parseMarkdownTables(md)
 
-    // ── TABLE 1 : Informations générales ─────────────────────────────────────
+    const USJ_VERT  = '1B5E20'   // vert foncé (en-têtes Programme, Langue, Autochtone)
+    const USJ_JAUNE = 'FFFF00'   // jaune (en-têtes AVANT, PENDANT, APRÈS)
+    const SUB_GRAY  = 'F3F4F6'   // gris clair (sous-en-têtes de phase)
+    const BORD      = '9CA3AF'   // couleur de bordure uniforme
+
+    function esp() {
+      return new Paragraph({ spacing: { after: 140 }, children: [] })
+    }
+
+    const bordures = {
+      top:    { style: BorderStyle.SINGLE, size: 4, color: BORD },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: BORD },
+      left:   { style: BorderStyle.SINGLE, size: 4, color: BORD },
+      right:  { style: BorderStyle.SINGLE, size: 4, color: BORD },
+    }
+
+    // Cellule texte simple (en-têtes, valeurs courtes)
+    function cellTxt(text: string, opts: {
+      fond?: string; couleur?: string; gras?: boolean;
+      size?: number; colspan?: number; va?: 'top' | 'center' | 'bottom'
+    } = {}): TableCell {
+      return new TableCell({
+        columnSpan:    opts.colspan,
+        verticalAlign: (opts.va ?? VerticalAlign.CENTER) as any,
+        shading:       opts.fond ? { fill: opts.fond, type: ShadingType.CLEAR } : undefined,
+        borders:       bordures,
+        margins:       { top: 80, bottom: 80, left: 120, right: 120 },
+        children: [new Paragraph({
+          children: [new TextRun({
+            text,
+            bold:  opts.gras  ?? false,
+            size:  opts.size  ?? 18,
+            color: opts.couleur ?? '111827',
+            font:  'Calibri',
+          })]
+        })]
+      })
+    }
+
+    // Cellule contenu riche (contenu Markdown parsé)
+    function cellMd(text: string, opts: { colspan?: number } = {}): TableCell {
+      return new TableCell({
+        columnSpan:    opts.colspan,
+        verticalAlign: VerticalAlign.TOP,
+        borders:       bordures,
+        margins:       { top: 80, bottom: 80, left: 120, right: 120 },
+        children:      text.trim()
+          ? markdownToParagraphs(text)
+          : [new Paragraph({ children: [new TextRun({ text: '' })] })],
+      })
+    }
+
+    // ── TABLE IDENTIFICATION (5 colonnes) ────────────────────────────────────
+    const t0     = tables[0]
+    const idData = t0?.rows[0] ?? []
+    const idHdrs = t0?.header ?? ['Nom', 'Niveau scolaire', 'Matière', 'Durée', 'Leçon #']
     elements.push(new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width:        { size: 9360, type: WidthType.DXA },
       columnWidths: [1872, 1872, 1872, 1872, 1872],
       rows: [
+        new TableRow({ children: idHdrs.slice(0, 5).map(h => cellTxt(h, { gras: true, fond: 'F3F4F6' })) }),
         new TableRow({ children: [
-          cellule(estAnglais ? 'Teacher Name'  : 'Nom',            { gras: true, fond: VIOLET, couleur: 'FFFFFF' }),
-          cellule(estAnglais ? 'Grade'         : 'Niveau scolaire', { gras: true, fond: VIOLET, couleur: 'FFFFFF' }),
-          cellule(estAnglais ? 'Subject'       : 'Matière',         { gras: true, fond: VIOLET, couleur: 'FFFFFF' }),
-          cellule(estAnglais ? 'Duration'      : 'Durée',           { gras: true, fond: VIOLET, couleur: 'FFFFFF' }),
-          cellule(estAnglais ? 'Lesson #'      : 'Leçon #',         { gras: true, fond: VIOLET, couleur: 'FFFFFF' }),
-        ]}),
-        new TableRow({ children: [
-          cellule(infos.enseignant  ?? '', { fontSize: 18 }),
-          cellule(infos.niveau      ?? '', { fontSize: 18 }),
-          cellule(infos.matiere     ?? '', { fontSize: 18 }),
-          cellule(infos.duree ? String(infos.duree) + ' min' : '', { fontSize: 18 }),
-          cellule(infos.numero_lecon ?? '', { fontSize: 18 }),
+          cellTxt(infos.enseignant   ?? idData[0] ?? ''),
+          cellTxt(infos.niveau       ?? idData[1] ?? ''),
+          cellTxt(infos.matiere      ?? idData[2] ?? ''),
+          cellTxt(infos.duree ? String(infos.duree) + ' min' : (idData[3] ?? '')),
+          cellTxt(infos.numero_lecon ?? idData[4] ?? ''),
         ]}),
       ],
     }))
-    elements.push(espacement)
+    elements.push(esp())
 
-    // ── TABLE 2 : Programme et intention ─────────────────────────────────────
-    const rag       = sections['rag']       ?? sections['glo'] ?? ''
-    const ras       = sections['ras']       ?? sections['slo'] ?? ''
-    const intention = sections['intention'] ?? sections['learning_intention'] ?? ''
-    elements.push(new Table({
-      width: { size: 9360, type: WidthType.DXA },
-      columnWidths: [4680, 4680],
-      rows: [
-        new TableRow({ children: [
-          cellule(
-            estAnglais ? 'Program of Studies: Learning Outcomes' : "Programme d'étude : résultats d'apprentissages",
-            { gras: true, fond: VIOLET, couleur: 'FFFFFF' }
-          ),
-          cellule(
-            estAnglais ? 'Learning Intention' : 'Intention pédagogique',
-            { gras: true, fond: VIOLET, couleur: 'FFFFFF' }
-          ),
-        ]}),
-        new TableRow({ children: [
-          cellule(
-            (estAnglais ? 'GLO: ' : 'RAG : ') + rag + '\n\n' + (estAnglais ? 'SLO: ' : 'RAS : ') + ras,
-            { fontSize: 18 }
-          ),
-          cellule(intention, { fontSize: 18 }),
-        ]}),
-      ],
-    }))
-    elements.push(espacement)
+    // ── TABLES INFO 2-colonnes (Programme, Langue, Autochtone) ───────────────
+    const infoSections: Array<{ idx: number; fallback: [string, string] }> = [
+      {
+        idx:      1,
+        fallback: [
+          estAnglais ? 'Program of Studies — Learning Outcomes' : "Programme d'étude — résultats d'apprentissages",
+          estAnglais ? 'Learning Intention'                     : 'Intention pédagogique',
+        ],
+      },
+      {
+        idx:      2,
+        fallback: [
+          estAnglais ? 'Language Integration (vocabulary, oral, written, visual)' : 'Intégration de la langue (vocabulaire, oral, écrit, visuel)',
+          estAnglais ? 'Assessment'                                                : 'Évaluation',
+        ],
+      },
+      {
+        idx:      3,
+        fallback: [
+          estAnglais ? 'Integration of Indigenous Perspectives' : 'Intégration de la perspective autochtone',
+          estAnglais ? 'Differentiated Instruction'             : 'Différenciation pédagogique (universel/ciblé/spécialisé)',
+        ],
+      },
+    ]
 
-    // ── TABLE 3 : Langue et évaluation ────────────────────────────────────────
-    const vocab    = sections['vocabulaire'] ?? sections['vocabulary'] ?? ''
-    const oral     = sections['oral']        ?? ''
-    const ecrit    = sections['ecrit']       ?? sections['written']   ?? ''
-    const visuel   = sections['visuel']      ?? sections['visual']    ?? ''
-    const evalForm = sections['evaluation_formative'] ?? sections['formative'] ?? ''
-    const evalSomm = sections['evaluation_sommative'] ?? sections['summative'] ?? ''
-    elements.push(new Table({
-      width: { size: 9360, type: WidthType.DXA },
-      columnWidths: [4680, 4680],
-      rows: [
-        new TableRow({ children: [
-          cellule(
-            estAnglais ? 'Language Integration' : 'Intégration de la langue',
-            { gras: true, fond: BLEU_SECTION, couleur: '1D4ED8' }
-          ),
-          cellule(
-            estAnglais ? 'Assessment' : 'Évaluation',
-            { gras: true, fond: VERT_SECTION, couleur: '166534' }
-          ),
-        ]}),
-        new TableRow({ children: [
-          cellule(
-            (estAnglais ? 'Vocabulary: ' : 'Vocabulaire : ') + vocab + '\n\n' +
-            (estAnglais ? 'Oral: '       : 'Oral : ')       + oral  + '\n\n' +
-            (estAnglais ? 'Written: '    : 'Écrit : ')      + ecrit + '\n\n' +
-            (estAnglais ? 'Visual: '     : 'Visuel : ')     + visuel,
-            { fontSize: 18 }
-          ),
-          cellule(
-            (estAnglais ? 'Formative: ' : 'Formative : ') + evalForm + '\n\n' +
-            (estAnglais ? 'Summative: ' : 'Sommative : ') + evalSomm,
-            { fontSize: 18 }
-          ),
-        ]}),
-      ],
-    }))
-    elements.push(espacement)
+    for (const sec of infoSections) {
+      const t    = tables[sec.idx]
+      const hdrs = (t?.header?.length === 2 ? t.header : sec.fallback) as [string, string]
+      const data = t?.rows[0] ?? ['', '']
+      elements.push(new Table({
+        width:        { size: 9360, type: WidthType.DXA },
+        columnWidths: [4680, 4680],
+        rows: [
+          new TableRow({ children: [
+            cellTxt(hdrs[0], { gras: true, fond: USJ_VERT, couleur: 'FFFFFF' }),
+            cellTxt(hdrs[1], { gras: true, fond: USJ_VERT, couleur: 'FFFFFF' }),
+          ]}),
+          new TableRow({ children: [
+            cellMd(data[0] ?? ''),
+            cellMd(data[1] ?? ''),
+          ]}),
+        ],
+      }))
+      elements.push(esp())
+    }
 
-    // ── TABLE 4 : Perspective autochtone et différenciation ────────────────────
-    const autochtone      = sections['autochtone']     ?? sections['indigenous']    ?? ''
-    const differentiation = sections['differentiation'] ?? ''
-    elements.push(new Table({
-      width: { size: 9360, type: WidthType.DXA },
-      columnWidths: [4680, 4680],
-      rows: [
-        new TableRow({ children: [
-          cellule(
-            estAnglais ? 'Integration of Indigenous Perspectives' : 'Intégration de la perspective autochtone',
-            { gras: true, fond: AMBRE_SECTION, couleur: '92400E' }
-          ),
-          cellule(
-            estAnglais ? 'Differentiated Instruction' : 'Différenciation pédagogique',
-            { gras: true, fond: ROSE_SECTION, couleur: '9D174D' }
-          ),
-        ]}),
-        new TableRow({ children: [
-          cellule(
-            autochtone || (estAnglais ? 'Not applicable for this lesson.' : 'Non applicable pour cette leçon.'),
-            { fontSize: 18 }
-          ),
-          cellule(differentiation, { fontSize: 18 }),
-        ]}),
-      ],
-    }))
-    elements.push(espacement)
-
-    // ── PHASES : AVANT / PENDANT / APRÈS ─────────────────────────────────────
+    // ── PHASES AVANT / PENDANT / APRÈS (tableaux positionnels 4-5-6) ─────────
+    // Structure USJ : en-tête jaune pleine largeur (titre | Matériaux/ressources),
+    // sous-en-tête gris (Temps prévu | Connexion/Déroulement | —),
+    // ligne contenu (valeur | texte riche | matériaux).
     const phases = [
       {
-        label:   estAnglais ? 'BEFORE — Hook / Introduction'        : 'AVANT — Préparation / Introduction',
-        key:     'avant',
-        fond:    BLEU_SECTION,
-        couleur: '1D4ED8',
+        titre:    estAnglais ? 'BEFORE — Hook / Introduction'                 : 'AVANT — Préparation/évaluation (amorce, introduction)',
+        mat:      estAnglais ? 'Materials / Resources'                        : 'Matériaux/ressources',
+        subLeft:  estAnglais ? 'Time'                                         : 'Temps prévu',
+        subRight: estAnglais ? 'Connection & Prior Knowledge'                 : 'Connexion et connaissances antérieures',
+        idx:      4,
       },
       {
-        label:   estAnglais ? 'DURING — Development / Realization'  : 'PENDANT — Réalisation / Développement',
-        key:     'pendant',
-        fond:    VERT_SECTION,
-        couleur: '166534',
+        titre:    estAnglais ? 'DURING — Development / Realization'           : 'PENDANT — Réalisation (développement)',
+        mat:      estAnglais ? 'Materials / Resources'                        : 'Matériaux/ressources',
+        subLeft:  estAnglais ? 'Time'                                         : 'Temps prévu',
+        subRight: estAnglais ? 'Modelling | Guided Practice | Independent'    : 'Modélisation | Pratique guidée | Pratique autonome',
+        idx:      5,
       },
       {
-        label:   estAnglais ? 'AFTER — Consolidation / Closure'     : 'APRÈS — Intégration / Clôture',
-        key:     'apres',
-        fond:    AMBRE_SECTION,
-        couleur: '92400E',
+        titre:    estAnglais ? 'AFTER — Integration / Closure'                : 'APRÈS — Intégration/évaluation (retour sur les apprentissages, conclusion)',
+        mat:      estAnglais ? 'Materials / Resources'                        : 'Matériaux/ressources',
+        subLeft:  estAnglais ? 'Time'                                         : 'Temps prévu',
+        subRight: estAnglais ? 'Return on Learning'                           : 'Retour sur les apprentissages',
+        idx:      6,
       },
     ]
 
     for (const phase of phases) {
-      const contenuPhase = sections[phase.key]             ?? ''
-      const materiel     = sections[phase.key + '_materiel'] ?? ''
+      const t      = tables[phase.idx]
+      const header = t?.header ?? []
 
+      // Filtrer les lignes qui dupliquent l'en-tête (l'IA répète parfois la ligne d'en-tête)
+      const rawRows = (t?.rows ?? []).filter(row => {
+        const hNorm = header.map(h => h.replace(/\s+/g, '').toLowerCase())
+        const rNorm = row.map(r => r.replace(/\s+/g, '').toLowerCase())
+        return !hNorm.every((h, i) => h === (rNorm[i] ?? ''))
+      })
+      // S'il n'y a aucune ligne valide, afficher une ligne vide plutôt que planter
+      const prows = rawRows.length > 0 ? rawRows : [['', '', '']]
+
+      // Largeurs : Temps (700) | Contenu (5780) | Matériaux (2880) = 9360
       elements.push(new Table({
-        width: { size: 9360, type: WidthType.DXA },
-        columnWidths: [6240, 3120],
+        width:        { size: 9360, type: WidthType.DXA },
+        columnWidths: [700, 5780, 2880],
         rows: [
-          // En-tête de phase
+          // Ligne 1 : en-tête jaune — titre de phase (colspan 2) + Matériaux
           new TableRow({ children: [
             new TableCell({
-              columnSpan: 2,
-              shading: { fill: phase.fond, type: ShadingType.CLEAR },
-              borders: {
-                top:    { style: BorderStyle.SINGLE, size: 8, color: VIOLET },
-                bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-                left:   { style: BorderStyle.SINGLE, size: 8, color: VIOLET },
-                right:  { style: BorderStyle.SINGLE, size: 8, color: VIOLET },
-              },
-              margins: { top: 120, bottom: 120, left: 160, right: 160 },
+              columnSpan:    2,
+              verticalAlign: VerticalAlign.CENTER,
+              shading:       { fill: USJ_JAUNE, type: ShadingType.CLEAR },
+              borders:       bordures,
+              margins:       { top: 100, bottom: 100, left: 120, right: 120 },
               children: [new Paragraph({
                 children: [new TextRun({
-                  text:  phase.label,
-                  bold:  true, size: 24,
-                  color: phase.couleur, font: 'Calibri',
+                  text:  phase.titre,
+                  bold:  true,
+                  size:  20,
+                  color: '111827',
+                  font:  'Calibri',
                 })]
               })]
-            })
-          ]}),
-          // Sous-entêtes
-          new TableRow({ children: [
-            cellule(
-              estAnglais ? 'Time | Activity' : 'Temps prévu | Activité',
-              { gras: true, fond: GRIS_HEADER }
-            ),
-            cellule(
-              estAnglais ? 'Materials / Resources' : 'Matériaux / Ressources',
-              { gras: true, fond: GRIS_HEADER }
-            ),
-          ]}),
-          // Contenu
-          new TableRow({ children: [
-            new TableCell({
-              borders: {
-                top:    { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-                bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-                left:   { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-                right:  { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-              },
-              margins: { top: 120, bottom: 120, left: 160, right: 160 },
-              children: markdownToParagraphs(contenuPhase),
             }),
+            cellTxt(phase.mat, { gras: true, fond: USJ_JAUNE, size: 18 }),
+          ]}),
+          // Ligne 2 : sous-en-têtes gris
+          new TableRow({ children: [
+            cellTxt(phase.subLeft,  { gras: true, fond: SUB_GRAY, size: 16 }),
+            cellTxt(phase.subRight, { gras: true, fond: SUB_GRAY, size: 16 }),
             new TableCell({
-              borders: {
-                top:    { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-                bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-                left:   { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-                right:  { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-              },
-              margins: { top: 120, bottom: 120, left: 160, right: 160 },
-              children: markdownToParagraphs(materiel),
+              verticalAlign: VerticalAlign.CENTER,
+              shading:       { fill: SUB_GRAY, type: ShadingType.CLEAR },
+              borders:       bordures,
+              children:      [new Paragraph({ children: [] })],
             }),
           ]}),
+          // Lignes de données : une par sous-section (Modélisation / Pratique guidée / Pratique autonome)
+          ...prows.map(prow => new TableRow({ children: [
+            cellTxt(prow[0] ?? '', { size: 16, va: 'top' }),
+            cellMd(prow[1] ?? ''),
+            cellMd(prow[2] ?? ''),
+          ]})),
         ],
       }))
-      elements.push(espacement)
-    }
-
-    // ── RÉFLEXION ENSEIGNANT ─────────────────────────────────────────────────
-    const reflexion = sections['reflexion'] ?? sections['reflection'] ?? ''
-    if (reflexion) {
-      elements.push(new Paragraph({
-        spacing: { before: 240, after: 120 },
-        border:  { left: { style: BorderStyle.SINGLE, size: 12, color: VIOLET } },
-        indent:  { left: 400 },
-        children: [new TextRun({
-          text:  estAnglais ? '💭 Teacher Reflection' : "💭 Réflexion de l'enseignant",
-          bold:  true, size: 24,
-          color: VIOLET, font: 'Calibri',
-        })]
-      }))
-      elements.push(...markdownToParagraphs(reflexion))
+      elements.push(esp())
     }
 
     return elements
+  }
+
+  // ─── SÉRIALISEUR ContenuLecon → Markdown 7-blocs USJ ────────────────────────
+  // Convertit un objet ContenuLecon structuré en Markdown gabarit compatible
+  // avec genererGabaritPlanLecon() — plus fiable que le parsing positionnel du MD brut.
+
+  function contenuLeconVersMarkdownUSJ(c: Record<string, any>, infos: InfosDoc): string {
+    const s = (v: any) => (typeof v === 'string' ? v : '').replace(/\|/g, '\\|').replace(/\n/g, ' • ')
+    const lang = c.integration_langue || {}
+    const langueContenu = [
+      lang.vocabulaire ? `**Vocabulaire :** ${s(lang.vocabulaire)}` : '',
+      lang.oral        ? `**Oral :** ${s(lang.oral)}`               : '',
+      lang.ecrit       ? `**Écrit :** ${s(lang.ecrit)}`             : '',
+      lang.visuel      ? `**Visuel :** ${s(lang.visuel)}`           : '',
+    ].filter(Boolean).join(' • ')
+    const diff = [
+      c.differentiation_universelle  ? `**Universel :** ${s(c.differentiation_universelle)}`  : '',
+      c.differentiation_ciblee       ? `**Ciblé :** ${s(c.differentiation_ciblee)}`           : '',
+      c.differentiation_specialisee  ? `**Spécialisé :** ${s(c.differentiation_specialisee)}` : '',
+    ].filter(Boolean).join(' • ')
+    const rag      = s(c.rag)
+    const ras      = s(c.ras)
+    const prog     = [rag, ras].filter(Boolean).join(' — ')
+    const materiel = Array.isArray(c.materiel) && c.materiel.length > 0
+      ? c.materiel.map((m: string) => `• ${m}`).join(' ')
+      : ''
+    const avantD   = c.avant_duree  ? `${c.avant_duree} min`   : '__ min'
+    const apresD   = c.apres_duree  ? `${c.apres_duree} min`   : '__ min'
+    const apresRet = [s(c.apres_cloture), c.apres_billet ? s(c.apres_billet) : ''].filter(Boolean).join(' — ')
+    return [
+      `| Nom | Niveau scolaire | Matière | Durée | Leçon # |`,
+      `|:---|:---|:---|:---|:---|`,
+      `| ${infos.enseignant || ''} | ${infos.niveau || ''} | ${infos.matiere || ''} | ${infos.duree ? infos.duree + ' min' : ''} | ${infos.numero_lecon || ''} |`,
+      ``,
+      `| Programme d'étude — RAG et RAS (texte officiel exact) | Intention pédagogique |`,
+      `|:---|:---|`,
+      `| ${prog} | ${s(c.intention)} |`,
+      ``,
+      `| Intégration de la langue (vocabulaire, oral, écrit, visuel) | Évaluation |`,
+      `|:---|:---|`,
+      `| ${langueContenu} | ${s(c.evaluation_formative)} |`,
+      ``,
+      `| Intégration de la perspective autochtone | Différenciation pédagogique |`,
+      `|:---|:---|`,
+      `| ${s(c.perspective_autochtone)} | ${diff} |`,
+      ``,
+      `**AVANT** — Préparation/activation (amorce, introduction)`,
+      `| Temps prévu | Connexion et connaissances antérieures | Matériaux/ressources |`,
+      `|:---|:---|:---|`,
+      `| ${avantD} | ${s(c.avant_amorce)} | ${materiel} |`,
+      ``,
+      `**PENDANT** — Réalisation (développement)`,
+      `| Temps prévu | Déroulement | Matériaux/ressources |`,
+      `|:---|:---|:---|`,
+      `| | **Modélisation :** ${s(c.pendant_modelisation)} | |`,
+      `| | **Pratique guidée :** ${s(c.pendant_pratique_guidee)} | |`,
+      `| | **Pratique autonome :** ${s(c.pendant_pratique_autonome)} | |`,
+      ``,
+      `**APRÈS** — Intégration/évaluation (retour sur les apprentissages)`,
+      `| Temps prévu | Retour sur les apprentissages | Matériaux/ressources |`,
+      `|:---|:---|:---|`,
+      `| ${apresD} | ${apresRet} | |`,
+    ].join('\n')
   }
 
   // ─── INFOS DU DOCUMENT ───────────────────────────────────────────────────────
@@ -596,7 +701,23 @@ export async function POST(req: NextRequest) {
 
   const estPlanLecon = ['plan_lecon', 'plan_de_lecon', 'lecon_complete', 'fiche_lecon'].includes(type_contenu)
 
-  if (estPlanLecon) {
+  try {
+
+  // contenu_json disponible ET contient au moins un champ structuré de phase ?
+  let contenuJsonEffectif = contenu_json
+  if (estPlanLecon && !contenuJsonEffectif && contenu) {
+    // Fallback : extraire depuis Markdown via Haiku si le client n'a pas fourni contenu_json
+    contenuJsonEffectif = await extraireContenuLeconPourDocx(contenu) ?? undefined
+  }
+
+  const aContenuJson = contenuJsonEffectif &&
+    (contenuJsonEffectif.avant_amorce || contenuJsonEffectif.pendant_modelisation || contenuJsonEffectif.intention)
+
+  if (estPlanLecon && aContenuJson) {
+    // JSON-first : mapping direct, aucun parsing positionnel de tableaux
+    contenuDoc = genererGabaritPlanLecon(contenuLeconVersMarkdownUSJ(contenuJsonEffectif!, infosDoc), infosDoc)
+
+  } else if (estPlanLecon) {
     contenuDoc = genererGabaritPlanLecon(contenu, infosDoc)
 
   } else if (type_contenu === 'quiz') {
@@ -712,7 +833,7 @@ export async function POST(req: NextRequest) {
             new Paragraph({
               border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: VIOLET } },
               children: [
-                new TextRun({ text: '✦ KlassIA+', bold: true, size: 18, color: VIOLET, font: 'Calibri' }),
+                new TextRun({ text: '✦ ScorgIA', bold: true, size: 18, color: VIOLET, font: 'Calibri' }),
                 new TextRun({ text: '  |  ' + (titre ?? ''), size: 18, color: '6B7280', font: 'Calibri' }),
                 new TextRun({ children: [PageNumber.CURRENT], size: 16, color: '9CA3AF', font: 'Calibri' }),
               ]
@@ -727,7 +848,7 @@ export async function POST(req: NextRequest) {
               alignment: AlignmentType.CENTER,
               border: { top: { style: BorderStyle.SINGLE, size: 4, color: 'E5E7EB' } },
               children: [new TextRun({
-                text:  'Généré par KlassIA+ — klassia.app — ' + new Date().toLocaleDateString('fr-CA'),
+                text:  'Généré par ScorgIA — scorgia.app — ' + new Date().toLocaleDateString('fr-CA'),
                 size:  16, color: '9CA3AF', font: 'Calibri',
               })]
             })
@@ -740,10 +861,29 @@ export async function POST(req: NextRequest) {
 
   const buffer = await Packer.toBuffer(doc)
 
+  // ── DIAGNOSTIC TEMPORAIRE — retirer après investigation ──────────────────
+  console.log('[docx/export] taille buffer:', buffer.length, 'bytes')
+  const firstBytes = buffer.slice(0, 4).toString('hex')
+  console.log('[docx/export] premiers bytes:', firstBytes)
+  if (firstBytes !== '504b0304') {
+    console.log('[docx/export] ATTENTION — pas un ZIP valide, contenu brut:',
+      buffer.slice(0, 200).toString('utf8'))
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type':        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'Content-Disposition': `attachment; filename="${encodeURIComponent(titre ?? 'klassia-document')}.docx"`,
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(titre ?? 'scorgia-document')}.docx"`,
     }
   })
+
+  } catch (buildErr: any) {
+    console.error('[docx/export] Échec construction document — phase:', buildErr?.message)
+    console.error('[docx/export] Stack:', buildErr?.stack)
+    return NextResponse.json(
+      { error: 'Échec de la génération du fichier Word.', detail: buildErr?.message },
+      { status: 500 }
+    )
+  }
 }

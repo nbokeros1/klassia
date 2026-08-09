@@ -225,7 +225,7 @@ export default function PrintPanel({ open, onClose, lecon, classe, profil, form 
         const blob = await res.blob()
         const url  = URL.createObjectURL(blob)
         const a    = document.createElement('a')
-        a.href = url; a.download = `KlassIA+_${(form.titre || 'lecon').replace(/\s+/g, '_')}.docx`
+        a.href = url; a.download = `ScorgIA_${(form.titre || 'lecon').replace(/\s+/g, '_')}.docx`
         document.body.appendChild(a); a.click(); a.remove()
         URL.revokeObjectURL(url)
       }
@@ -377,7 +377,7 @@ export default function PrintPanel({ open, onClose, lecon, classe, profil, form 
                 flexShrink: 0,
               }}>K</div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', fontFamily: 'system-ui,sans-serif' }}>KlassIA+</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', fontFamily: 'system-ui,sans-serif' }}>ScorgIA</div>
                 <div style={{ fontSize: 9, color: '#6B7280', fontFamily: 'system-ui,sans-serif' }}>Plan de leçon</div>
               </div>
             </div>
@@ -485,8 +485,8 @@ export default function PrintPanel({ open, onClose, lecon, classe, profil, form 
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             fontSize: 8.5, color: '#9CA3AF', fontFamily: 'system-ui,sans-serif',
           }}>
-            <span>Généré par KlassIA+ — klassia.app · {dateStr}</span>
-            <span style={{ fontWeight: 600 }}>klassia.app</span>
+            <span>Généré par ScorgIA — scorgia.app · {dateStr}</span>
+            <span style={{ fontWeight: 600 }}>scorgia.app</span>
             <span>{profil?.prenom} {profil?.nom} · {profil?.ecole || ''}</span>
           </div>
 

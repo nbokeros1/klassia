@@ -77,12 +77,15 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ClassesPage() {
-  const [classes,       setClasses]       = useState<any[]>([])
-  const [leconsByClass, setLeconsByClass] = useState<Record<string, any[]>>({})
-  const [profil,        setProfil]        = useState<any>(null)
-  const [loading,       setLoading]       = useState(true)
-  const [showForm,      setShowForm]      = useState(false)
-  const [saving,        setSaving]        = useState(false)
+  const [classes,         setClasses]         = useState<any[]>([])
+  const [leconsByClass,   setLeconsByClass]   = useState<Record<string, any[]>>({})
+  const [fichiersByClass, setFichiersByClass] = useState<Record<string, any[]>>({})
+  const [packsByClass,    setPacksByClass]    = useState<Record<string, any>>({})
+  const [profil,          setProfil]          = useState<any>(null)
+  const [loading,         setLoading]         = useState(true)
+  const [showForm,        setShowForm]        = useState(false)
+  const [saving,          setSaving]          = useState(false)
+  const [createWarning,   setCreateWarning]   = useState<string | null>(null)
 
   const [form, setForm] = useState({
     nom:           '',
@@ -121,6 +124,8 @@ export default function ClassesPage() {
 
       if (clsList.length > 0) {
         const classIds = clsList.map((c: any) => c.id)
+
+        // Leçons créées via l'éditeur (table lecons)
         const { data: lecons } = await supabase.from('lecons').select('classe_id, statut').in('classe_id', classIds)
         const grouped = (lecons || []).reduce((acc: Record<string, any[]>, l) => {
           if (!acc[l.classe_id]) acc[l.classe_id] = []
@@ -128,6 +133,35 @@ export default function ClassesPage() {
           return acc
         }, {})
         setLeconsByClass(grouped)
+
+        // Fichiers générés via le pipeline Construire (fichiers_dossier)
+        const { data: dossiers } = await supabase
+          .from('dossiers_systeme').select('id, classe_id').in('classe_id', classIds)
+        if (dossiers && dossiers.length > 0) {
+          const dossierIds = dossiers.map((d: any) => d.id)
+          const dossierToClasse: Record<string, string> = Object.fromEntries(
+            dossiers.map((d: any) => [d.id, d.classe_id])
+          )
+          const { data: fichiers } = await supabase
+            .from('fichiers_dossier').select('dossier_id, type_fichier').in('dossier_id', dossierIds)
+          const groupedFichiers = (fichiers || []).reduce((acc: Record<string, any[]>, f) => {
+            const classeId = dossierToClasse[f.dossier_id]
+            if (!classeId) return acc
+            if (!acc[classeId]) acc[classeId] = []
+            acc[classeId].push(f)
+            return acc
+          }, {})
+          setFichiersByClass(groupedFichiers)
+        }
+
+        // Teaching Packs (statut de l'année scolaire construite)
+        const { data: packs } = await supabase
+          .from('teaching_packs').select('id, classe_id, created_at').in('classe_id', classIds)
+        const groupedPacks = (packs || []).reduce((acc: Record<string, any>, p) => {
+          acc[p.classe_id] = p
+          return acc
+        }, {})
+        setPacksByClass(groupedPacks)
       }
 
       setLoading(false)
@@ -154,9 +188,31 @@ export default function ClassesPage() {
     }).select().single()
 
     if (!error && data) {
+      // Pour chaque matière au-delà de la première (déjà traitée par le trigger),
+      // appeler le RPC qui crée la structure complète de dossiers.
+      const matieresEnEchec: string[] = []
+      for (const matiere of form.matieres.slice(1)) {
+        const { error: rpcError } = await supabase.rpc('ajouter_matiere_classe', {
+          p_classe_id:     data.id,
+          p_enseignant_id: profil.id,
+          p_matiere:       matiere,
+          p_couleur:       form.couleur,
+        })
+        if (rpcError) {
+          console.error(`[Classes] Échec création dossiers pour la matière "${matiere}" (classe ${data.id}) :`, rpcError.message)
+          matieresEnEchec.push(matiere)
+        }
+      }
       setClasses(prev => [data, ...prev])
       setShowForm(false)
       setForm({ nom: '', niveau: '', matieres: [], nombre_eleves: '', couleur: '#1B3F6E', langue: 'fr' })
+      if (matieresEnEchec.length > 0) {
+        setCreateWarning(
+          `Les dossiers de ${matieresEnEchec.map(m => `"${m}"`).join(', ')} n'ont pas pu être configurés. Ouvrez la classe et utilisez "➕ Ajouter une matière" pour les recréer.`
+        )
+      } else {
+        setCreateWarning(null)
+      }
     }
     setSaving(false)
   }
@@ -210,6 +266,15 @@ export default function ClassesPage() {
               </button>
             </CadenasForFait>
           </div>
+
+          {/* ── Avertissement création partielle ──────────────────────── */}
+          {createWarning && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', marginBottom: 16, borderRadius: 10, background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.25)', animation: 'fadeUp .2s ease both' }}>
+              <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>⚠️</span>
+              <div style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{createWarning}</div>
+              <button onClick={() => setCreateWarning(null)} style={{ background: 'none', border: 'none', fontSize: 16, color: 'var(--text-muted)', cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}>✕</button>
+            </div>
+          )}
 
           {/* ── Formulaire ──────────────────────────────────────────────── */}
           {showForm && (
@@ -307,12 +372,22 @@ export default function ClassesPage() {
           {classes.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
               {classes.map(cls => {
-                const lecons    = leconsByClass[cls.id] || []
-                const enseignees = lecons.filter((l: any) => ['enseignee', 'complete'].includes(l.statut)).length
-                const pretes    = lecons.filter((l: any) => l.statut === 'prete').length
-                const pct       = lecons.length > 0 ? Math.round((enseignees / lecons.length) * 100) : 0
-                const matieres  = getMatieres(cls)
-                const accent    = cls.couleur || '#6C5CE7'
+                const leconsTable   = leconsByClass[cls.id] || []
+                const fichiers      = fichiersByClass[cls.id] || []
+                const pack          = packsByClass[cls.id] || null
+                // Leçons issues du pipeline Construire (plans_lecons, lecons)
+                const fichiersLecons = fichiers.filter((f: any) =>
+                  ['plan_lecon', 'fiche_lecon', 'lecon_complete'].includes(f.type_fichier)
+                )
+                // Quizzes issus du pipeline Construire
+                const fichiersQuiz = fichiers.filter((f: any) => f.type_fichier === 'quiz')
+                const totalLecons   = leconsTable.length + fichiersLecons.length
+                const enseignees    = leconsTable.filter((l: any) => ['enseignee', 'complete'].includes(l.statut)).length
+                // Prêtes = leçons éditeur prêtes + toutes les leçons générées (= prêtes à enseigner)
+                const pretes        = leconsTable.filter((l: any) => l.statut === 'prete').length + fichiersLecons.length
+                const pct           = totalLecons > 0 ? Math.round((enseignees / totalLecons) * 100) : 0
+                const matieres      = getMatieres(cls)
+                const accent        = cls.couleur || '#6C5CE7'
 
                 return (
                   <div key={cls.id} className="glass-light cls-card"
@@ -336,9 +411,11 @@ export default function ClassesPage() {
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{cls.niveau}{matieres ? ` · ${matieres}` : ''}</div>
                           </div>
                         </div>
-                        {cls.curriculum_charge
-                          ? <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 99, background: 'rgba(52,211,153,0.12)', color: '#34D399', border: '1px solid rgba(52,211,153,0.25)', flexShrink: 0, fontWeight: 700 }}>✓ Curriculum</span>
-                          : <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 99, background: 'rgba(251,195,74,0.12)', color: '#FBC34A', border: '1px solid rgba(251,195,74,0.2)', flexShrink: 0 }}>Sans curriculum</span>
+                        {pack
+                          ? <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 99, background: 'rgba(52,211,153,0.12)', color: '#34D399', border: '1px solid rgba(52,211,153,0.25)', flexShrink: 0, fontWeight: 700 }}>✓ Année construite</span>
+                          : cls.curriculum_charge
+                            ? <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 99, background: 'rgba(52,211,153,0.12)', color: '#34D399', border: '1px solid rgba(52,211,153,0.25)', flexShrink: 0, fontWeight: 700 }}>✓ Curriculum</span>
+                            : <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 99, background: 'rgba(251,195,74,0.12)', color: '#FBC34A', border: '1px solid rgba(251,195,74,0.2)', flexShrink: 0 }}>Sans curriculum</span>
                         }
                       </div>
 
@@ -352,13 +429,14 @@ export default function ClassesPage() {
                       )}
 
                       {/* Stats */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, marginBottom: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: pack ? 'repeat(5,1fr)' : 'repeat(4,1fr)', gap: 6, marginBottom: 12 }}>
                         {([
-                          { icon: '👥', v: cls.nombre_eleves || 0, l: 'Élèves',  c: '#60A5FA' },
-                          { icon: '📄', v: lecons.length,          l: 'Leçons',  c: '#A78BFA' },
-                          { icon: '✅', v: pretes,                  l: 'Prêtes',  c: '#FBC34A' },
-                          { icon: '📊', v: `${pct}%`,              l: 'Prog.',   c: pct >= 80 ? '#34D399' : pct >= 40 ? '#60A5FA' : '#94A3B8' },
-                        ] as const).map((s, i) => (
+                          { icon: '👥', v: cls.nombre_eleves || 0,              l: 'Élèves',  c: '#60A5FA' },
+                          { icon: '📄', v: totalLecons,                          l: 'Leçons',  c: '#A78BFA' },
+                          ...(pack ? [{ icon: '🎮', v: fichiersQuiz.length,     l: 'Quiz',    c: '#FB923C' }] : []),
+                          { icon: '✅', v: pretes,                               l: 'Prêtes',  c: '#FBC34A' },
+                          { icon: '📊', v: `${pct}%`,                           l: 'Prog.',   c: pct >= 80 ? '#34D399' : pct >= 40 ? '#60A5FA' : '#94A3B8' },
+                        ]).map((s, i) => (
                           <div key={i} style={{ textAlign: 'center', padding: '6px 4px', background: 'rgba(15,35,65,0.04)', borderRadius: 8 }}>
                             <div style={{ fontSize: 11, marginBottom: 2 }}>{s.icon}</div>
                             <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: s.c, lineHeight: 1 }}>{s.v}</div>
@@ -372,17 +450,21 @@ export default function ClassesPage() {
                         <div style={{ height: 4, background: 'rgba(15,35,65,0.08)', borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
                           <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#34D399' : `linear-gradient(90deg, ${accent}, #34D399)`, borderRadius: 99, transition: 'width 0.6s ease' }} />
                         </div>
-                        {!cls.curriculum_charge ? (
+                        {!cls.curriculum_charge && !pack ? (
                           <div style={{ fontSize: 11, color: '#F97316', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span>⚠️</span><span>Charger le curriculum</span>
+                            <span>⚠️</span><span>Construire mon année scolaire</span>
                           </div>
-                        ) : lecons.length === 0 ? (
+                        ) : totalLecons === 0 ? (
                           <div style={{ fontSize: 11, color: '#34D399', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <span>✓</span><span>Prêt à créer des leçons</span>
                           </div>
                         ) : (
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span>✓</span><span>{lecons.length} leçon{lecons.length !== 1 ? 's' : ''} planifiée{lecons.length !== 1 ? 's' : ''}</span>
+                            <span>✓</span>
+                            <span>
+                              {totalLecons} leçon{totalLecons !== 1 ? 's' : ''} planifiée{totalLecons !== 1 ? 's' : ''}
+                              {fichiersQuiz.length > 0 ? ` · ${fichiersQuiz.length} quiz` : ''}
+                            </span>
                           </div>
                         )}
                       </div>

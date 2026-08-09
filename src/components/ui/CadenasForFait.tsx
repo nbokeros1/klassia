@@ -90,7 +90,7 @@ function CadenasModal({
             {messageCustom || FONCTIONNALITE_LABELS[fonctionnalite]}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-            Disponible avec KlassIA+{' '}
+            Disponible avec ScorgIA{' '}
             <span style={{
               padding: '2px 8px',
               background: colors.bg,
@@ -235,7 +235,7 @@ export default function CadenasForFait({
           <span style={{ fontSize: 16 }}>🔒</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: colors.accent }}>
-              {messageCustom ? 'Limite atteinte' : `Fonctionnalité KlassIA+ ${FORFAIT_LABELS[requis]}`}
+              {messageCustom ? 'Limite atteinte' : `Fonctionnalité ScorgIA ${FORFAIT_LABELS[requis]}`}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-4)' }}>
               {messageCustom || `${FONCTIONNALITE_LABELS[fonctionnalite]} · Cliquez pour débloquer`}
@@ -298,7 +298,7 @@ export default function CadenasForFait({
               borderRadius: 99, fontSize: 10,
               fontWeight: 700, color: colors.accent,
             }}>
-              KlassIA+ {FORFAIT_LABELS[requis]}
+              ScorgIA {FORFAIT_LABELS[requis]}
             </span>
           </div>
           {children}

@@ -1,8 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk'
+﻿import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/api-auth'
 import { getMaxTokens } from '@/lib/ia/get-max-tokens'
+
+export const maxDuration = 60
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

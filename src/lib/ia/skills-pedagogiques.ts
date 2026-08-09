@@ -1,4 +1,4 @@
-// ─── KlassIA+ — Skills pédagogiques conditionnels ───────────────────────────
+// ─── ScorgIA — Skills pédagogiques conditionnels ───────────────────────────
 // Injectés dans le system prompt de generer/route.ts uniquement pour
 // plan_lecon et lecon_complete. Contenu ADDITIONNEL — ne pas modifier
 // les sections existantes (7 étapes, gabarit Alberta, BEP markers).
@@ -84,7 +84,7 @@ function perspectivesAutochtonesFr(province: string | null | undefined): string 
   }
 
   return `PERSPECTIVES AUTOCHTONES — RÈGLE ABSOLUE ET NON NÉGOCIABLE
-KlassIA+ ne génère JAMAIS de contenu culturel, historique ou spirituel spécifique à une nation autochtone précise : aucune légende, aucun récit, aucune pratique cérémonielle, aucune affirmation factuelle sur une nation sans source citée et vérifiable. Ce savoir appartient aux communautés concernées.
+ScorgIA ne génère JAMAIS de contenu culturel, historique ou spirituel spécifique à une nation autochtone précise : aucune légende, aucun récit, aucune pratique cérémonielle, aucune affirmation factuelle sur une nation sans source citée et vérifiable. Ce savoir appartient aux communautés concernées.
 
 Ce qu'il EST approprié de générer :
 • Questions de réflexion invitant les élèves à comparer la vision occidentale et d'autres façons de voir (sans présumer du contenu de cette autre vision)
@@ -118,7 +118,7 @@ function perspectivesAutochtoneEn(province: string | null | undefined): string {
   }
 
   return `INDIGENOUS PERSPECTIVES — ABSOLUTE NON-NEGOTIABLE RULE
-KlassIA+ NEVER generates cultural, historical, or spiritual content specific to a named Indigenous nation: no legends, no stories, no ceremonial practices, no factual claims about a nation without a cited and verifiable source. This knowledge belongs to the communities concerned.
+ScorgIA NEVER generates cultural, historical, or spiritual content specific to a named Indigenous nation: no legends, no stories, no ceremonial practices, no factual claims about a nation without a cited and verifiable source. This knowledge belongs to the communities concerned.
 
 Appropriate to generate:
 • Reflection questions inviting students to compare Western perspectives with other ways of knowing (without presuming what that other perspective contains)

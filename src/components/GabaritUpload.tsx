@@ -18,7 +18,7 @@ interface GabaritUploadProps {
 const STATE_LABELS: Record<GabaritState, string> = {
   idle:      '📂 Uploader mon gabarit de leçon',
   parsing:   '⏳ Extraction du texte...',
-  analysing: '✦ Analyse par KlassIA+...',
+  analysing: '✦ Analyse par ScorgIA...',
   saving:    '💾 Sauvegarde...',
   done:      '✓ Gabarit analysé et intégré',
   error:     '❌ Erreur — cliquer pour réessayer',

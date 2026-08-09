@@ -1,7 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk'
+﻿import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { getMaxTokens } from '@/lib/ia/get-max-tokens'
+
+export const maxDuration = 60
 
 export async function POST(request: Request) {
   const { error, session } = await requireAuth()

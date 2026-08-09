@@ -90,8 +90,8 @@ export default function RepondreEleve() {
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg, #6B3FA0, #3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: 'white', margin: '0 auto 16px' }}>K</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginBottom: 6, fontWeight: 600 }}>KLASSIA · SONDAGE</div>
+          <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg, #6B3FA0, #3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 900, color: 'white', margin: '0 auto 16px' }}>S</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: 2, marginBottom: 6, fontWeight: 600 }}>SCORGIA · SONDAGE</div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Code : <b style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: 2 }}>{code}</b></div>
         </div>
 
@@ -156,7 +156,7 @@ export default function RepondreEleve() {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
-          Propulsé par KlassIA+
+          Propulsé par ScorgIA
         </div>
       </div>
     </div>

@@ -264,7 +264,7 @@ function imprimerDocument(titre: string, type_contenu: string, contenu: string) 
   const html = `<!DOCTYPE html><html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>KlassIA+ — ${titre}</title>
+  <title>ScorgIA — ${titre}</title>
   ${styleLinks}
   ${styleTags}
   ${extraStyles}
@@ -276,10 +276,10 @@ function imprimerDocument(titre: string, type_contenu: string, contenu: string) 
         <div class="title">${titre}</div>
         <div class="meta">${date}</div>
       </div>
-      <div class="logo">✦ KlassIA+</div>
+      <div class="logo">✦ ScorgIA</div>
     </div>
     <div class="apercu-modal-body">${bodyHtml}</div>
-    <div class="print-footer">Généré par KlassIA+ — klassia.app</div>
+    <div class="print-footer">Généré par ScorgIA — scorgia.app</div>
   </div>
 </body></html>`
 
@@ -363,7 +363,7 @@ export default function ApercuModal({
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = `${titre ?? 'klassia'}.docx`
+      a.download = `${titre ?? 'scorgia'}.docx`
       a.click()
       URL.revokeObjectURL(url)
       showToast('✓ Document Word téléchargé', true)
@@ -387,7 +387,7 @@ export default function ApercuModal({
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = `${titre ?? 'klassia'}.pdf`
+      a.download = `${titre ?? 'scorgia'}.pdf`
       a.click()
       URL.revokeObjectURL(url)
       showToast('✓ PDF téléchargé', true)
@@ -482,7 +482,7 @@ export default function ApercuModal({
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: '#7C3AED', fontWeight: 800, flexShrink: 0, marginLeft: 20 }}>
-                  ✦ KlassIA+
+                  ✦ ScorgIA
                 </div>
               </div>
             )}
@@ -538,10 +538,10 @@ export default function ApercuModal({
                 {exportEnCours === 'word' ? '⟳ Word…' : '📥 Word'}
               </button>
               <button
-                style={{ ...btnSm, opacity: exportEnCours === 'pdf' ? 0.6 : 1 }}
-                disabled={!!exportEnCours}
-                onClick={exporterPDF}>
-                {exportEnCours === 'pdf' ? '⟳ PDF…' : '📥 PDF'}
+                title="L'export PDF sera disponible prochainement. Utilisez Word ou l'impression pour cette version bêta."
+                style={{ ...btnSm, opacity: 0.45, cursor: 'not-allowed' }}
+                disabled>
+                📥 PDF
               </button>
               <button style={btnSm} onClick={() => imprimerDocument(titre, type_contenu, contenu)}>
                 🖨️ Imprimer

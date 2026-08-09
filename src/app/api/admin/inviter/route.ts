@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     try { body = await req.json() }
     catch { return NextResponse.json({ error: 'Corps invalide' }, { status: 400 }) }
 
-    const { email, role_admin = 'support', prenom = 'Admin', nom = 'KlassIA' } = body
+    const { email, role_admin = 'support', prenom = 'Admin', nom = 'ScorgIA' } = body
 
     if (!email || !email.includes('@')) {
       return NextResponse.json({ error: 'Email valide requis' }, { status: 400 })

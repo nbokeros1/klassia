@@ -117,7 +117,7 @@ export default function AdminSystemePage() {
 
           {/* Actions */}
           <div style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '22px 24px' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#F1F5F9', marginBottom: 14 }}>🛠️ Actions d'administration</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#F1F5F9', marginBottom: 14 }}>🛠️ Actions d&apos;administration</div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' as const }}>
               <button onClick={handleArchive} disabled={archiving}
                 style={{ padding: '10px 18px', background: archiving || archived ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.06)', border: `1px solid ${archived ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 10, color: archived ? '#34D399' : 'rgba(255,255,255,0.6)', fontSize: 13, cursor: archiving ? 'wait' : 'pointer', fontFamily: 'inherit' }}>

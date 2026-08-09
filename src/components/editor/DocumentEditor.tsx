@@ -74,7 +74,9 @@ export default function DocumentEditor({ lecon, classe, profil, leconId, onValid
   const supabase = createClient()
 
   const [content,     setContent]     = useState<string>('')
-  const [saveMsg,     setSaveMsg]     = useState('')
+  const [isDirty,     setIsDirty]     = useState(false)
+  const [saving,      setSaving]      = useState(false)
+  const [savedAt,     setSavedAt]     = useState<string | null>(null)
   const [font,        setFont]        = useState('Inter')
   const [fontSize,    setFontSize]    = useState('12')
   const [lineHeight,  setLineHeight]  = useState('1.5')
@@ -90,7 +92,6 @@ export default function DocumentEditor({ lecon, classe, profil, leconId, onValid
   const [validating,          setValidating]          = useState(false)
   const [validateMsg,    setValidateMsg]    = useState('')
 
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const calloutRef    = useRef<HTMLDivElement>(null)
   const colorRef      = useRef<HTMLDivElement>(null)
 
@@ -110,25 +111,31 @@ export default function DocumentEditor({ lecon, classe, profil, leconId, onValid
     return () => document.removeEventListener('mousedown', h)
   }, [])
 
-  // ── Auto-save 2.5s ─────────────────────────────────────────────────────────
+  // ── Suivi des modifications ────────────────────────────────────────────────
   const handleChange = useCallback((html: string) => {
     setContent(html)
-    setSaveMsg('Sauvegarde...')
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
-    autoSaveTimer.current = setTimeout(async () => {
-      try {
-        const existing = lecon?.contenu_json || {}
-        await supabase.from('lecons').update({
-          contenu_json: { ...existing, lecon_complete_html: html },
-        }).eq('id', leconId)
-        setSaveMsg('✓ Sauvegardé')
-        setTimeout(() => setSaveMsg(''), 2500)
-      } catch {
-        setSaveMsg('⚠ Erreur de sauvegarde')
-        setTimeout(() => setSaveMsg(''), 3000)
-      }
-    }, 2500)
-  }, [leconId, lecon?.contenu_json])
+    setIsDirty(true)
+  }, [])
+
+  // ── Sauvegarde manuelle ────────────────────────────────────────────────────
+  const handleSave = useCallback(async () => {
+    setSaving(true)
+    try {
+      const existing = lecon?.contenu_json || {}
+      const now = new Date().toISOString()
+      const { error } = await supabase.from('lecons').update({
+        contenu_json: { ...existing, lecon_complete_html: content },
+        updated_at: now,
+      }).eq('id', leconId)
+      if (error) throw error
+      setIsDirty(false)
+      setSavedAt(now)
+    } catch {
+      /* Erreur silencieuse — l'indicateur reste "Non enregistré" */
+    } finally {
+      setSaving(false)
+    }
+  }, [leconId, lecon?.contenu_json, content])
 
   // ── Insérer callout ────────────────────────────────────────────────────────
   const insertCallout = (c: typeof CALLOUTS[0]) => {
@@ -402,15 +409,32 @@ Utilise du HTML propre, pas de markdown.`,
         {/* Impression / Export */}
         <TBtn title="Imprimer" onClick={handlePrint}><span style={{ fontSize: 13 }}>🖨️</span></TBtn>
         <TBtn title="Télécharger Word" onClick={handleExportDocx}><span style={{ fontSize: 11 }}>📥 Word</span></TBtn>
+        <TDivider />
 
-        {/* Indicateur sauvegarde */}
-        {saveMsg && (
-          <span className="doc-save-msg" style={{
-            marginLeft: 8, fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 5,
-            color: saveMsg.startsWith('✓') ? '#059669' : saveMsg.startsWith('⚠') ? '#DC2626' : '#6B7280',
-            background: saveMsg.startsWith('✓') ? '#ECFDF5' : saveMsg.startsWith('⚠') ? '#FEF2F2' : '#F9FAFB',
-          }}>{saveMsg}</span>
+        {/* Indicateur sauvegarde + bouton Sauvegarder */}
+        {isDirty && !saving && (
+          <span className="doc-save-msg" style={{ marginLeft: 4, fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 5, color: '#B45309', background: '#FFFBEB' }}>
+            ● Non enregistré
+          </span>
         )}
+        {!isDirty && savedAt && (
+          <span className="doc-save-msg" style={{ marginLeft: 4, fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 5, color: '#059669', background: '#ECFDF5' }}>
+            ✓ {new Date(savedAt).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={saving || !isDirty}
+          style={{
+            marginLeft: 6, height: 26, padding: '0 12px', borderRadius: 5, fontSize: 11, fontWeight: 700,
+            cursor: isDirty && !saving ? 'pointer' : 'not-allowed',
+            border: 'none',
+            background: isDirty && !saving ? '#4F46E5' : '#E5E7EB',
+            color: isDirty && !saving ? '#fff' : '#9CA3AF',
+            transition: 'all 0.15s',
+          }}>
+          {saving ? '…' : '✓ Sauvegarder'}
+        </button>
       </div>
 
       {/* ── Zone document ─────────────────────────────────────────────────── */}
@@ -433,7 +457,7 @@ Utilise du HTML propre, pas de markdown.`,
                 {today}{lecon?.duree_minutes ? ` · ${lecon.duree_minutes} min` : ''}
               </div>
             </div>
-            <div className="doc-header-logo">K</div>
+            <div className="doc-header-logo">S</div>
           </div>
 
           {/* Éditeur */}
@@ -477,7 +501,7 @@ Utilise du HTML propre, pas de markdown.`,
           )}
 
           <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12, lineHeight: 1.6 }}>
-            KlassIA+ va générer une leçon complète pour <strong>{lecon?.titre || 'cette leçon'}</strong> avec :
+            ScorgIA va générer une leçon complète pour <strong>{lecon?.titre || 'cette leçon'}</strong> avec :
             introduction, activités, exercices, différenciation et billet de sortie.
           </div>
 

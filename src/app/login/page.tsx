@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import AuthBranding from '@/components/auth/AuthBranding'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -79,15 +80,10 @@ export default function LoginPage() {
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '420px' }}>
 
         {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', background: 'linear-gradient(135deg, #1B3F6E, #7C3AED)', borderRadius: '13px', fontSize: '22px', fontWeight: 800, color: 'white', boxShadow: '0 0 32px rgba(124,58,237,0.5)', marginBottom: '14px' }}>K</div>
-          <div style={{ fontSize: '26px', fontWeight: 700, color: 'white', letterSpacing: '-0.5px' }}>
-            Klass<span style={{ color: '#A78BFA' }}>IA+</span>
-          </div>
-          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)', marginTop: '4px' }}>
-            Ton quartier général pédagogique
-          </div>
-        </div>
+        <AuthBranding
+          slogan="Votre espace pédagogique intelligent"
+          style={{ marginBottom: '32px' }}
+        />
 
         {/* Card */}
         <div style={{

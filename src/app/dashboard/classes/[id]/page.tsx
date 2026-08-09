@@ -404,11 +404,20 @@ export default function ClasseExplorateur() {
     let items: any[] = []
     const t = selectedDossier?.type
     if (t === 'lecons') {
-      items = lecons.filter(l => !['plan_lecon','plan_sequence','plan_annuel'].includes(l.type_document||'')).map(l => ({ ...l, _source: 'lecon', type_fichier: l.type_document || 'lecon' }))
+      const leconItems = lecons
+        .filter(l => !['plan_lecon','plan_sequence','plan_annuel'].includes(l.type_document||''))
+        .map(l => ({ ...l, _source: 'lecon', type_fichier: l.type_document || 'lecon' }))
+      items = [...leconItems, ...fichiers]
     } else if (t === 'plans_lecons') {
-      items = lecons.filter(l => ['plan_lecon','plan_sequence'].includes(l.type_document||'')).map(l => ({ ...l, _source: 'lecon', type_fichier: l.type_document || 'plan_lecon' }))
+      const leconItems = lecons
+        .filter(l => ['plan_lecon','plan_sequence'].includes(l.type_document||''))
+        .map(l => ({ ...l, _source: 'lecon', type_fichier: l.type_document || 'plan_lecon' }))
+      items = [...leconItems, ...fichiers]
     } else if (t === 'plan_annuel') {
-      items = lecons.filter(l => l.type_document === 'plan_annuel').map(l => ({ ...l, _source: 'lecon', type_fichier: 'plan_annuel' }))
+      const leconItems = lecons
+        .filter(l => l.type_document === 'plan_annuel')
+        .map(l => ({ ...l, _source: 'lecon', type_fichier: 'plan_annuel' }))
+      items = [...leconItems, ...fichiers]
     } else {
       items = fichiers
     }
@@ -467,10 +476,43 @@ export default function ClasseExplorateur() {
       nom: file.name.replace(/\.[^.]+$/, ''), type_fichier,
       taille_bytes: file.size, statut: 'valide', url_storage: url,
       indexe_studio_ia: isCurriculum,
+      storage_path: path, mime_type: file.type || null,
     }).select().single()
 
     if (insertErr) { showToast('Erreur sauvegarde : ' + insertErr.message, 'error'); return false }
     if (f) f.url = url
+
+    if (f?.id) {
+      const { error: idxErr } = await supabase.from('fichiers_indexation').insert({
+        fichier_id:    f.id,
+        enseignant_id: profil.id,
+        mime_type:     file.type || null,
+        statut:        'en_attente',
+      })
+      if (idxErr) {
+        console.error('[KLASSIA][DOCUMENTS][INDEXATION_INIT]', idxErr.message)
+        showToast('Fichier sauvegardé — indexation IA différée', 'error')
+      } else {
+        // Déclencher l'extraction côté serveur (fire-and-forget).
+        // Le fichier n'est pas renvoyé depuis le navigateur : la route le récupère depuis Storage.
+        fetch('/api/documents/indexer', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ fichier_id: f.id }),
+        })
+          .then(r => r.json())
+          .then((data: any) => {
+            if (!data?.succes) {
+              console.error('[KLASSIA][DOCUMENTS][EXTRACTION]', data?.error)
+              showToast('Fichier sauvegardé, mais son contenu n\'est pas encore disponible pour l\'IA.', 'error')
+            }
+          })
+          .catch((err: any) => {
+            console.error('[KLASSIA][DOCUMENTS][EXTRACTION]', err?.message ?? err)
+            showToast('Fichier sauvegardé, mais son contenu n\'est pas encore disponible pour l\'IA.', 'error')
+          })
+      }
+    }
 
     if (isCurriculum && f) {
       await supabase.from('classes').update({ curriculum_charge: true }).eq('id', id)
@@ -662,11 +704,11 @@ export default function ClasseExplorateur() {
     if (!fenetre) return
     const titre = item.nom || item.titre || 'Document'
     const date  = new Date().toLocaleDateString('fr-CA')
-    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>KlassIA+ — ${titre}</title><style>${PRINT_STYLES}</style></head>
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>ScorgIA — ${titre}</title><style>${PRINT_STYLES}</style></head>
 <body>
-  <div class="print-header"><div><div class="title">${titre}</div><div class="meta">${date}</div></div><div class="logo">✦ KlassIA+</div></div>
+  <div class="print-header"><div><div class="title">${titre}</div><div class="meta">${date}</div></div><div class="logo">✦ ScorgIA</div></div>
   ${renduItemHtml(item)}
-  <div class="print-footer">Généré par KlassIA+ — klassia.app</div>
+  <div class="print-footer">Généré par ScorgIA — scorgia.app</div>
 </body></html>`
     fenetre.document.write(html)
     fenetre.document.close()
@@ -699,7 +741,7 @@ export default function ClasseExplorateur() {
     let n = 0
     for (const fichier of selected) { if (await ajouterAuZip(zip, fichier)) n++ }
     const content = await zip.generateAsync({ type: 'blob' })
-    saveAs(content, 'export-klassia.zip')
+    saveAs(content, 'export-scorgia.zip')
     showToast(`${n} fichiers exportés`)
   }, [selectedItems, fileItems, ajouterAuZip, showToast])
 
@@ -721,9 +763,19 @@ export default function ClasseExplorateur() {
     if (!mat || !profil?.id) return
     try {
       // 1. Conteneur matière
+      const { data: maxOrdre } = await supabase
+        .from('dossiers_systeme')
+        .select('ordre')
+        .eq('classe_id', id)
+        .eq('type', 'matiere')
+        .order('ordre', { ascending: false })
+        .limit(1)
+        .single()
+      const prochainOrdre = (maxOrdre?.ordre ?? 0) + 1
+
       const { data: matDos, error: e1 } = await supabase
         .from('dossiers_systeme')
-        .insert({ classe_id: id, enseignant_id: profil.id, nom: mat, type: 'matiere', icone: '📚', couleur: newMatiereColor, ordre: 0, parent_id: null, est_commun: false, matiere: mat })
+        .insert({ classe_id: id, enseignant_id: profil.id, nom: mat, type: 'matiere', icone: '📚', couleur: newMatiereColor, ordre: prochainOrdre, parent_id: null, est_commun: false, matiere: mat })
         .select().single()
       if (e1) throw e1
 
@@ -744,9 +796,9 @@ export default function ClasseExplorateur() {
 
       // 4. Leçons, Évaluations, Ressources
       const { error: e4 } = await supabase.from('dossiers_systeme').insert([
-        { classe_id: id, enseignant_id: profil.id, nom: 'Leçons',      type: 'lecons',                icone: '🎓', couleur: newMatiereColor, ordre: 2, parent_id: matDos.id, est_commun: false, matiere: mat },
-        { classe_id: id, enseignant_id: profil.id, nom: 'Évaluations', type: 'evaluations_sommatives', icone: '📊', couleur: newMatiereColor, ordre: 3, parent_id: matDos.id, est_commun: false, matiere: mat },
-        { classe_id: id, enseignant_id: profil.id, nom: 'Ressources',  type: 'ressources',             icone: '📚', couleur: newMatiereColor, ordre: 4, parent_id: matDos.id, est_commun: false, matiere: mat },
+        { classe_id: id, enseignant_id: profil.id, nom: 'Leçons',                 type: 'lecons',                icone: '🎓', couleur: newMatiereColor, ordre: 2, parent_id: matDos.id, est_commun: false, matiere: mat },
+        { classe_id: id, enseignant_id: profil.id, nom: 'Évaluations sommatives', type: 'evaluations_sommatives', icone: '📊', couleur: newMatiereColor, ordre: 3, parent_id: matDos.id, est_commun: false, matiere: mat },
+        { classe_id: id, enseignant_id: profil.id, nom: 'Ressources',             type: 'ressources',             icone: '📚', couleur: newMatiereColor, ordre: 4, parent_id: matDos.id, est_commun: false, matiere: mat },
       ])
       if (e4) throw e4
 
@@ -981,7 +1033,14 @@ export default function ClasseExplorateur() {
               type="text" placeholder="🔍 Rechercher…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               style={{ padding: '5px 10px', borderRadius: 8, fontSize: 12, border: '1px solid rgba(15,35,65,0.1)', background: 'rgba(255,255,255,0.7)', color: 'var(--text-primary)', outline: 'none', width: 160, fontFamily: 'inherit' }}
             />
-            <button onClick={() => router.push(`/dashboard/gerer/preparer?classe_id=${id}`)}
+            <button onClick={() => router.push(`/dashboard/classes/${id}/programme`)}
+              style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(127,119,221,0.4)', background: 'rgba(127,119,221,0.08)', color: '#7F77DD', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              🗓️ Mon année
+            </button>
+            <button onClick={() => {
+                const mat = selectedDossier?.matiere
+                router.push(`/dashboard/gerer/preparer?classe_id=${id}${mat ? `&matiere=${encodeURIComponent(mat)}` : ''}`)
+              }}
               style={{ padding: '6px 14px', borderRadius: 8, background: 'linear-gradient(135deg, #7F77DD, #4F46E5)', border: 'none', color: '#FFF', fontSize: 12, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(108,92,231,0.35)' }}>
               ✦ Préparer
             </button>

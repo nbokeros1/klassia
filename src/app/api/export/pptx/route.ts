@@ -3,16 +3,60 @@ import { requireAuth } from '@/lib/api-auth'
 import PptxGenJS from 'pptxgenjs'
 
 export async function POST(request: Request) {
-  const { error, session } = await requireAuth()
+  const { error } = await requireAuth()
   if (error) return error
 
   try {
-    const { lecon, classe, enseignant } = await request.json()
+    const body = await request.json()
+
+    // Support two call formats:
+    // 1. Legacy: { lecon, classe, enseignant }
+    // 2. New (contenu_json-first): { contenu_json, titre, matiere, niveau, classe, enseignant_nom }
+    let lecon: Record<string, any>, classe: Record<string, any>, enseignant: Record<string, any>
+    if (body.lecon) {
+      lecon = body.lecon
+      classe = body.classe || {}
+      enseignant = body.enseignant || {}
+    } else {
+      const cj = body.contenu_json || {}
+      // Cascade: ras → rag → objectifs/objectif → intention (jamais de slide vide)
+      const extractLines = (val: any): string[] => {
+        if (!val) return []
+        if (Array.isArray(val)) return (val as any[]).filter(Boolean).map(String).filter((s: string) => s.trim())
+        return String(val).split(/\n|•|-/).map((s: string) => s.trim()).filter(Boolean)
+      }
+      const objectifsLines = (
+        extractLines(cj.ras).length > 0         ? extractLines(cj.ras) :
+        extractLines(cj.rag).length > 0         ? extractLines(cj.rag) :
+        extractLines(cj.objectifs ?? cj.objectif ?? '').length > 0
+                                                 ? extractLines(cj.objectifs ?? cj.objectif ?? '') :
+        (cj.intention as string | undefined)     ? [String(cj.intention).substring(0, 200)] : []
+      )
+      lecon = {
+        titre:                    body.titre || 'Leçon ScorgIA',
+        objectifs:                objectifsLines.slice(0, 4),
+        intention:                cj.intention || '',
+        avant_amorce:             cj.avant_amorce || '',
+        avant_duree:              cj.avant_duree || '10',
+        pendant_modelisation:     cj.pendant_modelisation || '',
+        pendant_pratique_guidee:  cj.pendant_pratique_guidee || '',
+        pendant_pratique_autonome: cj.pendant_pratique_autonome || '',
+        pendant_duree:            cj.pendant_duree || '50',
+        apres_cloture:            cj.apres_cloture || '',
+        apres_billet:             cj.apres_billet || '',
+        apres_duree:              cj.apres_duree || '10',
+        criteres:                 typeof cj.evaluation_formative === 'string' && cj.evaluation_formative
+                                    ? [cj.evaluation_formative] : [],
+      }
+      classe = { nom: body.classe || '', matiere: body.matiere || '', niveau: body.niveau || '' }
+      const nomParts = (body.enseignant_nom || '').trim().split(' ')
+      enseignant = { prenom: nomParts[0] || '', nom: nomParts.slice(1).join(' '), ecole: '' }
+    }
 
     const pres = new PptxGenJS()
     pres.layout = 'LAYOUT_16x9'
-    pres.author = 'KlassIA+'
-    pres.title = lecon.titre || 'Leçon KlassIA+'
+    pres.author = 'ScorgIA'
+    pres.title = lecon.titre || 'Leçon ScorgIA'
 
     const C = {
       navy: '0A1628', blue: '1B3F6E', blue2: '2D5FA0',
@@ -34,12 +78,16 @@ export async function POST(request: Request) {
       s.addText(lecon.titre || 'Leçon', { x: 0.3, y: 0.9, w: 3.6, h: 1.8, fontSize: 28, bold: true, color: C.white, fontFace: 'Calibri', lineSpacingMultiple: 1.1 })
       s.addText(classe?.matiere || '', { x: 0.3, y: 2.95, w: 3.6, h: 0.35, fontSize: 14, color: 'E8EEF8', fontFace: 'Calibri' })
       s.addText(`${classe?.niveau || ''} · ${totalDuree} minutes`, { x: 0.3, y: 3.35, w: 3.6, h: 0.3, fontSize: 11, color: C.muted })
-      s.addText('Objectifs', { x: 4.4, y: 0.5, w: 5.2, h: 0.5, fontSize: 20, bold: true, color: C.blue })
-      ;(lecon.objectifs || []).slice(0, 4).forEach((obj: string, i: number) => {
-        const y = 1.2 + i * 0.9
-        s.addText(`${i + 1}. ${obj}`, { x: 4.4, y: y + 0.1, w: 4.7, h: 0.35, fontSize: 12, color: C.dark })
-      })
-      s.addText(`${enseignant?.prenom || ''} ${enseignant?.nom || ''} · ${enseignant?.ecole || ''} · KlassIA+`, { x: 4.4, y: 5.22, w: 5.3, h: 0.28, fontSize: 9, color: C.muted, align: 'right' })
+      s.addText((lecon.objectifs || []).length > 0 ? 'Objectifs' : 'Intention pédagogique', { x: 4.4, y: 0.5, w: 5.2, h: 0.5, fontSize: 20, bold: true, color: C.blue })
+      if ((lecon.objectifs || []).length > 0) {
+        ;(lecon.objectifs as string[]).slice(0, 4).forEach((obj: string, i: number) => {
+          const y = 1.2 + i * 0.9
+          s.addText(`${i + 1}. ${obj}`, { x: 4.4, y: y + 0.1, w: 4.7, h: 0.35, fontSize: 12, color: C.dark })
+        })
+      } else {
+        s.addText('Voir le plan de leçon complet pour les objectifs détaillés.', { x: 4.4, y: 1.2, w: 4.7, h: 2.5, fontSize: 12, color: C.gray, lineSpacingMultiple: 1.4 })
+      }
+      s.addText(`${enseignant?.prenom || ''} ${enseignant?.nom || ''} · ${enseignant?.ecole || ''} · ScorgIA`, { x: 4.4, y: 5.22, w: 5.3, h: 0.28, fontSize: 9, color: C.muted, align: 'right' })
     }
 
     // ── SLIDE 2 AVANT ──
@@ -127,10 +175,10 @@ export async function POST(request: Request) {
       ;(lecon.objectifs || []).slice(0, 3).forEach((obj: string, i: number) => {
         s.addText(`${i + 1}. ${obj}`, { x: 0.3, y: 2.1 + i * 0.9, w: 3.8, h: 0.7, fontSize: 12, color: C.white, lineSpacingMultiple: 1.3 })
       })
-      s.addText('✦ Généré par KlassIA+ — klassia.app', { x: 5.0, y: 0.5, w: 4.7, h: 0.4, fontSize: 11, bold: true, color: C.violet })
+      s.addText('✦ Généré par ScorgIA — scorgia.app', { x: 5.0, y: 0.5, w: 4.7, h: 0.4, fontSize: 11, bold: true, color: C.violet })
       s.addText('Prochaine leçon', { x: 5.0, y: 1.1, w: 4.7, h: 0.35, fontSize: 13, bold: true, color: C.blue })
       s.addText("Continue à pratiquer les notions vues aujourd'hui.", { x: 5.0, y: 1.5, w: 4.7, h: 1.0, fontSize: 12, color: C.gray, lineSpacingMultiple: 1.4 })
-      s.addText(`${classe?.nom || ''} · ${enseignant?.ecole || ''} · KlassIA+`, { x: 5.0, y: 5.22, w: 4.7, h: 0.28, fontSize: 9, color: C.muted, align: 'right' })
+      s.addText(`${classe?.nom || ''} · ${enseignant?.ecole || ''} · ScorgIA`, { x: 5.0, y: 5.22, w: 4.7, h: 0.28, fontSize: 9, color: C.muted, align: 'right' })
     }
 
     // ── EXPORT ──
@@ -139,7 +187,7 @@ export async function POST(request: Request) {
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'Content-Disposition': `attachment; filename="KlassIA+_${(lecon.titre || 'lecon').replace(/\s+/g, '_')}.pptx"`,
+        'Content-Disposition': `attachment; filename="ScorgIA_${(lecon.titre || 'lecon').replace(/\s+/g, '_')}.pptx"`,
       },
     })
 

@@ -2,7 +2,6 @@
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
 import { sanitizeSvg, splitAtSvg, hasPendingSvgBlock } from '@/lib/utils/parser-svg-schema'
 
 // ── Sous-composant : bloc SVG rendu ──────────────────────────────────────────
@@ -53,7 +52,6 @@ export default function MarkdownMessage({ content, isStreaming = false, classNam
           <ReactMarkdown
             key={i}
             remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw]}
           >
             {seg.value}
           </ReactMarkdown>

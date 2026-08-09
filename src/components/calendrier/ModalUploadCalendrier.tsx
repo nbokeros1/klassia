@@ -313,7 +313,7 @@ export default function ModalUploadCalendrier({ profil, classes, onClose, onSucc
 
             {classes.length > 0 && totalEvenements > 0 && (
               <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: 8, fontSize: 11, color: '#FBBF24' }}>
-                ✦ Après confirmation, KlassIA+ proposera une révision de vos plans annuels tenant compte de ces dates.
+                ✦ Après confirmation, ScorgIA proposera une révision de vos plans annuels tenant compte de ces dates.
               </div>
             )}
 

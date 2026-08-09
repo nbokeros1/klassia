@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import LogoKlassIA from '@/components/ui/LogoKlassIA'
+import { ScorgiaLogo } from '@/components/branding/scorgia-logo'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { createClient } from '@/lib/supabase/client'
@@ -61,9 +61,9 @@ function contextFromPath(pathname: string): { label: string; message: string } {
     return { label: 'Enseigner', message: 'Vous êtes en mode enseignement. Besoin d\'aide ?' }
   }
   if (pathname.includes('/communaute')) {
-    return { label: 'Communauté', message: 'Vous explorez la communauté KlassIA+. Que cherchez-vous ?' }
+    return { label: 'Communauté', message: 'Vous explorez la communauté ScorgIA. Que cherchez-vous ?' }
   }
-  return { label: 'KlassIA+', message: 'Comment puis-je vous aider ?' }
+  return { label: 'ScorgIA', message: 'Comment puis-je vous aider ?' }
 }
 
 // ─── Helpers contextuels ──────────────────────────────────────────────────────
@@ -199,6 +199,11 @@ function AssistantFlottantInner({ pathname }: { pathname: string }) {
   const [liveTranscript, setLiveTranscript] = useState('')
   const [actionEnAttente, setActionEnAttente] = useState<ActionSuggestion | null>(null)
   const [classes, setClasses] = useState<{ id: string; nom: string }[]>([])
+  const [showBtn, setShowBtn]  = useState(true)
+
+  useEffect(() => {
+    setShowBtn(localStorage.getItem('scorgia_show_assistant_btn') !== 'false')
+  }, [])
 
   const endRef   = useRef<HTMLDivElement>(null)
   const taRef    = useRef<HTMLTextAreaElement>(null)
@@ -371,11 +376,11 @@ function AssistantFlottantInner({ pathname }: { pathname: string }) {
       `}</style>
 
       {/* ── Bouton flottant ──────────────────────────────────────────────── */}
-      <div
-        title="Parler à KlassIA+"
+      {showBtn && <div
+        title="Parler à ScorgIA"
         onClick={() => { setOpen(true); setHasUnread(false) }}
         style={{
-          position: 'fixed', bottom: 24, left: 24, zIndex: 900,
+          position: 'fixed', bottom: 24, right: 24, zIndex: 900,
           width: 56, height: 56, borderRadius: '50%', cursor: 'pointer',
           background:  'linear-gradient(135deg, #7F77DD, #9B5DE5)',
           boxShadow:   '0 4px 20px rgba(127,119,221,0.55)',
@@ -396,7 +401,7 @@ function AssistantFlottantInner({ pathname }: { pathname: string }) {
             animation: 'pulseRed 1.4s ease-in-out infinite',
           }} />
         )}
-      </div>
+      </div>}
 
       {/* ── Overlay ───────────────────────────────────────────────────────── */}
       {open && (
@@ -422,7 +427,7 @@ function AssistantFlottantInner({ pathname }: { pathname: string }) {
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, #7F77DD, #4F46E5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#FFF', fontWeight: 800 }}>✦</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>KlassIA+</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>ScorgIA</div>
               <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Vous êtes dans : <strong>{ctx.label}</strong></div>
             </div>
             <button onClick={() => setOpen(false)}
@@ -445,7 +450,7 @@ function AssistantFlottantInner({ pathname }: { pathname: string }) {
               return (
                 <div key={msg.id} style={{ marginBottom: 14 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    <LogoKlassIA variant="icone" taille={26} />
+                    <ScorgiaLogo variant="icon" width={26} height={26} />
                     <div className={msg.isStreaming && msg.content ? 'asst-bubble-ia' : ''}
                       style={{ background: 'var(--color-bg-card)', border: '1px solid var(--color-border)', borderRadius: '3px 14px 14px 14px', padding: '10px 13px', maxWidth: '85%', fontSize: 13, lineHeight: 1.6, color: 'var(--color-text-primary)', overflowX: 'auto' }}>
                       {msg.content ? (

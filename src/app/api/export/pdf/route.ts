@@ -8,6 +8,8 @@ import os from 'os'
 
 const execAsync = promisify(exec)
 
+export const maxDuration = 120
+
 export async function POST(req: NextRequest) {
   const { error } = await requireAuth()
   if (error) return error
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   const docxBuffer = await docxResponse.arrayBuffer()
   const tmpDir     = os.tmpdir()
-  const tmpDocx    = path.join(tmpDir, `klassia_${Date.now()}.docx`)
+  const tmpDocx    = path.join(tmpDir, `scorgia_${Date.now()}.docx`)
   const tmpPdf     = tmpDocx.replace('.docx', '.pdf')
 
   fs.writeFileSync(tmpDocx, Buffer.from(docxBuffer))
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
     return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type':        'application/pdf',
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(body.titre ?? 'klassia')}.pdf"`,
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(body.titre ?? 'scorgia')}.pdf"`,
       },
     })
   } finally {

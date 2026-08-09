@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { ForfaitType } from '@/lib/types/database'
 import { FEATURE_DARK_MODE_ENABLED, FEATURE_COMMUNAUTE_VISIBLE } from '@/lib/constants/features'
 import ThemeToggle from '@/components/ui/ThemeToggle'
-import LogoKlassIA from '@/components/ui/LogoKlassIA'
+import { ScorgiaLogo } from '@/components/branding/scorgia-logo'
 
 // ─── Forfait badge ────────────────────────────────────────────────────────────
 
@@ -19,7 +19,7 @@ const FORFAIT_BADGE: Record<ForfaitType, { label: string; color: string; bg: str
 // ─── Nav admin ────────────────────────────────────────────────────────────────
 
 const NAV_ADMIN = [
-  { label: "Vue d'ensemble", emoji: '📊', href: '/dashboard/ecole'              },
+  { label: "Founder Center", emoji: '🚀', href: '/founder'                      },
   { label: 'Utilisateurs',   emoji: '👥', href: '/dashboard/admin/utilisateurs' },
   { label: 'Inscriptions',   emoji: '👤', href: '/dashboard/admin/inscriptions' },
   { label: 'Analytics',      emoji: '📈', href: '/dashboard/admin/analytics'    },
@@ -53,7 +53,7 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount }: Si
     const next = !adminMode
     setAdminMode(next)
     localStorage.setItem('klassia_admin_mode', String(next))
-    router.push(next ? '/dashboard/ecole' : '/dashboard')
+    router.push(next ? '/founder' : '/dashboard')
   }
 
   const isActive = (href: string) => {
@@ -113,10 +113,10 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount }: Si
       <aside className="sidebar">
         {/* Logo admin */}
         <div className="sidebar-logo" onClick={() => router.push('/dashboard')} style={{ cursor: 'pointer' }}>
-          <LogoKlassIA variant="icone" taille={36} />
+          <ScorgiaLogo variant="icon" width={28} height={28} />
           <div style={{ flex: 1 }}>
             <div className="sidebar-brand">
-              Klass<span style={{ color: '#60A5FA' }}>IA+</span>
+              Scorg<span style={{ color: '#60A5FA' }}>IA</span>
             </div>
           </div>
           <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA', padding: '2px 7px', background: 'rgba(96,165,250,0.18)', borderRadius: 99 }}>ADMIN</span>
@@ -154,9 +154,9 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount }: Si
       <div className="sidebar-logo" onClick={() => router.push('/dashboard')} style={{ cursor: 'pointer' }}
         onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
         onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
-        <LogoKlassIA variant="icone" taille={36} />
+        <ScorgiaLogo variant="icon" width={28} height={28} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="sidebar-brand">KlassIA+</div>
+          <div className="sidebar-brand">ScorgIA</div>
         </div>
         <span style={{
           fontSize: 9, fontWeight: 700,
@@ -170,6 +170,7 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount }: Si
       <div className="sidebar-section" style={{ paddingTop: 8 }}>
         <NavItem label={isFr ? 'Tableau de bord' : 'Dashboard'}         emoji="🏠"  href="/dashboard" />
         <NavItem label={isFr ? 'Mes classes' : 'My Classes'}             emoji="🎓"  href="/dashboard/classes" />
+        <NavItem label={isFr ? 'Bibliothèque' : 'Library'}               emoji="📚"  href="/dashboard/bibliotheque" />
         <NavItem label={isFr ? 'Préparer' : 'Prepare'}                   emoji="✨"  href="/dashboard/gerer/preparer" />
         <NavItem label={isFr ? 'Enseigner' : 'Teach'}                    emoji="🖥️"  href="/dashboard/gerer/enseigner" />
         <NavItem label={isFr ? 'Agenda intelligent' : 'Smart Agenda'}    emoji="🗓️"  href="/dashboard/calendrier" />
@@ -192,7 +193,7 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount }: Si
       <div className="sidebar-section">
         <NavItem label={isFr ? 'Paramètres' : 'Settings'}      emoji="⚙️"  href="/dashboard/profil" />
         {isAdmin && (
-          <NavItem label={isFr ? 'Administration' : 'Administration'} emoji="🛡️" href="/dashboard/admin/utilisateurs" />
+          <NavItem label={isFr ? 'Administration' : 'Administration'} emoji="🛡️" href="/founder" />
         )}
       </div>
 
@@ -223,7 +224,7 @@ function UserCard({ profil, badge, adminMode, onLogout, router }: {
 }) {
   return (
     <div className="sidebar-user"
-      onClick={() => router.push(adminMode ? '/dashboard/ecole' : '/dashboard/profil')}>
+      onClick={() => router.push(adminMode ? '/founder' : '/dashboard/profil')}>
       <div className="sidebar-avatar"
         style={adminMode ? { background: 'linear-gradient(135deg,#1B3F6E,#2563EB)' } : undefined}>
         {profil?.prenom?.[0]?.toUpperCase()}{profil?.nom?.[0]?.toUpperCase()}

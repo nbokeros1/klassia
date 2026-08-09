@@ -121,7 +121,7 @@ export default function ForfaitsPage() {
 
   const handleUpgrade = (planId: string) => {
     if (planId === 'institution') {
-      setToast('Contactez-nous à contact@klassia.ca')
+      setToast('Contactez-nous à contact@scorgia.app')
     } else {
       setToast('Paiement en ligne disponible bientôt — Stripe en cours d\'intégration')
     }
@@ -354,8 +354,8 @@ export default function ForfaitsPage() {
           {/* Pied de page */}
           <div style={{ marginTop: 24, textAlign: 'center', fontSize: 11, color: 'var(--text-4)', lineHeight: 1.6 }}>
             Taxes applicables selon votre province · Les prix en USD sont indicatifs (taux 1 USD ≈ 1,38 CAD) ·{' '}
-            <span style={{ color: '#A78BFA', cursor: 'pointer' }} onClick={() => setToast('Contactez-nous à contact@klassia.ca')}>
-              contact@klassia.ca
+            <span style={{ color: '#A78BFA', cursor: 'pointer' }} onClick={() => setToast('Contactez-nous à contact@scorgia.app')}>
+              contact@scorgia.app
             </span>
           </div>
 

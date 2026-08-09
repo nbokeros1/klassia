@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import LoadingScreen from '@/components/LoadingScreen'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import AuthBranding from '@/components/auth/AuthBranding'
 
 // ─── Données de référence ─────────────────────────────────────────────────────
 
@@ -507,12 +508,11 @@ export default function OnboardingPage() {
         <style>{`@keyframes fadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } } .onb-fade { animation: fadeUp .28s ease-out; }`}</style>
 
         {/* Logo */}
-        <div style={{ marginBottom: 24, textAlign: 'center' }}>
-          <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--color-text-primary)', letterSpacing: '-0.5px' }}>
-            Klass<span style={{ color: '#6C5CE7' }}>IA</span><span style={{ color: '#A78BFA', fontSize: 14, fontWeight: 700, marginLeft: 2 }}>+</span>
-          </span>
-          <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 4 }}>Configurons votre profil</div>
-        </div>
+        <AuthBranding
+          theme="light"
+          slogan="Configurons votre profil"
+          style={{ marginBottom: 24 }}
+        />
 
         <div className="onb-fade" style={cardStyle}>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--color-text-primary)', margin: '0 0 6px' }}>
@@ -618,11 +618,10 @@ export default function OnboardingPage() {
       <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px' }}>
         <style>{`@keyframes fadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } } .onb-fade { animation: fadeUp .28s ease-out; }`}</style>
 
-        <div style={{ marginBottom: 20, textAlign: 'center' }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--color-text-primary)' }}>
-            Klass<span style={{ color: '#6C5CE7' }}>IA</span><span style={{ color: '#A78BFA', fontSize: 13, fontWeight: 700 }}>+</span>
-          </span>
-        </div>
+        <AuthBranding
+          theme="light"
+          style={{ marginBottom: 20 }}
+        />
 
         <div className="onb-fade" style={{ ...cardStyle, maxWidth: 640 }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--color-text-primary)', margin: '0 0 6px', textAlign: 'center' }}>
@@ -652,7 +651,7 @@ export default function OnboardingPage() {
               <div style={{ fontSize: 28, marginBottom: 12 }}>⚡</div>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 8 }}>Chemin B — Automatique</div>
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
-                J'uploade mon emploi du temps. KlassIA+ crée tout automatiquement : classes, calendrier, plans de leçons.
+                J'uploade mon emploi du temps. ScorgIA crée tout automatiquement : classes, calendrier, plans de leçons.
               </div>
               <div style={{ marginTop: 12 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: '#6C5CE7', background: 'rgba(108,92,231,0.12)', padding: '2px 8px', borderRadius: 99 }}>Recommandé</span>
@@ -677,7 +676,7 @@ export default function OnboardingPage() {
             Créez votre première classe
           </h2>
           <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 24 }}>
-            KlassIA+ génèrera vos séquences et plans de leçons automatiquement.
+            ScorgIA génèrera vos séquences et plans de leçons automatiquement.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -744,7 +743,7 @@ export default function OnboardingPage() {
         {/* Header */}
         <div style={{ height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)' }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #6C5CE7, #4F46E5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#FFF', fontWeight: 800, animation: 'glowPulse 3s ease-in-out infinite' }}>✦</div>
-          <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-text-primary)', letterSpacing: '-0.3px' }}>KlassIA+</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-text-primary)', letterSpacing: '-0.3px' }}>ScorgIA</span>
           <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)', borderRadius: 99, padding: '3px 9px' }}>Configuration initiale</span>
         </div>
 
@@ -855,7 +854,7 @@ export default function OnboardingPage() {
                   value={inputValue}
                   onChange={e => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Répondez à KlassIA+ ou posez une question…"
+                  placeholder="Répondez à ScorgIA ou posez une question…"
                   rows={1}
                   style={{ flex: 1, resize: 'none', border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: 'var(--color-text-primary)', fontFamily: 'inherit', lineHeight: 1.5, minHeight: 24, maxHeight: 120, overflowY: 'auto', padding: '3px 0' }}
                 />

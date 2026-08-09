@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import LogoKlassIA from '@/components/ui/LogoKlassIA'
+import { ScorgiaLogo } from '@/components/branding/scorgia-logo'
 
 const TEMOIGNAGES = [
   {
     nom: 'Marie-Claire Leblanc',
     ecole: 'École Saint-Michel, Montréal',
     role: 'Enseignante de français · Secondaire 3',
-    texte: 'KlassIA+ m\'a fait économiser au moins 6 heures par semaine. Je charge mon curriculum en début d\'année et tout est organisé automatiquement. Mes plans de leçon sont prêts en 30 secondes.',
+    texte: 'ScorgIA m\'a fait économiser au moins 6 heures par semaine. Je charge mon curriculum en début d\'année et tout est organisé automatiquement. Mes plans de leçon sont prêts en 30 secondes.',
     initiales: 'ML',
     couleur: '#1B3F6E',
     note: 5,
@@ -20,7 +20,7 @@ const TEMOIGNAGES = [
     nom: 'Jean-Philippe Tremblay',
     ecole: 'Collège Notre-Dame, Québec',
     role: 'Enseignant de mathématiques · 10e année',
-    texte: 'L\'export PowerPoint est incroyable. Je projette directement les slides générées par KlassIA+. La différenciation automatique pour mes élèves à besoins particuliers me sauve chaque semaine.',
+    texte: 'L\'export PowerPoint est incroyable. Je projette directement les slides générées par ScorgIA. La différenciation automatique pour mes élèves à besoins particuliers me sauve chaque semaine.',
     initiales: 'JT',
     couleur: '#6B3FA0',
     note: 5,
@@ -29,7 +29,7 @@ const TEMOIGNAGES = [
     nom: 'Amina Diallo',
     ecole: 'École française de Calgary, AB',
     role: 'Étudiante en éducation · Université Saint-Jean',
-    texte: 'En stage, KlassIA+ m\'a permis de préparer mes leçons aussi vite que des enseignants expérimentés. Le gabarit AVANT/PENDANT/APRÈS est exactement ce qu\'on nous enseigne à l\'université.',
+    texte: 'En stage, ScorgIA m\'a permis de préparer mes leçons aussi vite que des enseignants expérimentés. Le gabarit AVANT/PENDANT/APRÈS est exactement ce qu\'on nous enseigne à l\'université.',
     initiales: 'AD',
     couleur: '#059669',
     note: 5,
@@ -38,7 +38,7 @@ const TEMOIGNAGES = [
     nom: 'Sophie Bergeron',
     ecole: 'École primaire des Érables, Laval',
     role: 'Enseignante · 4e et 5e année',
-    texte: 'Je n\'avais jamais utilisé d\'IA avant KlassIA+. C\'est simple, en français, et ça respecte la vie privée de mes élèves. C\'est exactement ce dont les enseignants ont besoin.',
+    texte: 'Je n\'avais jamais utilisé d\'IA avant ScorgIA. C\'est simple, en français, et ça respecte la vie privée de mes élèves. C\'est exactement ce dont les enseignants ont besoin.',
     initiales: 'SB',
     couleur: '#C2410C',
     note: 5,
@@ -57,7 +57,7 @@ const SLIDES = [
   {
     tag: '✦ IA Pédagogique',
     titre: 'Curriculum uploadé.\n72 leçons générées.',
-    sous: 'Chargez votre curriculum officiel. KlassIA+ analyse et structure toute votre année en moins de 2 minutes — syllabus, unités, leçons.',
+    sous: 'Chargez votre curriculum officiel. ScorgIA analyse et structure toute votre année en moins de 2 minutes — syllabus, unités, leçons.',
     accent: '#A78BFA',
     bg: 'linear-gradient(135deg, #0D0520 0%, #1A0D35 100%)',
     mockup: 'curriculum',
@@ -73,7 +73,7 @@ const SLIDES = [
   {
     tag: '✦ Inclusion',
     titre: 'Différenciation\nautomatique.',
-    sous: 'Décrivez les besoins de vos élèves sans les nommer. KlassIA+ génère des stratégies et une version adaptée du cours pour chaque profil.',
+    sous: 'Décrivez les besoins de vos élèves sans les nommer. ScorgIA génère des stratégies et une version adaptée du cours pour chaque profil.',
     accent: '#FCD34D',
     bg: 'linear-gradient(135deg, #1A1000 0%, #2D1E00 100%)',
     mockup: 'inclusion',
@@ -82,7 +82,7 @@ const SLIDES = [
 
 const ANNONCES_FR = [
   '🔴 NOUVEAU — Génération de slides interactifs disponible bientôt',
-  '🎓 72 enseignants ont rejoint KlassIA+ cette semaine',
+  '🎓 72 enseignants ont rejoint ScorgIA cette semaine',
   '✦ Export PowerPoint prêt en 1 clic',
   '📚 Curriculum québécois, ontarien et CB supporté',
   '🔒 Données des élèves 100% protégées — jamais envoyées à l\'IA',
@@ -92,7 +92,7 @@ const ANNONCES_FR = [
 
 const ANNONCES_EN = [
   '🔴 NEW — Interactive slides generation coming soon',
-  '🎓 72 teachers joined KlassIA+ this week',
+  '🎓 72 teachers joined ScorgIA this week',
   '✦ PowerPoint export ready in 1 click',
   '📚 Quebec, Ontario and BC curriculum supported',
   '🔒 Student data 100% protected — never sent to AI',
@@ -156,39 +156,39 @@ export default function LandingPage() {
       nav_login: 'Se connecter', nav_cta: 'Commencer gratuitement', nav_dashboard: 'Mon dashboard',
       hero_tag: 'Plateforme IA pédagogique · FR + EN',
       hero_h1_1: 'Ton année scolaire.', hero_h1_2: 'Organisée en', hero_h1_3: 'quelques minutes.',
-      hero_sub: "Charge ton curriculum officiel. KlassIA+ génère ton syllabus, tes plans de leçon, tes évaluations et tes activités différenciées — automatiquement.",
+      hero_sub: "Charge ton curriculum officiel. ScorgIA génère ton syllabus, tes plans de leçon, tes évaluations et tes activités différenciées — automatiquement.",
       hero_cta: 'Commencer gratuitement', hero_demo: 'Voir la démo',
       hero_note1: 'Aucune carte requise', hero_note2: 'Données protégées', hero_note3: 'Prêt en 5 min',
       stat1_l: 'enseignants actifs', stat2_l: 'leçons générées', stat3_l: 'classes organisées', stat4_l: 'données anonymisées',
       feat_tag: 'Fonctionnalités', feat_h: 'Tout ce dont tu as besoin.\nRien de superflu.',
       feat_sub: 'Deux volets distincts — organisation pure et IA pédagogique — pour un usage simple, rapide et précis.',
       features: [
-        { icon: '📄', t: 'Curriculum → Programme complet', d: "Charge ton curriculum. KlassIA+ génère syllabus, 72 leçons, objectifs et sous-dossiers en moins de 2 minutes." },
+        { icon: '📄', t: 'Curriculum → Programme complet', d: "Charge ton curriculum. ScorgIA génère syllabus, 72 leçons, objectifs et sous-dossiers en moins de 2 minutes." },
         { icon: '📋', t: 'Plans de leçon sur mesure', d: 'Gabarit AVANT / PENDANT / APRÈS. Basé sur ton modèle personnel. Prêts en 30 secondes.' },
         { icon: '📅', t: 'Emploi du temps intelligent', d: "Entre ton horaire une fois. L'app organise tes cours, dossiers et rappels automatiquement." },
-        { icon: '🎯', t: 'Inclusion & différenciation', d: 'Décris les besoins sans nommer les élèves. KlassIA+ génère des stratégies adaptées à chaque profil.' },
+        { icon: '🎯', t: 'Inclusion & différenciation', d: 'Décris les besoins sans nommer les élèves. ScorgIA génère des stratégies adaptées à chaque profil.' },
         { icon: '❓', t: 'Quiz, évaluations & corrections', d: "Quiz auto-corrigés, grilles d'évaluation et billets de sortie liés à tes objectifs." },
-        { icon: '🧠', t: "IA qui apprend ton style", d: 'Plus tu utilises KlassIA+, plus elle te connaît. Elle mémorise tes préférences pédagogiques.' },
+        { icon: '🧠', t: "IA qui apprend ton style", d: 'Plus tu utilises ScorgIA, plus elle te connaît. Elle mémorise tes préférences pédagogiques.' },
       ],
       how_tag: 'Comment ça marche', how_h: "4 étapes. Toute l'année organisée.",
       steps: [
         { n: '01', t: 'Crée ton compte', d: 'Profil enseignant ou étudiant. École, matières, niveaux. FR ou EN. Prêt en 2 minutes.' },
-        { n: '02', t: 'Charge ton curriculum', d: "PDF ou Word officiel. KlassIA+ analyse et structure toute l'année automatiquement." },
+        { n: '02', t: 'Charge ton curriculum', d: "PDF ou Word officiel. ScorgIA analyse et structure toute l'année automatiquement." },
         { n: '03', t: 'Entre ton horaire', d: 'Tes cours sont créés, rangés et liés à ton programme annuel. Automatiquement.' },
-        { n: '04', t: 'Génère et enseigne', d: "Fiches, quiz, évaluations en 30 secondes. Tu enseignes. KlassIA+ s'occupe du reste." },
+        { n: '04', t: 'Génère et enseigne', d: "Fiches, quiz, évaluations en 30 secondes. Tu enseignes. ScorgIA s'occupe du reste." },
       ],
       pricing_tag: 'Tarifs', pricing_h: 'Simple et transparent',
       pricing_sub: 'Commence gratuitement. Passe au Pro quand tu es prêt.',
       popular: '⭐ LE PLUS POPULAIRE',
       plans: [
-        { name: 'Gratuit', price: '0$', period: 'CAD/mois', desc: 'Pour découvrir KlassIA+', features: ['1 classe maximum', '5 générations IA / mois', 'Plan de leçon basique (AVANT/PENDANT/APRÈS)', 'Éditeur de texte enrichi', 'Sauvegarde automatique'], cta: 'Commencer', highlight: false },
+        { name: 'Gratuit', price: '0$', period: 'CAD/mois', desc: 'Pour découvrir ScorgIA', features: ['1 classe maximum', '5 générations IA / mois', 'Plan de leçon basique (AVANT/PENDANT/APRÈS)', 'Éditeur de texte enrichi', 'Sauvegarde automatique'], cta: 'Commencer', highlight: false },
         { name: 'Pro', price: '14,99$', period: 'CAD/mois', desc: '119,99$ CAD/an — économisez 33 %', features: ['Classes illimitées', 'Génération IA illimitée', '3 types de documents', 'Export Word + PowerPoint', 'Programme annuel IA', 'Timer · Sondage QR · TBI'], cta: 'Choisir Pro', highlight: false },
         { name: 'Pro+', price: '24,99$', period: 'CAD/mois', desc: '199,99$ CAD/an — économisez 33 %', features: ['Tout ce qui est inclus dans Pro', 'Quiz live + Podium en direct', '10 ressources premium / mois', 'Communication école-famille IA', 'Rapports avancés', 'Éditeur schémas scientifiques'], cta: 'Choisir Pro+', highlight: true },
         { name: 'Institution', price: '—', period: '', desc: 'Sur demande · dès 9,99$ CAD/ens./mois', features: ['Tout ce qui est inclus dans Pro+', 'Dashboard admin multi-enseignants', 'Facturation centralisée', 'Conformité PIPEDA', 'Support dédié'], cta: 'Nous contacter', highlight: false },
       ],
       temoignages_tag: 'Témoignages', temoignages_h: 'Ce que disent les enseignants',
       contact_tag: 'Contact', contact_h: "Rejoins la liste d'attente",
-      contact_sub: 'Sois parmi les premiers à accéder à KlassIA+ Pro et aux fonctionnalités exclusives.',
+      contact_sub: 'Sois parmi les premiers à accéder à ScorgIA Pro et aux fonctionnalités exclusives.',
       contact_nom: 'Nom complet', contact_email: 'Adresse email', contact_ecole: 'École',
       contact_message: 'Message (optionnel)', contact_cta: 'Rejoindre la liste',
       contact_success: '✓ Merci ! Tu seras parmi les premiers informés.',
@@ -196,7 +196,7 @@ export default function LandingPage() {
       cta_sub: 'Rejoins des enseignants qui préparent mieux, plus vite, avec moins de stress.',
       cta_btn: 'Commencer gratuitement', cta_studio: 'Voir le Studio IA',
       cta_note: 'Gratuit pour commencer · Aucune carte requise · Données 100% protégées',
-      footer_note: '© 2026 KlassIA+ · Fait pour les enseignants',
+      footer_note: '© 2026 ScorgIA · Fait pour les enseignants',
       footer_links: ['Confidentialité', 'Conditions', 'Contact', 'Pour les écoles'],
     },
     en: {
@@ -205,39 +205,39 @@ export default function LandingPage() {
       nav_login: 'Sign in', nav_cta: 'Start free', nav_dashboard: 'My dashboard',
       hero_tag: 'AI pedagogical platform · FR + EN',
       hero_h1_1: 'Your school year.', hero_h1_2: 'Organized in', hero_h1_3: 'minutes.',
-      hero_sub: 'Upload your official curriculum. KlassIA+ generates your syllabus, lesson plans, assessments and differentiated activities — automatically.',
+      hero_sub: 'Upload your official curriculum. ScorgIA generates your syllabus, lesson plans, assessments and differentiated activities — automatically.',
       hero_cta: 'Start for free', hero_demo: 'Watch demo',
       hero_note1: 'No card required', hero_note2: 'Data protected', hero_note3: 'Ready in 5 min',
       stat1_l: 'active teachers', stat2_l: 'lessons generated', stat3_l: 'classes organized', stat4_l: 'student data anonymized',
       feat_tag: 'Features', feat_h: "Everything you need.\nNothing you don't.",
       feat_sub: 'Two distinct modules — pure organization and pedagogical AI — for simple, fast and precise use.',
       features: [
-        { icon: '📄', t: 'Curriculum → Full program', d: 'Upload your curriculum. KlassIA+ generates syllabus, 72 lessons, objectives and subfolders in under 2 minutes.' },
+        { icon: '📄', t: 'Curriculum → Full program', d: 'Upload your curriculum. ScorgIA generates syllabus, 72 lessons, objectives and subfolders in under 2 minutes.' },
         { icon: '📋', t: 'Custom lesson plans', d: 'Hook / During / After template. Based on your own model. Ready in 30 seconds.' },
         { icon: '📅', t: 'Smart schedule', d: 'Enter your schedule once. The app organizes your courses, folders and reminders automatically.' },
-        { icon: '🎯', t: 'Inclusion & differentiation', d: 'Describe needs without naming students. KlassIA+ generates strategies for each profile.' },
+        { icon: '🎯', t: 'Inclusion & differentiation', d: 'Describe needs without naming students. ScorgIA generates strategies for each profile.' },
         { icon: '❓', t: 'Quizzes, assessments & corrections', d: 'Auto-corrected quizzes, rubrics and exit tickets linked to your objectives.' },
-        { icon: '🧠', t: 'AI that learns your style', d: 'The more you use KlassIA+, the better it knows you. It memorizes your pedagogical preferences.' },
+        { icon: '🧠', t: 'AI that learns your style', d: 'The more you use ScorgIA, the better it knows you. It memorizes your pedagogical preferences.' },
       ],
       how_tag: 'How it works', how_h: '4 steps. The whole year organized.',
       steps: [
         { n: '01', t: 'Create your account', d: 'Teacher or student profile. School, subjects, levels. FR or EN. Ready in 2 minutes.' },
-        { n: '02', t: 'Upload your curriculum', d: 'Official PDF or Word. KlassIA+ analyzes and structures the entire year automatically.' },
+        { n: '02', t: 'Upload your curriculum', d: 'Official PDF or Word. ScorgIA analyzes and structures the entire year automatically.' },
         { n: '03', t: 'Enter your schedule', d: 'Your courses are created, organized and linked to your annual program. Automatically.' },
-        { n: '04', t: 'Generate and teach', d: 'Lesson plans, quizzes, assessments in 30 seconds. You teach. KlassIA+ handles the rest.' },
+        { n: '04', t: 'Generate and teach', d: 'Lesson plans, quizzes, assessments in 30 seconds. You teach. ScorgIA handles the rest.' },
       ],
       pricing_tag: 'Pricing', pricing_h: 'Simple and transparent',
       pricing_sub: 'Start free. Upgrade when ready.',
       popular: '⭐ MOST POPULAR',
       plans: [
-        { name: 'Free', price: '$0', period: 'CAD/mo', desc: 'To discover KlassIA+', features: ['1 class maximum', '5 AI generations / month', 'Basic lesson plan (Hook/During/After)', 'Rich text editor', 'Auto-save'], cta: 'Get started', highlight: false },
+        { name: 'Free', price: '$0', period: 'CAD/mo', desc: 'To discover ScorgIA', features: ['1 class maximum', '5 AI generations / month', 'Basic lesson plan (Hook/During/After)', 'Rich text editor', 'Auto-save'], cta: 'Get started', highlight: false },
         { name: 'Pro', price: '$14.99', period: 'CAD/mo', desc: '$119.99 CAD/year — save 33%', features: ['Unlimited classes', 'Unlimited AI generation', '3 document types', 'Word + PowerPoint export', 'AI annual program', 'Timer · QR Poll · Whiteboard'], cta: 'Choose Pro', highlight: false },
         { name: 'Pro+', price: '$24.99', period: 'CAD/mo', desc: '$199.99 CAD/year — save 33%', features: ['Everything in Pro', 'Live quiz + Leaderboard', '10 premium resources / month', 'School-family AI messaging', 'Advanced reports', 'Scientific diagrams editor'], cta: 'Choose Pro+', highlight: true },
         { name: 'Institution', price: '—', period: '', desc: 'On request · from $9.99 CAD/teacher/mo', features: ['Everything in Pro+', 'Multi-teacher admin dashboard', 'Centralized billing', 'PIPEDA compliance', 'Dedicated support'], cta: 'Contact us', highlight: false },
       ],
       temoignages_tag: 'Testimonials', temoignages_h: 'What teachers are saying',
       contact_tag: 'Contact', contact_h: 'Join the waitlist',
-      contact_sub: 'Be among the first to access KlassIA+ Pro and exclusive features.',
+      contact_sub: 'Be among the first to access ScorgIA Pro and exclusive features.',
       contact_nom: 'Full name', contact_email: 'Email address', contact_ecole: 'School',
       contact_message: 'Message (optional)', contact_cta: 'Join the list',
       contact_success: "✓ Thank you! You'll be among the first to know.",
@@ -245,7 +245,7 @@ export default function LandingPage() {
       cta_sub: 'Join teachers who prepare better, faster, with less stress.',
       cta_btn: 'Start for free', cta_studio: 'See AI Studio',
       cta_note: 'Free to start · No card required · 100% protected data',
-      footer_note: '© 2026 KlassIA+ · Made for educators',
+      footer_note: '© 2026 ScorgIA · Made for educators',
       footer_links: ['Privacy', 'Terms', 'Contact', 'For schools'],
     },
   }[lang]
@@ -261,16 +261,20 @@ export default function LandingPage() {
       {/* ── NAV ── */}
       <nav style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-        height: '64px',
+        height: 'clamp(68px, 5.5vw, 84px)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 48px',
+        padding: '0 clamp(24px, 4vw, 64px)',
         background: navScrolled ? 'rgba(5,13,26,0.92)' : 'transparent',
         backdropFilter: navScrolled ? 'blur(20px)' : 'none',
         borderBottom: navScrolled ? '1px solid rgba(255,255,255,0.07)' : 'none',
         transition: 'all 0.3s ease',
       }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <LogoKlassIA variant="horizontal" taille={32} />
+          <ScorgiaLogo
+            variant="dark"
+            height={56}
+            style={{ height: 'clamp(38px, 3.8vw, 56px)' }}
+          />
         </div>
 
         <div style={{ display: 'flex', gap: '32px' }}>
@@ -344,8 +348,8 @@ export default function LandingPage() {
             tag: isFr ? '✦ Studio IA' : '✦ AI Studio',
             titre: isFr ? 'Génère ta leçon\nen 30 secondes chrono.' : 'Generate your lesson\nin 30 seconds flat.',
             desc: isFr
-              ? "Décris ton sujet. KlassIA+ crée un plan complet AVANT / PENDANT / APRÈS adapté au gabarit pédagogique de ta province — personnalisé pour ton style d'enseignement."
-              : "Describe your topic. KlassIA+ creates a full Hook / During / After plan adapted to your province's template — personalized to your teaching style.",
+              ? "Décris ton sujet. ScorgIA crée un plan complet AVANT / PENDANT / APRÈS adapté au gabarit pédagogique de ta province — personnalisé pour ton style d'enseignement."
+              : "Describe your topic. ScorgIA creates a full Hook / During / After plan adapted to your province's template — personalized to your teaching style.",
             stats: [
               { v: '30s', l: isFr ? 'Génération' : 'Generation' },
               { v: '100%', l: isFr ? 'Personnalisé' : 'Personalized' },
@@ -386,8 +390,8 @@ export default function LandingPage() {
             tag: isFr ? '📄 Curriculum → Programme' : '📄 Curriculum → Program',
             titre: isFr ? '72 leçons structurées\nen 2 minutes.' : '72 structured lessons\nin 2 minutes.',
             desc: isFr
-              ? 'Importe ton curriculum officiel (PDF ou Word). KlassIA+ analyse le document et génère automatiquement ton programme annuel complet : unités, séquences, leçons et objectifs alignés.'
-              : 'Import your official curriculum (PDF or Word). KlassIA+ analyzes the document and automatically generates your complete annual program: units, sequences, lessons and aligned objectives.',
+              ? 'Importe ton curriculum officiel (PDF ou Word). ScorgIA analyse le document et génère automatiquement ton programme annuel complet : unités, séquences, leçons et objectifs alignés.'
+              : 'Import your official curriculum (PDF or Word). ScorgIA analyzes the document and automatically generates your complete annual program: units, sequences, lessons and aligned objectives.',
             stats: [
               { v: '72', l: isFr ? 'Leçons créées' : 'Lessons created' },
               { v: '<2 min', l: isFr ? 'Génération' : 'Generation' },
@@ -541,8 +545,8 @@ export default function LandingPage() {
             tag: isFr ? '🎯 Inclusion & Différenciation' : '🎯 Inclusion & Differentiation',
             titre: isFr ? "Chaque élève à\nson niveau exact." : "Every student at\ntheir exact level.",
             desc: isFr
-              ? "Décris le profil de ton élève sans le nommer. KlassIA+ génère une version adaptée du cours pour la dyslexie, le TDAH, les apprenants ELL — en 15 secondes. Confidentiel par design."
-              : "Describe your student's profile without naming them. KlassIA+ generates an adapted version of the lesson for dyslexia, ADHD, ELL learners — in 15 seconds. Confidential by design.",
+              ? "Décris le profil de ton élève sans le nommer. ScorgIA génère une version adaptée du cours pour la dyslexie, le TDAH, les apprenants ELL — en 15 secondes. Confidentiel par design."
+              : "Describe your student's profile without naming them. ScorgIA generates an adapted version of the lesson for dyslexia, ADHD, ELL learners — in 15 seconds. Confidential by design.",
             stats: [
               { v: '15s', l: isFr ? 'Adaptation' : 'Adaptation' },
               { v: '100%', l: isFr ? 'Confidentiel' : 'Confidential' },
@@ -591,7 +595,7 @@ export default function LandingPage() {
               <div style={{ textAlign: 'center', marginBottom: '24px' }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', padding: '5px 16px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase' }}>
                   <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: s.accent, display: 'inline-block', transition: 'background 0.4s' }} />
-                  {isFr ? 'Découvrir KlassIA+' : 'Explore KlassIA+'}
+                  {isFr ? 'Découvrir ScorgIA' : 'Explore ScorgIA'}
                 </div>
               </div>
 
@@ -612,7 +616,7 @@ export default function LandingPage() {
                   <div style={{ display: 'flex', gap: '5px' }}>
                     {['#FF5F57','#FFBD2E','#27C93F'].map((c,i) => <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: c }} />)}
                   </div>
-                  <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '5px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>klassia.ca</div>
+                  <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '5px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>scorgia.app</div>
                   <div style={{ display: 'flex', gap: '5px' }}>
                     {C5.map((_, i) => (
                       <div key={i} onClick={() => setSlideActif(i)} style={{ width: i === slideActif ? '20px' : '6px', height: '6px', borderRadius: '99px', background: i === slideActif ? s.accent : 'rgba(255,255,255,0.12)', cursor: 'pointer', transition: 'all 0.3s' }} />
@@ -916,7 +920,7 @@ export default function LandingPage() {
               </div>
               <div style={{ marginBottom: '24px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#3D4F65', marginBottom: '6px' }}>{t.contact_message}</label>
-                <textarea value={formContact.message} onChange={e => setFormContact({ ...formContact, message: e.target.value })} placeholder="Comment KlassIA+ peut vous aider ?" rows={3} style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #E8EEF8', borderRadius: '10px', fontSize: '14px', outline: 'none', fontFamily: 'inherit', resize: 'none', lineHeight: '1.6' }} />
+                <textarea value={formContact.message} onChange={e => setFormContact({ ...formContact, message: e.target.value })} placeholder="Comment ScorgIA peut vous aider ?" rows={3} style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #E8EEF8', borderRadius: '10px', fontSize: '14px', outline: 'none', fontFamily: 'inherit', resize: 'none', lineHeight: '1.6' }} />
               </div>
               <button type="submit" disabled={formEnvoi === 'loading'} style={{ width: '100%', padding: '15px', background: 'linear-gradient(135deg, #1B3F6E, #7C3AED)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: 'pointer', opacity: formEnvoi === 'loading' ? 0.7 : 1, boxShadow: '0 4px 20px rgba(124,58,237,0.3)' }}>
                 {formEnvoi === 'loading' ? 'Envoi...' : t.contact_cta}
@@ -931,7 +935,7 @@ export default function LandingPage() {
       <section style={{ background: '#050D1A', padding: '112px 48px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '800px', height: '800px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,58,237,0.14) 0%, transparent 70%)', filter: 'blur(80px)', pointerEvents: 'none' }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', color: '#A78BFA', padding: '6px 18px', borderRadius: '99px', fontSize: '12px', fontWeight: 500, marginBottom: '28px' }}>✦ KlassIA+</div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', color: '#A78BFA', padding: '6px 18px', borderRadius: '99px', fontSize: '12px', fontWeight: 500, marginBottom: '28px' }}>✦ ScorgIA</div>
           <h2 style={{ fontSize: '60px', fontWeight: 900, letterSpacing: '-2px', color: 'white', lineHeight: 1.05, marginBottom: '20px', whiteSpace: 'pre-line' }}>{t.cta_h}</h2>
           <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.4)', marginBottom: '44px', maxWidth: '500px', margin: '0 auto 44px', lineHeight: 1.7 }}>{t.cta_sub}</p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
@@ -953,7 +957,7 @@ export default function LandingPage() {
       {/* ── FOOTER ── */}
       <footer style={{ background: '#02060F', padding: '28px 48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <LogoKlassIA variant="horizontal" taille={24} />
+          <ScorgiaLogo variant="dark" height={24} />
         </div>
         <div style={{ display: 'flex', gap: '28px' }}>
           {t.footer_links.map((l, i) => (
@@ -970,7 +974,7 @@ export default function LandingPage() {
         <div onClick={() => setShowVideo(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', backdropFilter: 'blur(10px)' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#0D1525', borderRadius: '24px', overflow: 'hidden', width: '100%', maxWidth: '800px', boxShadow: '0 48px 120px rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div style={{ padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <span style={{ fontSize: '15px', fontWeight: 600, color: 'white' }}>✦ Démo KlassIA+</span>
+              <span style={{ fontSize: '15px', fontWeight: 600, color: 'white' }}>✦ Démo ScorgIA</span>
               <button onClick={() => setShowVideo(false)} style={{ background: 'rgba(255,255,255,0.07)', border: 'none', fontSize: '15px', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
             <div style={{ background: '#050D1A', aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

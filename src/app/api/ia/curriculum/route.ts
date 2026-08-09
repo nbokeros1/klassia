@@ -1,7 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk'
+﻿import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getMaxTokens } from '@/lib/ia/get-max-tokens'
+import { requireAuth } from '@/lib/api-auth'
+
+export const maxDuration = 60
 
 const CURRICULA_CONTEXT: Record<string, string> = {
   quebec:      'Programme de formation de l\'école québécoise (PFEQ/MEES). Compétences transversales, domaines d\'apprentissage, progression des apprentissages.',
@@ -14,6 +17,9 @@ const CURRICULA_CONTEXT: Record<string, string> = {
 }
 
 export async function POST(request: Request) {
+  const { error: authError } = await requireAuth()
+  if (authError) return authError
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return NextResponse.json({ success: false, error: 'Clé API Anthropic manquante' }, { status: 200 })

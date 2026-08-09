@@ -2,8 +2,17 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
-  // ── Protection /admin ──────────────────────────────────────────────────────
-  if (request.nextUrl.pathname.startsWith('/admin')) {
+  const { pathname } = request.nextUrl
+
+  const isProtectedDashboard = pathname.startsWith('/dashboard')
+  const isProtectedAdmin     = pathname.startsWith('/admin')
+  const isProtectedFounder   = pathname.startsWith('/founder')
+
+  if (!isProtectedDashboard && !isProtectedAdmin && !isProtectedFounder) {
+    return NextResponse.next({ request })
+  }
+
+  try {
     const response = NextResponse.next({ request: { headers: request.headers } })
 
     const supabase = createServerClient(
@@ -22,27 +31,38 @@ export async function proxy(request: NextRequest) {
       }
     )
 
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
+    // getUser() valide le JWT côté serveur — plus sûr que getSession()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    const { data: profil } = await supabase
-      .from('utilisateurs')
-      .select('is_admin, type_compte')
-      .eq('user_id', session.user.id)
-      .single()
+    if (isProtectedAdmin || isProtectedFounder) {
+      const { data: profil } = await supabase
+        .from('utilisateurs')
+        .select('is_admin, type_compte, role')
+        .eq('user_id', user.id)
+        .single()
 
-    if (!profil?.is_admin && profil?.type_compte !== 'admin') {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      const isAdmin   = profil?.is_admin || profil?.type_compte === 'admin'
+      const isFounder = isAdmin || ['founder', 'super_admin'].includes(profil?.role ?? '')
+
+      if (isProtectedFounder && !isFounder) {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
+      if (isProtectedAdmin && !isAdmin) {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
     }
 
     return response
+  } catch {
+    // Si Supabase est injoignable, on laisse passer — la page gèrera l'auth.
+    return NextResponse.next({ request })
   }
-
-  return NextResponse.next({ request })
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/classes/:path*', '/ia/:path*', '/admin/:path*'],
+  matcher: ['/dashboard/:path*', '/classes/:path*', '/ia/:path*', '/admin/:path*', '/founder/:path*'],
 }

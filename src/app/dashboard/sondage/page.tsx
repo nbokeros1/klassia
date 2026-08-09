@@ -170,9 +170,9 @@ export default function SondagePage() {
           ✕ Fermer (Échap)
         </button>
 
-        {/* KlassIA+ watermark */}
+        {/* ScorgIA watermark */}
         <div style={{ position: 'absolute', top: 24, left: 32, fontSize: 18, fontWeight: 900, color: 'rgba(255,255,255,0.15)', letterSpacing: 2 }}>
-          Klass<span style={{ color: 'rgba(107,63,160,0.4)' }}>IA</span>
+          Scorg<span style={{ color: 'rgba(107,63,160,0.4)' }}>IA</span>
         </div>
 
         {/* Question */}
@@ -193,7 +193,7 @@ export default function SondagePage() {
             <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: 8, color: 'white', background: 'rgba(255,255,255,0.08)', padding: '16px 40px', borderRadius: 20 }}>
               {activeSondage.code}
             </div>
-            <div style={{ fontSize: 16, color: 'rgba(255,255,255,0.3)', marginTop: 12 }}>Tape ce code sur klassia.app ou scanne le QR</div>
+            <div style={{ fontSize: 16, color: 'rgba(255,255,255,0.3)', marginTop: 12 }}>Tape ce code sur scorgia.app ou scanne le QR</div>
           </div>
         ) : activeSondage.type === 'texte' ? (
           /* Large word cloud */

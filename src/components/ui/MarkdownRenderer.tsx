@@ -10,6 +10,8 @@ interface Props {
 
 function cleanMarkdown(raw: string): string {
   return raw
+    // Strip SVG blocks before rehype-raw converts them to React elements (kebab-case props warning)
+    .replace(/```svg-schema[\s\S]*?```/g, '')
     .replace(/^```[\w]*\n?/m, '')
     .replace(/\n?```$/m, '')
     .replace(/<callout([^>]*)>/gi, '<blockquote$1>')

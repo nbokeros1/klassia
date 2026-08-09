@@ -137,7 +137,7 @@ export default function SallePage() {
           sujet: aiSujet,
           instructions: `Génère le contenu HTML d'une affiche pédagogique ${aiFormat} style "${aiStyle}" sur : "${aiSujet}".
 Contexte classe : ${classe?.nom} (${classe?.niveau}, ${classe?.matiere}).
-L'affiche doit contenir : un grand titre, les concepts clés avec définitions courtes, des exemples visuels (décrits en texte), et un pied de page KlassIA+.
+L'affiche doit contenir : un grand titre, les concepts clés avec définitions courtes, des exemples visuels (décrits en texte), et un pied de page ScorgIA.
 Format HTML propre, utilisable directement. Pas de markdown.`,
           contexte: { classe: { nom: classe?.nom, niveau: classe?.niveau, matiere: classe?.matiere } },
           langue: 'fr',

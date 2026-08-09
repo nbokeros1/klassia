@@ -38,7 +38,7 @@ export default function LogoKlassIA({
       width={svgWidth}
       height={svgHeight}
       className={className}
-      aria-label="KlassIA+"
+      aria-label="ScorgIA"
       style={{ display: 'block', flexShrink: 0 }}
     >
       <defs>
@@ -141,7 +141,7 @@ export default function LogoKlassIA({
           letterSpacing="-1.5"
           fill={`url(#${u}wm)`}
         >
-          KlassIA+
+          ScorgIA
         </text>
       )}
 
@@ -159,7 +159,7 @@ export default function LogoKlassIA({
           letterSpacing="-0.6"
           fill={`url(#${u}wm)`}
         >
-          KlassIA+
+          ScorgIA
         </text>
       )}
     </svg>

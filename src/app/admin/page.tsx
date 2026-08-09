@@ -4,6 +4,19 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface BetaFeedbackItem {
+  id:           string
+  type:         string
+  titre:        string | null
+  description:  string
+  page_url:     string | null
+  feature_note: number | null
+  statut:       string
+  created_at:   string
+}
+
 // ─── Prix forfaits (CAD/mois) ─────────────────────────────────────────────────
 
 const PRIX: Record<string, number> = {
@@ -46,6 +59,14 @@ export default function AdminPage() {
   const [enseignants, setEnseignants] = useState<any[]>([])
   const [loadEdit,    setLoadEdit]    = useState<string | null>(null)
   const channelRef = useRef<any>(null)
+
+  // ── Onglet actif ────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<'overview' | 'beta'>('overview')
+
+  // ── Bêta : retours ──────────────────────────────────────────────────────────
+  const [betaFeedback,    setBetaFeedback]    = useState<BetaFeedbackItem[]>([])
+  const [betaSessionsCount, setBetaSessionsCount] = useState(0)
+  const [loadingBeta,     setLoadingBeta]     = useState(false)
 
   // ── Chargement données ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -128,18 +149,87 @@ export default function AdminPage() {
     setEnseignants(prev => prev.filter(u => u.id !== userId))
   }
 
+  // ── Charger données bêta ─────────────────────────────────────────────────────
+  const loadBeta = async () => {
+    if (loadingBeta) return
+    setLoadingBeta(true)
+    try {
+      const [fbRes, sessRes] = await Promise.all([
+        fetch('/api/beta/feedback'),
+        supabase.from('lecons').select('id', { count: 'exact', head: true }).eq('statut', 'enseignee'),
+      ])
+      if (fbRes.ok) {
+        const { feedback } = await fbRes.json()
+        setBetaFeedback(feedback || [])
+      }
+      setBetaSessionsCount(sessRes.count ?? 0)
+    } finally {
+      setLoadingBeta(false)
+    }
+  }
+
+  const handleUpdateFeedbackStatut = async (id: string, statut: string) => {
+    await fetch('/api/beta/feedback', {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id, statut }),
+    })
+    setBetaFeedback(prev => prev.map(f => f.id === id ? { ...f, statut } : f))
+  }
+
   const totalEns = Object.values(forfaits).reduce((a, b) => a + b, 0) || 1
+
+  const avgNote = (() => {
+    const rated = betaFeedback.filter(f => f.feature_note != null)
+    if (!rated.length) return null
+    return (rated.reduce((s, f) => s + (f.feature_note ?? 0), 0) / rated.length).toFixed(1)
+  })()
+
+  const TYPE_LABELS: Record<string, string> = {
+    bug: '🐛 Bug', idea: '💡 Idée', remark: '📝 Commentaire', rating: '⭐ Évaluation',
+  }
+  const STATUT_COLORS: Record<string, string> = {
+    nouveau: '#60A5FA', en_traitement: '#FBC34A', resolu: '#34D399', ferme: '#6B7280',
+  }
 
   return (
     <div style={{ padding: '32px 36px', maxWidth: 1200 }}>
 
       {/* ── Titre ──────────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: '#F1F5F9', marginBottom: 4 }}>📊 Vue d'ensemble</div>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: '#F1F5F9', marginBottom: 4 }}>📊 Administration</div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
-          Plateforme KlassIA+ — Tableau de bord administrateur
+          Scorgia — Tableau de bord administrateur
         </div>
       </div>
+
+      {/* ── Onglets ─────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 28 }}>
+        {[
+          { id: 'overview', label: '📊 Vue d\'ensemble' },
+          { id: 'beta',     label: '🧪 Bêta & retours'  },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => {
+              setActiveTab(tab.id as 'overview' | 'beta')
+              if (tab.id === 'beta' && betaFeedback.length === 0) loadBeta()
+            }}
+            style={{
+              padding: '8px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+              background:   activeTab === tab.id ? 'rgba(108,92,231,0.25)' : 'rgba(255,255,255,0.05)',
+              border:       activeTab === tab.id ? '1px solid rgba(108,92,231,0.4)' : '1px solid rgba(255,255,255,0.08)',
+              color:        activeTab === tab.id ? '#A78BFA' : 'rgba(255,255,255,0.5)',
+              cursor:       'pointer',
+              transition:   'all 0.15s',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'overview' && (<>
 
       {/* ── Section 1 : KPIs ───────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
@@ -153,7 +243,7 @@ export default function AdminPage() {
             sub: `+${kpis.nouveaux7j} cette semaine`, color: '#60A5FA',
           },
           {
-            icon: '🤖', label: 'Générations IA aujourd\'hui', value: fmtNum(kpis.genAujourdhui),
+            icon: '🤖', label: "Générations IA aujourd'hui", value: fmtNum(kpis.genAujourdhui),
             sub: `Coût estimé ~${(kpis.genAujourdhui * 0.04).toFixed(2)} $ USD`, color: '#A78BFA',
           },
           {
@@ -209,7 +299,7 @@ export default function AdminPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {feed.length === 0 && (
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '20px 0' }}>
-                En attente d'activité...
+                En attente d&apos;activité...
               </div>
             )}
             {feed.map((item, i) => (
@@ -296,6 +386,112 @@ export default function AdminPage() {
           </table>
         </div>
       </div>
+
+      </>)}
+
+      {/* ── Onglet bêta ─────────────────────────────────────────────────────── */}
+      {activeTab === 'beta' && (
+        <div>
+          {/* KPIs bêta */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
+            {[
+              { icon: '🧪', label: 'Retours reçus',     value: betaFeedback.length, color: '#A78BFA' },
+              { icon: '🎓', label: 'Sessions enseignées', value: betaSessionsCount, color: '#60A5FA' },
+              { icon: '⭐', label: 'Note moyenne',        value: avgNote ? `${avgNote} / 5` : '—', color: '#FBC34A' },
+            ].map(kpi => (
+              <div key={kpi.label} style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '20px 22px' }}>
+                <div style={{ fontSize: 24, marginBottom: 10 }}>{kpi.icon}</div>
+                <div style={{ fontSize: 26, fontWeight: 800, color: kpi.color, marginBottom: 4 }}>{kpi.value}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{kpi.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tableau des retours */}
+          <div style={{ background: '#111827', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#F1F5F9' }}>Retours bêta</div>
+              <button onClick={loadBeta} disabled={loadingBeta}
+                style={{ fontSize: 11, color: '#60A5FA', background: 'none', border: 'none', cursor: 'pointer', opacity: loadingBeta ? 0.5 : 1 }}>
+                {loadingBeta ? 'Chargement…' : '↻ Actualiser'}
+              </button>
+            </div>
+
+            {betaFeedback.length === 0 && !loadingBeta && (
+              <div style={{ padding: '32px 24px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>
+                Aucun retour reçu pour l&apos;instant.
+              </div>
+            )}
+
+            {betaFeedback.length > 0 && (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                      {['Type', 'Description', 'Page', 'Note', 'Statut', 'Date', ''].map(h => (
+                        <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {betaFeedback.map(f => (
+                      <tr key={f.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#A78BFA' }}>
+                            {TYPE_LABELS[f.type] ?? f.type}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.75)', maxWidth: 260 }}>
+                          {f.titre && <div style={{ fontWeight: 600, marginBottom: 2, color: '#F1F5F9' }}>{f.titre}</div>}
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.description}</div>
+                        </td>
+                        <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.35)', maxWidth: 140 }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                            {f.page_url ?? '—'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#FBC34A', textAlign: 'center' }}>
+                          {f.feature_note ? `${f.feature_note}★` : '—'}
+                        </td>
+                        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                          <select
+                            value={f.statut}
+                            onChange={e => handleUpdateFeedbackStatut(f.id, e.target.value)}
+                            style={{
+                              padding: '3px 8px', borderRadius: 6, fontSize: 11,
+                              background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                              color: STATUT_COLORS[f.statut] ?? 'rgba(255,255,255,0.7)',
+                              cursor: 'pointer', fontFamily: 'inherit',
+                            }}>
+                            {['nouveau', 'en_traitement', 'resolu', 'ferme'].map(s => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap' }}>
+                          {new Date(f.created_at).toLocaleDateString('fr-CA')}
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <button
+                            onClick={() => {
+                              alert(`${TYPE_LABELS[f.type] ?? f.type}\n\n${f.titre ? f.titre + '\n' : ''}${f.description}\n\nPage : ${f.page_url ?? '—'}`)
+                            }}
+                            style={{ fontSize: 11, color: '#60A5FA', background: 'none', border: 'none', cursor: 'pointer' }}
+                          >
+                            Voir
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

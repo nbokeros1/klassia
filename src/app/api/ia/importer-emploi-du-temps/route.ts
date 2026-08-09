@@ -1,6 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
+﻿import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
+
+export const maxDuration = 60
 
 // ─── Types (mêmes que onboarding-auto) ───────────────────────────────────────
 
@@ -211,7 +213,7 @@ export async function POST(request: Request) {
           if (!genererContenuIA) {
             encodeEvent(controller, {
               etape: 'quota_epuise', progression: 100,
-              message: `ℹ️ ${quotaCheck.raison} Les dossiers et horaires ont été créés. Passez à un forfait payant pour que KlassIA+ génère automatiquement le plan annuel et les leçons.`,
+              message: `ℹ️ ${quotaCheck.raison} Les dossiers et horaires ont été créés. Passez à un forfait payant pour que ScorgIA génère automatiquement le plan annuel et les leçons.`,
               details: {
                 classes_creees:   classesCreees.length,
                 evenements_crees: totalEvenements,
