@@ -1,11 +1,24 @@
 # SPIE — ScorgIA Pedagogical Intelligence Engine
 ## Blueprint officiel — Constitution technique et pédagogique
 
-> **Version** : RELEASE-P0.2 (mis à jour 2026-08-09)
+> **Version** : SPIE-PERSISTENCE-01 (mis à jour 2026-08-09)
 > **Date initiale** : 2026-08-03
-> **Statut** : ✅ Architecture complète — SPIE-01→07 + SPIE-BETA-01/02/03/04 + RELEASE-P0/P0.2 · 0 erreur TS
+> **Statut** : ✅ Architecture complète — SPIE-01→07 + SPIE-BETA-01/02/03/04 + RELEASE-P0/P0.2 + SPIE-PERSISTENCE-01 · 0 erreur TS
 > **Score architecture** : 80/100 — Voir `Architecture_Review_Report.md`
 > **Auteur** : Architecture ScorgIA
+
+### SPIE-PERSISTENCE-01 (2026-08-09)
+
+| Correction | Impact |
+|-----------|--------|
+| Pattern GENERATE→VALIDATE→PERSIST→VERIFY sur chaque étape | P0 BLOQUANT résolu |
+| BuildState persisté dans `contenu_json.build_state` | Smart resume possible |
+| Anti-doublon 409 avant ouverture stream SSE | Builds simultanés impossibles |
+| `verifyTeachingPackCompleteness()` : statut basé sur DB réelle | Pack ne peut jamais être `pret` sans données |
+| `etapes_completees` = projection du BuildState success-only | Cohérence données |
+| EmptyState précis par onglet manquant | UX diagnostique |
+| CTA adaptatif Reprendre / Reconstruire | Workflow enseignant |
+| DEC-053 à DEC-060 ajoutés au Decision_Log | — |
 
 ### Corrections RELEASE-P0.2 (2026-08-09)
 
@@ -291,3 +304,4 @@ Voir [Roadmap.md](Roadmap.md) pour le détail des prochaines missions.
 | SPIE-BETA-04 | Certification bêta end-to-end — audit, corrections P0/P1, GO/NO GO | ✅ |
 | RELEASE-P0 | Déploiement Vercel — docs, sécurité, migrations, branding, maxDuration | ✅ |
 | RELEASE-P0.2 | Workspace Data Binding — compteurs, explorer, bibliothèque, onglets | ✅ |
+| SPIE-PERSISTENCE-01 | Build Pipeline Persistance — GENERATE→VERIFY, BuildState, smart resume | ✅ |

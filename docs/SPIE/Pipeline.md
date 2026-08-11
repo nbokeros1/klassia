@@ -2,7 +2,13 @@
 ## Du curriculum au copilote d'enseignement
 
 > Référence : [Architecture.md](Architecture.md)  
-> Version : SPIE-01
+> Version : SPIE-PERSISTENCE-01
+
+> **Note SPIE-PERSISTENCE-01 :** Le pipeline `build-year` (`/api/spie/build-year`)
+> implémente un pattern plus strict que les étapes conceptuelles ci-dessous :
+> **GENERATE → VALIDATE → PERSIST → VERIFY → EMIT SUCCESS**.
+> Chaque DB write est re-lu avant d'émettre le succès SSE.
+> Voir [Persistence_Pipeline.md](Persistence_Pipeline.md) pour le détail.
 
 ---
 

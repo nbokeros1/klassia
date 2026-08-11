@@ -534,3 +534,133 @@
 **Décision** : Si pack existe → modal confirmation rouge. Sinon → wizard direct. CTA "Construire" → "Reprendre la génération" selon état.
 **Raison** : Action destructive (remplace `programme_annuel`) → confirmation obligatoire.
 **Conséquences** : Pas de build accidentel. UX adaptative selon l'état de la classe. ✅
+
+---
+
+## DEC-053 — SPIE-PERSISTENCE-01 : SUCCESS uniquement si DB verification = SUCCESS
+
+**Date** : 2026-08-09
+**Contexte** : Le pipeline `build-year` déclarait les étapes SUCCESS dès la réponse IA, sans vérifier que les données étaient effectivement en base. Packs marqués `pret` avec contenu null.
+**Décision** : Chaque étape suit le pattern GENERATE → VALIDATE → PERSIST → VERIFY. `stepSuccess()` n'est appelé qu'après une re-lecture DB confirmant l'existence et la non-nullité des données.
+**Raison** : La promesse centrale de SPIE est la fiabilité pédagogique. Un enseignant qui voit "Année scolaire construite ✓" doit pouvoir ouvrir chaque onglet et trouver le contenu.
+**Conséquences** : Légère augmentation de latence (re-lectures DB). Fiabilité de livraison garantie. ✅
+
+---
+
+## DEC-054 — SPIE-PERSISTENCE-01 : BuildState persisté dans contenu_json (pas de table séparée)
+
+**Date** : 2026-08-09
+**Contexte** : Le BuildState (état de chaque étape du pipeline) devait survivre aux déconnexions pour permettre la reprise. Options : table `build_states` dédiée ou colonne JSONB existante.
+**Décision** : `BuildState` est persisté dans `teaching_packs.contenu_json.build_state` — colonne JSONB existante (migration 036). Aucune migration requise.
+**Raison** : Cohérence avec DEC-024 (persistance via colonnes JSONB). Le BuildState est un attribut du Teaching Pack, pas une entité indépendante.
+**Conséquences** : `contenu_json` grossit légèrement (~2KB par BuildState). Accès via operateur JSONB PostgreSQL. ✅
+
+---
+
+## DEC-055 — SPIE-PERSISTENCE-01 : anti-doublon 409 avant ouverture stream SSE
+
+**Date** : 2026-08-09
+**Contexte** : Si l'enseignant clique deux fois sur "Construire", ou si deux onglets exécutent le build simultanément, deux pipelines tournent en parallèle sur le même Teaching Pack — conflits d'écriture.
+**Décision** : Vérification `statut === 'generation_en_cours'` AVANT d'ouvrir le stream SSE. Retour HTTP 409 immédiat si actif.
+**Raison** : Le stream SSE est unidirectionnel — une fois ouvert, il n'est pas possible d'envoyer un 409. La vérification doit être synchrone avant l'ouverture.
+**Conséquences** : Le client doit gérer le 409 et informer l'enseignant. Le pipeline ne démarre pas. ✅
+
+---
+
+## DEC-056 — SPIE-PERSISTENCE-01 : smart resume — skip des étapes success, re-vérif objectId stale
+
+**Date** : 2026-08-09
+**Contexte** : Un enseignant reprend un build interrompu. Régénérer toutes les étapes depuis zéro (coût IA + latence) est inutile si certaines étapes ont déjà réussi.
+**Décision** : `reprendre: true` dans l'input → le pipeline lit le BuildState existant, saute les étapes `status === 'success'`, et re-vérifie que les `objectId` existent toujours en DB (stale reference check).
+**Raison** : Économie IA + UX enseignant (reprise rapide). La re-vérification protège contre la suppression accidentelle d'un fichier entre deux sessions.
+**Conséquences** : Un objectId stale (fichier supprimé) force la régénération de cette étape uniquement. ✅
+
+---
+
+## DEC-057 — SPIE-PERSISTENCE-01 : verifyTeachingPackCompleteness lit DB après toutes les étapes
+
+**Date** : 2026-08-09
+**Contexte** : L'étape de finalisation devait déterminer le statut final du Teaching Pack. Utiliser les variables en mémoire était insuffisant (elles peuvent être non-nulles alors que les writes ont échoué).
+**Décision** : `verifyTeachingPackCompleteness()` re-lit `teaching_packs`, `programme_annuel`, et compte les `fichiers_dossier` depuis Supabase avant d'écrire le statut final.
+**Raison** : La vérité est en base. Aucune inférence depuis l'état en mémoire pour le statut final.
+**Conséquences** : +1 requête à la finalisation (latence négligeable). Statut final toujours cohérent avec la réalité DB. ✅
+
+---
+
+## DEC-058 — SPIE-PERSISTENCE-01 : statut = completeness.status (pas état en mémoire)
+
+**Date** : 2026-08-09
+**Contexte** : Avant, `statutFinal = premiereLeconId ? 'pret' : 'partiellement_genere'`. Cette variable en mémoire pouvait diverger de la DB.
+**Décision** : `statut = completeness.status` où `completeness` est le résultat de `verifyTeachingPackCompleteness()`.
+**Raison** : Cohérence avec DEC-053. La source de vérité est la DB.
+**Conséquences** : La UI reflétera toujours l'état réel du pack. ✅
+
+---
+
+## DEC-059 — SPIE-PERSISTENCE-01 : etapes_completees = projection build_state, success uniquement
+
+**Date** : 2026-08-09
+**Contexte** : `etapes_completees` incluait 'syllabus' même quand le syllabus était null (étape non validée).
+**Décision** : `etapes_completees` est calculé dynamiquement depuis `buildState` — uniquement les étapes avec `status === 'success'` sont incluses.
+**Raison** : `etapes_completees` est utilisé pour l'UI (badge d'avancement). Une étape non-success ne doit jamais y apparaître.
+**Conséquences** : `etapes_completees` est désormais une projection fiable de `build_state`. ✅
+
+---
+
+## DEC-060 — SPIE-PERSISTENCE-01 : erreurs non critiques → CONTINUE pipeline (pas CLOSE)
+
+**Date** : 2026-08-09
+**Contexte** : Un enseignant en forfait Pro peut ne pas avoir accès à la génération de leçon ou de quiz. Ou la génération peut échouer sur une étape non essentielle. Fermer le stream à la moindre erreur serait trop strict.
+**Décision** : Seule l'ÉTAPE 1 (pack upsert + verify) peut `CLOSE` le stream. Toutes les autres étapes échouantes émettent un SSE erreur et laissent le pipeline continuer. Le pack final sera `partiellement_genere`.
+**Raison** : Un plan annuel sans leçon générée est toujours utile. L'enseignant peut relancer la génération via "Reprendre".
+**Conséquences** : Le pack ne sera jamais coincé dans un état bloquant irréparable. ✅
+
+---
+
+## DEC-061 — SPIE-DIAGNOSTIC-01 : supprimer genere_par_ia de programme_annuel
+
+**Date** : 2026-08-09
+**Contexte** : Le pipeline `build-year` utilisait `genere_par_ia: true` dans l'INSERT et l'UPDATE de `programme_annuel`. Cette colonne n'existe pas dans le schéma DB (ni dans `schema.sql`, ni dans aucune migration).
+**Décision** : Supprimer `genere_par_ia: true` des deux opérations DB sur `programme_annuel`.
+**Raison** : Tout INSERT avec une colonne inexistante lève une erreur PostgreSQL, rendant `progId = null` et bloquant toutes les étapes downstream.
+**Conséquences** : L'étape "Sauvegarde plan annuel" peut maintenant persister en DB. ✅
+
+---
+
+## DEC-062 — SPIE-DIAGNOSTIC-01 : statut fichiers_dossier = 'brouillon' (pas 'prete')
+
+**Date** : 2026-08-09
+**Contexte** : Le code utilisait `statut: 'prete'` pour les INSERT de leçon (`type_fichier: 'lecon_complete'`) et quiz dans `fichiers_dossier`. La contrainte CHECK de cette table n'accepte que `('brouillon','valide','enseigne','archive')`.
+**Décision** : Utiliser `statut: 'brouillon'` pour tous les INSERT de fichiers générés par le pipeline.
+**Raison** : `'prete'` est valide pour `lecons.statut`, pas pour `fichiers_dossier.statut`. Violation de contrainte = INSERT silencieusement rejeté.
+**Conséquences** : Les leçons et quiz sont maintenant correctement persistés. ✅
+
+---
+
+## DEC-063 — SPIE-DIAGNOSTIC-01 : logging structuré obligatoire pour syllabus
+
+**Date** : 2026-08-09
+**Contexte** : Sans logging de la réponse brute Claude, il est impossible de diagnostiquer un échec de parsing du syllabus en production.
+**Décision** : Capturer `rawSylCapture` avant tout parsing. Logguer via `console.error('[build-year][syllabus] FAIL ...')` avec `packId`, `error`, et `raw[0:500]`. Extraire le JSON robustement via `indexOf('{')` / `lastIndexOf('}')`.
+**Raison** : Un échec de parsing syllabus se manifeste exactement comme un échec de génération — sans raw, impossible de distinguer les deux.
+**Conséquences** : Chaque échec de syllabus est maintenant traçable côté serveur. ✅
+
+---
+
+## DEC-064 — SPIE-DIAGNOSTIC-01 : endpoint founder /api/founder/build-debug
+
+**Date** : 2026-08-09
+**Contexte** : Diagnostiquer un pack défaillant nécessitait d'accéder directement à Supabase Studio, inaccessible hors contexte dev.
+**Décision** : Créer `GET /api/founder/build-debug?packId=...`, protégé par `is_admin` ou rôle `founder/super_admin`. Retourne pack metadata, db state, build_state complet, step trace, failing steps, et completeness réel.
+**Raison** : Le fondateur doit pouvoir diagnostiquer un pack en production sans accès DB direct.
+**Conséquences** : Diagnostic possible depuis n'importe quel navigateur authentifié en tant qu'admin. ✅
+
+---
+
+## DEC-065 — SPIE-DIAGNOSTIC-01 : audit schema avant tout INSERT
+
+**Date** : 2026-08-09
+**Contexte** : Les erreurs de SPIE-DIAGNOSTIC-01 (genere_par_ia, statut prete) auraient pu être détectées avant déploiement.
+**Décision** : Toute future modification d'INSERT/UPDATE dans build-year doit être précédée d'une lecture de `supabase/schema.sql` et des migrations pour confirmer les colonnes et contraintes CHECK de la table cible.
+**Raison** : TypeScript ne connaît pas les colonnes DB ni les contraintes CHECK — seule la lecture des migrations confirme ce qui est valide.
+**Conséquences** : Réduction du risque de régression DB silencieuse dans le pipeline. ✅

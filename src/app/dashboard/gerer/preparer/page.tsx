@@ -7,7 +7,7 @@ import PedagogiqueExplorer from '@/components/preparer/explorer/PedagogiqueExplo
 import KlassIAFilePicker, { type FichierKlassia } from '@/components/preparer/KlassIAFilePicker'
 import { WorkspaceHeader } from '@/components/preparer/workspace/WorkspaceHeader'
 import { WorkspaceLayout } from '@/components/preparer/workspace/WorkspaceLayout'
-import { AIAssistantPanel } from '@/components/preparer/assistant/AIAssistantPanel'
+import { AIAssistantPanel, type IaTimestamp } from '@/components/preparer/assistant/AIAssistantPanel'
 import { ActionBar } from '@/components/preparer/toolbar/ActionBar'
 import { PreparationCanvas } from '@/components/preparer/canvas/PreparationCanvas'
 import { InspectorPanel } from '@/components/preparer/inspector/InspectorPanel'
@@ -148,9 +148,16 @@ function PreparerPageInner() {
   const messagesScrollRef  = useRef<HTMLDivElement>(null)
   const abortRef           = useRef<AbortController | null>(null)
   const [showScrollBtn,    setShowScrollBtn]    = useState(false)
-  const [aiPanelOpen,       setAiPanelOpen]       = useState(false)
+  const [aiPanelOpen,       setAiPanelOpen]       = useState(() =>
+    typeof window === 'undefined' ? false : localStorage.getItem('ws_copilot_open') === 'true'
+  )
   const [inspectorOpen,     setInspectorOpen]     = useState(false)
-  const [explorerOpen,      setExplorerOpen]      = useState(true)
+  const [explorerOpen,      setExplorerOpen]      = useState(() =>
+    typeof window === 'undefined' ? true : localStorage.getItem('ws_focus_mode') !== 'true'
+  )
+  const [focusMode,         setFocusMode]         = useState(() =>
+    typeof window === 'undefined' ? false : localStorage.getItem('ws_focus_mode') === 'true'
+  )
 
   // SC-02H — Teacher Memory
   const [teacherMemory, setTeacherMemory] = useState<MemoryEntry[]>([])
@@ -925,6 +932,28 @@ function PreparerPageInner() {
   const handleStop   = () => { abortRef.current?.abort() }
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/login') }
 
+  const handleToggleFocus = () => {
+    setFocusMode(prev => {
+      const next = !prev
+      localStorage.setItem('ws_focus_mode', String(next))
+      if (next) {
+        setExplorerOpen(false)
+        setAiPanelOpen(false)
+      } else {
+        setExplorerOpen(true)
+      }
+      return next
+    })
+  }
+
+  const handleToggleAssistant = useCallback(() => {
+    setAiPanelOpen(prev => {
+      const next = !prev
+      localStorage.setItem('ws_copilot_open', String(next))
+      return next
+    })
+  }, [])
+
   // ── Dérivés export global (dernière réponse IA exportable) ───────────────
   const lastExportableMsg = useMemo(
     () => [...messages].reverse().find(m => m.role === 'ia' && m.action_sug && !m.isStreaming),
@@ -937,6 +966,29 @@ function PreparerPageInner() {
       lastExportableMsg?.action_sug?.type_contenu ?? '',
     )
   )
+  // ── M1 — Context Bar ─────────────────────────────────────────────────────
+  const contextBar = useMemo(() => {
+    if (!classeId || !classe) return null
+    return [classe.nom, classe.niveau, matiereEffective].filter(Boolean).join(' · ')
+  }, [classeId, classe, matiereEffective])
+
+  // ── M8 — docType pour actions contextuelles ───────────────────────────────
+  const docType = lastExportableMsg?.action_sug?.type_contenu ?? null
+
+  // ── M3 — Suggestion Strip ─────────────────────────────────────────────────
+  const [ignoredSuggestionDocType, setIgnoredSuggestionDocType] = useState<string | null>(null)
+  const rawSuggestion = useMemo(() => {
+    if (!classeId || isStreaming || !docType) return null
+    if (docType === 'plan_lecon') return isFr
+      ? { text: 'Ce plan est prêt. Développer en leçon complète ?', action: 'Développe ce plan en une leçon complète avec activités et exemples concrets.', reason: 'Votre plan contient des objectifs structurés — une leçon complète peut être générée directement.' }
+      : { text: 'This plan is ready. Expand into a full lesson?', action: 'Expand this plan into a full lesson with activities and concrete examples.', reason: 'Your plan has structured objectives — a full lesson can be generated directly.' }
+    if (['fiche_lecon', 'lecon_complete', 'lecon_developpee'].includes(docType)) return isFr
+      ? { text: 'Votre leçon est prête. Créer un quiz formatif ?', action: 'Crée un quiz formatif de 5 questions basé sur cette leçon.', reason: 'Une leçon avec des objectifs clairs se prête naturellement à un quiz formatif.' }
+      : { text: 'Your lesson is ready. Create a formative quiz?', action: 'Create a 5-question formative quiz based on this lesson.', reason: 'A lesson with clear objectives naturally leads to a formative quiz.' }
+    return null
+  }, [classeId, isStreaming, docType, isFr])
+  const activeSuggestion = ignoredSuggestionDocType === docType ? null : rawSuggestion
+
   const handleGlobalExportWord = useCallback(() => {
     if (lastExportableMsg?.action_sug) handleExportWord(lastExportableMsg.action_sug, lastExportableMsg.contenu_json)
   }, [lastExportableMsg, handleExportWord])
@@ -945,11 +997,53 @@ function PreparerPageInner() {
       handleExportPptx(lastExportableMsg.action_sug, lastExportableMsg.contenu_json)
   }, [lastExportableMsg, handleExportPptx])
 
+  // ── DESIGN-14: iaTimestamps + lastSaveTime (display-only) ────────────────
+  const [iaTimestamps, setIaTimestamps] = useState<IaTimestamp[]>([])
+  const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null)
+  const seenIaMsgIds   = useRef(new Set<string>())
+  const prevSavedRef   = useRef(false)
+
+  useEffect(() => {
+    for (const msg of messages) {
+      if (msg.role === 'ia' && msg.action_sug && !msg.isStreaming && !seenIaMsgIds.current.has(msg.id)) {
+        seenIaMsgIds.current.add(msg.id)
+        const label = msg.action_sug.titre || (isFr ? 'Document généré' : 'Document generated')
+        setIaTimestamps(prev => [...prev, { id: msg.id, time: new Date(), label }])
+      }
+    }
+  }, [messages])
+
+  useEffect(() => {
+    const saved = !!lastExportableMsg?.is_saved
+    if (saved && !prevSavedRef.current) setLastSaveTime(new Date())
+    prevSavedRef.current = saved
+  }, [lastExportableMsg?.is_saved])
+
+  const handleHeaderSave = useCallback(() => {
+    if (!lastExportableMsg?.action_sug) return
+    handleSaveOpen(lastExportableMsg.action_sug, lastExportableMsg.id, lastExportableMsg.autosave_fichier_id, lastExportableMsg.indexation_ok)
+  }, [lastExportableMsg, handleSaveOpen])
+
+  // ── DESIGN-13: streaming phase (display only) ──────────────────────────────
+  const [streamingPhase, setStreamingPhase] = useState(0)
+  const STREAMING_PHASES_FR = ['Analyse en cours…', 'Construction…', 'Rédaction…', 'Finalisation…']
+  const STREAMING_PHASES_EN = ['Analysing…', 'Building…', 'Writing…', 'Finalising…']
+  useEffect(() => {
+    if (!isStreaming) { setStreamingPhase(0); return }
+    const lastMsg = messages[messages.length - 1]
+    if (!lastMsg?.isStreaming) return
+    const len = lastMsg.content.length
+    if (len < 100)      setStreamingPhase(0)
+    else if (len < 400) setStreamingPhase(1)
+    else if (len < 900) setStreamingPhase(2)
+    else                setStreamingPhase(3)
+  }, [isStreaming, messages])
+
   if (loading) return <LoadingScreen />
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'linear-gradient(160deg, #EEF5FF 0%, #FFFFFF 100%)' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#F8FAFC' }}>
 
       <PedagogiqueExplorer
         profil={profil}
@@ -971,7 +1065,7 @@ function PreparerPageInner() {
 
       <WorkspaceLayout
         explorerOpen={explorerOpen}
-        explorerWidth={272}
+        explorerWidth={300}
         isFr={isFr}
         onOpenExplorer={() => setExplorerOpen(true)}
         header={
@@ -984,18 +1078,25 @@ function PreparerPageInner() {
             isFr={isFr}
             notifCount={notifCount}
             initiales={initiales}
-            creditsIa={{ used: 0, total: 20 }}
             canExport={canExport}
             canExportPptx={canExportPptx}
             assistantOpen={aiPanelOpen}
             inspectorOpen={inspectorOpen}
             hasDocument={!!lastExportableMsg}
-            onClasseChange={id => { setClasseId(id); setMessages([]); setPendingSave(null); conversationIdRef.current = null; setConversationId(null) }}
-            onClear={() => { setMessages([]); setPendingSave(null); conversationIdRef.current = null; setConversationId(null); setToast(null); setInspectorOpen(false) }}
-            onToggleAssistant={() => setAiPanelOpen(v => !v)}
+            focusMode={focusMode}
+            onToggleFocus={handleToggleFocus}
+            contextBar={contextBar}
+            suggestion={activeSuggestion}
+            isSaved={!!lastExportableMsg?.is_saved}
+            onSave={canExport ? handleHeaderSave : undefined}
+            onClasseChange={id => { setClasseId(id); setMessages([]); setPendingSave(null); conversationIdRef.current = null; setConversationId(null); setIaTimestamps([]); setLastSaveTime(null); seenIaMsgIds.current.clear() }}
+            onClear={() => { setMessages([]); setPendingSave(null); conversationIdRef.current = null; setConversationId(null); setToast(null); setInspectorOpen(false); setIaTimestamps([]); setLastSaveTime(null); seenIaMsgIds.current.clear() }}
+            onToggleAssistant={handleToggleAssistant}
             onToggleInspector={() => setInspectorOpen(v => !v)}
             onExportWord={handleGlobalExportWord}
             onExportPptx={handleGlobalExportPptx}
+            onApplySuggestion={action => { handleSend(action); setIgnoredSuggestionDocType(docType) }}
+            onIgnoreSuggestion={() => setIgnoredSuggestionDocType(docType)}
           />
         }
         inspectorPanel={inspectorOpen && lastExportableMsg ? (
@@ -1015,8 +1116,10 @@ function PreparerPageInner() {
             contextFiles={fichiersKlassia.map(f => ({ id: f.id, nom: f.nom }))}
             isFr={isFr}
             isStreaming={isStreaming}
+            docType={docType}
+            iaTimestamps={iaTimestamps}
             onQuickAction={prompt => handleSend(prompt)}
-            onClose={() => setAiPanelOpen(false)}
+            onClose={() => { setAiPanelOpen(false); localStorage.setItem('ws_copilot_open', 'false') }}
           />
         ) : undefined}
       >
@@ -1039,205 +1142,160 @@ function PreparerPageInner() {
           /* ── Chat interface ── */
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-            {/* Messages area — ou canvas pédagogique si document généré */}
-            <div
-              ref={messagesScrollRef}
-              style={{ flex: 1, overflowY: 'auto', padding: lastExportableMsg?.action_sug && !loadingConversation ? 0 : '24px 32px', position: 'relative' }}>
+            {/* ── DESIGN-13 Document zone — L'IA écrit directement dans le document ── */}
+            <div ref={messagesScrollRef} className="c13-doc-zone">
 
-              {/* ── Canvas pédagogique (SC-02F) ── */}
-              {lastExportableMsg?.action_sug && !loadingConversation ? (
-                <PreparationCanvas
-                  content={lastExportableMsg.action_sug.contenu}
-                  titre={lastExportableMsg.action_sug.titre}
-                  typeContenu={lastExportableMsg.action_sug.type_contenu}
-                  isFr={isFr}
-                  isStreaming={isStreaming}
-                  onSuggestPrompt={prompt => setInputValue(prompt)}
-                />
-              ) : loadingConversation ? (
-                <LoadingConversationState isFr={isFr} />
-
-              ) : messages.length === 0 ? (
-                /* Welcome state */
-                <WelcomeState
-                  isFr={isFr}
-                  prenom={prenom}
-                  classe={classe ?? null}
-                  matiere={matiereEffective}
-                  suggestions={SUGGESTIONS(isFr)}
-                  onSend={handleSend}
-                />
-
-              ) : (
-                /* Messages list */
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 780, margin: '0 auto' }}>
-                  {messages.map(msg => (
-                    <div key={msg.id} className="prep-msg-in"
-                      style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-
-                      {/* Rangée logo + bulle */}
-                      <div style={{ display: 'flex', flexDirection: msg.role === 'user' ? 'row-reverse' : 'row', gap: 10, alignItems: 'flex-start' }}>
-
-                        {msg.role === 'ia' && (
-                          <div style={{ flexShrink: 0, marginTop: 2 }}>
-                            <ScorgiaLogo variant="icon" width={32} height={32} />
-                          </div>
-                        )}
-
-                        <div style={{
-                          maxWidth: msg.role === 'user' ? '72%' : '100%',
-                          padding: msg.role === 'user' ? '10px 16px' : '4px 0 16px',
-                          borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : 0,
-                          background: msg.role === 'user' ? 'var(--violet, #6C5CE7)' : 'transparent',
-                          color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
-                          fontSize: 14,
-                          lineHeight: 1.65,
-                        }}>
-                          {msg.role === 'ia' && msg.isStreaming && !msg.content ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-                              <span style={{ fontStyle: 'italic', marginRight: 4 }}>ScorgIA {isFr ? 'rédige' : 'is writing'}</span>
-                              <span className="prep-dot" />
-                              <span className="prep-dot" />
-                              <span className="prep-dot" />
-                            </span>
-                          ) : msg.role === 'ia' ? (
-                            !msg.isStreaming && ['plan_lecon', 'plan_de_lecon', 'fiche_lecon', 'lecon_complete'].includes(msg.type_contenu || '') ? (
-                              <PlanLeconView content={msg.content} />
-                            ) : (
-                              <MarkdownMessage content={msg.content} isStreaming={!!msg.isStreaming} />
-                            )
-                          ) : (
-                            <>
-                              {msg.content}
-                              {msg.piecesJointes?.length ? (
-                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const, marginTop: msg.content ? 8 : 0 }}>
-                                  {msg.piecesJointes.map((pj, i) =>
-                                    pj.type_mime.startsWith('image/') && pj.url_storage ? (
-                                      <a key={i} href={pj.url_storage} target="_blank" rel="noopener noreferrer">
-                                        <img src={pj.url_storage} alt={pj.nom}
-                                          style={{ maxWidth: 180, maxHeight: 130, borderRadius: 8, display: 'block', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.25)', cursor: 'pointer' }}
-                                        />
-                                      </a>
-                                    ) : (
-                                      <a key={i}
-                                        href={pj.url_storage || '#'}
-                                        target={pj.url_storage ? '_blank' : undefined}
-                                        rel="noopener noreferrer"
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 6, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 11, textDecoration: 'none', maxWidth: 200 }}>
-                                        <span style={{ flexShrink: 0 }}>
-                                          {pj.nom.toLowerCase().endsWith('.pdf') ? '📄' : '📝'}
-                                        </span>
-                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                          {pj.nom}
-                                        </span>
-                                      </a>
-                                    )
-                                  )}
-                                </div>
-                              ) : null}
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* ── Refs fichiers KlassIA sur le message user ── */}
-                      {msg.role === 'user' && msg.fichiersKlassiaRefs?.length ? (
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' as const, marginTop: 4, justifyContent: 'flex-end' }}>
-                          {msg.fichiersKlassiaRefs.map(ref => (
-                            <div key={ref.fichier_id} style={{
-                              display: 'flex', alignItems: 'center', gap: 4,
-                              padding: '2px 8px', borderRadius: 6,
-                              background: 'rgba(255,255,255,0.2)',
-                              border: '1px solid rgba(255,255,255,0.3)',
-                              fontSize: 10, color: '#fff',
-                            }}>
-                              <span style={{ fontWeight: 700 }}>✦</span>
-                              <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ref.nom}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      {/* ── Fichiers KlassIA ignorés — note sous la réponse IA ── */}
-                      {msg.role === 'ia' && !msg.isStreaming && msg.fichiersKlassiaIgnores?.length ? (
-                        <div style={{ paddingLeft: 42, marginTop: 4, display: 'flex', flexDirection: 'column' as const, gap: 2 }}>
-                          {msg.fichiersKlassiaIgnores.map(f => (
-                            <div key={f.fichier_id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#F59E0B' }}>
-                              <span>⚠</span>
-                              <span>
-                                {f.nom ? `« ${f.nom} » — ` : ''}
-                                {isFr ? 'Ce document n\'a pas encore pu être utilisé par l\'IA.' : 'This document could not be used by the AI yet.'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      {/* ── Barre d'actions par message (liée à ce message uniquement) ── */}
-                      {msg.role === 'ia' && msg.action_sug && !msg.isStreaming && (
-                        <div style={{ paddingLeft: 42, marginTop: 6 }}>
-                          <div className="glass-light" style={{
-                            borderRadius: 'var(--radius-md)',
-                            padding: '10px 14px',
-                            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const,
-                            boxShadow: '0 2px 8px rgba(15,35,65,0.05)',
-                          }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginRight: 4 }}>
-                              {isFr ? '✦ Généré :' : '✦ Generated:'}
-                            </span>
-                            {[
-                              { label: '📥 Word',     onClick: () => handleExportWord(msg.action_sug!, msg.contenu_json) },
-                              ...(msg.contenu_json && ['plan_lecon','fiche_lecon','lecon_complete','lecon_developpee','activite'].includes(msg.action_sug?.type_contenu ?? '')
-                                ? [{ label: '📊 PowerPoint', onClick: () => handleExportPptx(msg.action_sug!, msg.contenu_json) }]
-                                : []),
-                              { label: '🖨️ Imprimer', onClick: () => handlePrint(msg.action_sug!) },
-                            ].map(btn => (
-                              <button key={btn.label} onClick={btn.onClick}
-                                style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', border: '1px solid rgba(15,35,65,0.1)', background: 'rgba(255,255,255,0.85)', color: 'var(--text-secondary)', boxShadow: 'none' }}
-                                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#fff' }}
-                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.85)' }}>
-                                {btn.label}
-                              </button>
-                            ))}
-                            <button
-                              onClick={msg.is_saved ? undefined : () => handleSaveOpen(msg.action_sug!, msg.id, msg.autosave_fichier_id, msg.indexation_ok)}
-                              disabled={!!msg.is_saved}
-                              style={{
-                                padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                                cursor: msg.is_saved ? 'default' : 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
-                                border: 'none',
-                                background: msg.is_saved ? 'rgba(34,197,94,0.15)' : 'linear-gradient(135deg, #6B3FA0, #4F46E5)',
-                                color: msg.is_saved ? '#16a34a' : '#fff',
-                                boxShadow: msg.is_saved ? 'none' : '0 3px 10px rgba(108,92,231,0.25)',
-                              }}>
-                              {msg.is_saved ? (isFr ? '✓ Sauvegardé' : '✓ Saved') : (isFr ? '💾 Sauvegarder' : '💾 Save')}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  <div ref={messagesEndRef} />
+              {/* Streaming phase indicator */}
+              {isStreaming && (
+                <div className="c13-phase-bar">
+                  <div className="c13-phase-pill">
+                    <div className="c13-phase-dot" />
+                    <div className="c13-phase-dot" />
+                    <div className="c13-phase-dot" />
+                    <span>{(isFr ? STREAMING_PHASES_FR : STREAMING_PHASES_EN)[streamingPhase]}</span>
+                  </div>
                 </div>
               )}
 
-              {/* ── Bouton Revenir en bas (visible quand scrollé vers le haut pendant la génération) ── */}
+              <div className="c13-doc-scroll">
+                <div className="c13-doc-inner">
+
+                  {/* ── DESIGN-14: Document header ── */}
+                  {!loadingConversation && messages.length > 0 && (lastExportableMsg?.action_sug || isStreaming) && (
+                    <div className="c14-doc-hd">
+                      <h1 className="c14-doc-title">
+                        {lastExportableMsg?.action_sug?.titre || (isFr ? 'Document en cours…' : 'Document in progress…')}
+                      </h1>
+                      <div className="c14-doc-meta">
+                        <span className={`c14-doc-status ${
+                          isStreaming ? 'c14-status-gen' :
+                          lastExportableMsg?.is_saved ? 'c14-status-saved' : 'c14-status-unsaved'
+                        }`}>
+                          {isStreaming
+                            ? (isFr ? '✦ Génération…' : '✦ Generating…')
+                            : lastExportableMsg?.is_saved
+                              ? (isFr ? '✓ Enregistré' : '✓ Saved')
+                              : (isFr ? '● Non enregistré' : '● Unsaved')}
+                        </span>
+                        {lastSaveTime && !isStreaming && (
+                          <span className="c14-doc-save-time">
+                            {isFr
+                              ? `Enregistré à ${lastSaveTime.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}`
+                              : `Saved at ${lastSaveTime.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Canvas pédagogique (document structuré) ── */}
+                  {lastExportableMsg?.action_sug && !loadingConversation ? (
+                    <PreparationCanvas
+                      content={lastExportableMsg.action_sug.contenu}
+                      titre={lastExportableMsg.action_sug.titre}
+                      typeContenu={lastExportableMsg.action_sug.type_contenu}
+                      isFr={isFr}
+                      isStreaming={isStreaming}
+                      onSuggestPrompt={prompt => setInputValue(prompt)}
+                    />
+                  ) : loadingConversation ? (
+                    <LoadingConversationState isFr={isFr} />
+
+                  ) : messages.length === 0 ? (
+                    <WelcomeState
+                      isFr={isFr}
+                      prenom={prenom}
+                      classe={classe ?? null}
+                      matiere={matiereEffective}
+                      suggestions={SUGGESTIONS(isFr)}
+                      onSend={handleSend}
+                    />
+
+                  ) : (
+                    /* ── Document view — last IA response, direct (no chat bubbles) ── */
+                    (() => {
+                      const lastIa = [...messages].reverse().find(m => m.role === 'ia')
+                      if (!lastIa) return (
+                        <div className="c13-welcome">
+                          <div className="c13-welcome-icon">✦</div>
+                          <p className="c13-welcome-sub">
+                            {isFr ? 'ScorgIA prépare votre document…' : 'ScorgIA is preparing your document…'}
+                          </p>
+                        </div>
+                      )
+                      if (lastIa.isStreaming && !lastIa.content) return (
+                        <div className="c13-welcome">
+                          <div className="c13-welcome-icon" style={{ opacity: 0.4 }}>✦</div>
+                          <p className="c13-welcome-sub">
+                            {isFr ? 'Rédaction en cours…' : 'Writing in progress…'}
+                          </p>
+                        </div>
+                      )
+                      return (
+                        <div className="c13-doc-body">
+                          {!lastIa.isStreaming && ['plan_lecon', 'plan_de_lecon', 'fiche_lecon', 'lecon_complete'].includes(lastIa.type_contenu || '') ? (
+                            <PlanLeconView content={lastIa.content} />
+                          ) : (
+                            <MarkdownMessage content={lastIa.content} isStreaming={!!lastIa.isStreaming} />
+                          )}
+
+                          {/* Fichiers ignorés */}
+                          {!lastIa.isStreaming && lastIa.fichiersKlassiaIgnores?.length ? (
+                            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                              {lastIa.fichiersKlassiaIgnores.map(f => (
+                                <div key={f.fichier_id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#F59E0B' }}>
+                                  <span>⚠</span>
+                                  <span>
+                                    {f.nom ? `« ${f.nom} » — ` : ''}
+                                    {isFr ? 'Ce document n\'a pas encore pu être utilisé par l\'IA.' : 'This document could not be used by the AI yet.'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {/* Action chips sous le document */}
+                          {!lastIa.isStreaming && lastIa.action_sug && (
+                            <div className="c13-action-chips">
+                              <button className="c13-chip" onClick={() => handleExportWord(lastIa.action_sug!, lastIa.contenu_json)}>
+                                📥 Word
+                              </button>
+                              {lastIa.contenu_json && ['plan_lecon','fiche_lecon','lecon_complete','lecon_developpee','activite'].includes(lastIa.action_sug?.type_contenu ?? '') && (
+                                <button className="c13-chip" onClick={() => handleExportPptx(lastIa.action_sug!, lastIa.contenu_json)}>
+                                  📊 PowerPoint
+                                </button>
+                              )}
+                              <button className="c13-chip" onClick={() => handlePrint(lastIa.action_sug!)}>
+                                🖨️ Imprimer
+                              </button>
+                              <button
+                                className={lastIa.is_saved ? 'c13-chip c13-chip-saved' : 'c13-chip c13-chip-save'}
+                                onClick={lastIa.is_saved ? undefined : () => handleSaveOpen(lastIa.action_sug!, lastIa.id, lastIa.autosave_fichier_id, lastIa.indexation_ok)}
+                                disabled={!!lastIa.is_saved}>
+                                {lastIa.is_saved ? (isFr ? '✓ Sauvegardé' : '✓ Saved') : (isFr ? '💾 Sauvegarder' : '💾 Save')}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()
+                  )}
+
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+
+              {/* Scroll-to-bottom button */}
               {showScrollBtn && (
                 <div style={{ position: 'sticky', bottom: 12, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
                   <button
-                    onClick={() => {
-                      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-                      setShowScrollBtn(false)
-                    }}
+                    onClick={() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); setShowScrollBtn(false) }}
                     style={{
                       pointerEvents: 'all',
                       padding: '7px 16px', borderRadius: 99,
-                      background: 'var(--violet, #6C5CE7)',
-                      color: '#fff', border: 'none', cursor: 'pointer',
-                      fontSize: 12, fontWeight: 700, boxShadow: '0 4px 16px rgba(108,92,231,0.4)',
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      transition: 'transform 0.15s',
+                      background: '#6D5DF6', color: '#fff', border: 'none', cursor: 'pointer',
+                      fontSize: 12, fontWeight: 700, boxShadow: '0 4px 16px rgba(109,93,246,0.4)',
+                      display: 'flex', alignItems: 'center', gap: 6, transition: 'transform 0.15s',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.04)')}
                     onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
@@ -1468,8 +1526,8 @@ function PreparerPageInner() {
                 </button>
               </div>
 
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', margin: '6px 0 0' }}>
-                ScorgIA · {isFr ? 'Contenu éducatif généré par IA · Vérifiez avant d\'utiliser' : 'AI-generated educational content · Review before using'}
+              <p style={{ fontSize: 9, color: 'var(--text-muted)', textAlign: 'center', margin: '4px 0 0', opacity: 0.38 }}>
+                ScorgIA · {isFr ? 'Contenu généré par IA · Vérifiez avant d\'utiliser' : 'AI-generated content · Review before using'}
               </p>
             </div>
 

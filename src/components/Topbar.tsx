@@ -23,27 +23,6 @@ const MODE_LABELS: Record<Mode, { fr: string; en: string }> = {
   suivre:    { fr: 'Suivre',    en: 'Track'   },
 }
 
-// ─── SVG ring de crédits IA ────────────────────────────────────────────────────
-
-function IaRing({ used, total }: { used: number; total: number }) {
-  const r = 8
-  const circ = 2 * Math.PI * r
-  const fraction = total > 0 ? Math.min(used / total, 1) : 0
-  const dashUsed = fraction * circ
-  return (
-    <svg width="22" height="22" viewBox="0 0 22 22" style={{ flexShrink: 0 }}>
-      <circle cx="11" cy="11" r={r} fill="none" stroke="rgba(15,35,65,0.1)" strokeWidth="2.5" />
-      <circle cx="11" cy="11" r={r} fill="none"
-        stroke="var(--violet, #6C5CE7)" strokeWidth="2.5"
-        strokeDasharray={`${dashUsed} ${circ}`}
-        strokeDashoffset={circ * 0.25}
-        strokeLinecap="round"
-        transform="rotate(-90 11 11)"
-      />
-    </svg>
-  )
-}
-
 // ─── Pill button helper ────────────────────────────────────────────────────────
 
 function Pill({ children, style, onClick }: {
@@ -127,15 +106,6 @@ export default function Topbar({
           })}
         </div>
       )}
-
-      {/* ── Crédits IA ────────────────────────────────────────── */}
-      <Pill style={{ gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-primary, #0F1B2D)' }}>
-        <span style={{ fontSize: 11, color: 'var(--text-muted, #8B97AC)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-          {isFr ? 'Générations restantes' : 'Remaining generations'}
-        </span>
-        <IaRing used={creditsIa.used} total={creditsIa.total} />
-        <span>{creditsIa.total === 0 ? '∞' : `${creditsIa.used}/${creditsIa.total}`}</span>
-      </Pill>
 
       {/* ── Notifications ─────────────────────────────────────── */}
       <button

@@ -170,16 +170,15 @@ export default function DashboardPage() {
   const [showFab,          setShowFab]          = useState(false)
   const [prochainCours,    setProchainCours]    = useState<any>(null)
   const [leconsHistorique, setLeconsHistorique] = useState<{ created_at: string }[]>([])
-  const [leconsRecentes,   setLeconsRecentes]   = useState<{ id: string; titre: string; statut: string; created_at: string; updated_at?: string; classe_id: string }[]>([])
+  const [conversationsRecentes, setConversationsRecentes] = useState<{ id: string; titre: string; classe_id: string | null; updated_at: string; type_contenu: string | null }[]>([])
   const [leconsByStatut,   setLeconsByStatut]   = useState<Record<string, number>>({})
   const [missionActive,    setMissionActive]    = useState<MissionPublic | null>(null)
   const [missionsLoading,  setMissionsLoading]  = useState(false)
   const [missionsError,    setMissionsError]    = useState<string | null>(null)
   const [workflowSummary,  setWorkflowSummary]  = useState<WorkflowSummary | null>(null)
   const [recentActivity,   setRecentActivity]   = useState<TimelineEntry[]>([])
-  // kept for future use — fetched but not displayed in current layout
-  const [, setBehavioralInsights] = useState<Insight[]>([])
-  const [, setRecommendations]    = useState<Recommendation[]>([])
+  const [behavioralInsights, setBehavioralInsights] = useState<Insight[]>([])
+  const [recommendations,    setRecommendations]    = useState<Recommendation[]>([])
 
   // ── Chargement des données principales ──────────────────────────────────────
   useEffect(() => {
@@ -189,13 +188,14 @@ export default function DashboardPage() {
       const demainJour = JOURS_FR[(new Date().getDay() + 1) % 7]
       const heureNow   = new Date().toTimeString().substring(0, 5)
 
-      const [clsRes, tachesRes, coursRes, notifRes, coProcAujourdRes, coProcDemainRes] = await Promise.all([
+      const [clsRes, tachesRes, coursRes, notifRes, coProcAujourdRes, coProcDemainRes, convsRes] = await Promise.all([
         supabase.from('classes').select('*').eq('enseignant_id', profil.id).order('created_at', { ascending: false }),
         supabase.from('taches_enseignant').select('*').eq('enseignant_id', profil.id).eq('est_complete', false).order('date_echeance', { ascending: true }).limit(10),
         supabase.from('cours_semaine').select('*').eq('enseignant_id', profil.id).eq('jour', todayJour).order('heure_debut', { ascending: true }),
         supabase.from('notifications').select('id').eq('enseignant_id', profil.id).eq('est_lue', false).limit(99),
         supabase.from('cours_semaine').select('*').eq('enseignant_id', profil.id).eq('jour', todayJour).gte('heure_debut', heureNow).order('heure_debut', { ascending: true }).limit(1),
         supabase.from('cours_semaine').select('*').eq('enseignant_id', profil.id).eq('jour', demainJour).order('heure_debut', { ascending: true }).limit(1),
+        supabase.from('conversations_ia').select('id, titre, classe_id, updated_at, type_contenu').eq('enseignant_id', profil.id).neq('est_archivee', true).order('updated_at', { ascending: false }).limit(3),
       ])
 
       const cls = clsRes.data || []
@@ -204,18 +204,17 @@ export default function DashboardPage() {
       setCoursAujourdhui(coursRes.data || [])
       setNotifCount((notifRes.data || []).length)
       setProchainCours(coProcAujourdRes.data?.[0] || coProcDemainRes.data?.[0] || null)
+      setConversationsRecentes(convsRes.data || [])
 
       if (cls.length > 0) {
         const classIds = cls.map((c: any) => c.id)
-        const [leconsCountRes, leconsHistRes, leconsRecentesRes, leconsStatutRes] = await Promise.all([
+        const [leconsCountRes, leconsHistRes, leconsStatutRes] = await Promise.all([
           supabase.from('lecons').select('*', { count: 'exact', head: true }).in('classe_id', classIds),
           supabase.from('lecons').select('created_at').in('classe_id', classIds).order('created_at', { ascending: true }),
-          supabase.from('lecons').select('id, titre, statut, created_at, updated_at, classe_id').in('classe_id', classIds).order('updated_at', { ascending: false }).limit(3),
           supabase.from('lecons').select('statut').in('classe_id', classIds).limit(500),
         ])
         setTotalLecons(leconsCountRes.count || 0)
         setLeconsHistorique(leconsHistRes.data || [])
-        setLeconsRecentes(leconsRecentesRes.data || [])
         const counts: Record<string, number> = {}
         for (const l of (leconsStatutRes.data || [])) counts[l.statut] = (counts[l.statut] || 0) + 1
         setLeconsByStatut(counts)
@@ -399,14 +398,17 @@ export default function DashboardPage() {
                 Bonjour{prenom ? `, ${prenom}` : ''}
               </h1>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0 16px' }}>
-                Voici l'essentiel pour votre journée.
+                {prochainCours
+                  ? `Prochain cours : ${prochainCours.nom_classe} à ${prochainCours.heure_debut}.`
+                  : tachesEnRetard.length > 0
+                  ? `${tachesEnRetard.length} tâche${tachesEnRetard.length > 1 ? 's' : ''} en retard.`
+                  : taches.length > 0
+                  ? `${taches.length} tâche${taches.length > 1 ? 's' : ''} en attente.`
+                  : 'Tout est à jour pour aujourd\'hui.'}
               </p>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button style={btnPrimary} onClick={() => router.push('/dashboard/gerer/preparer')}>
-                  ✨ Préparer une leçon
-                </button>
-                <button style={btnSecondary} onClick={() => router.push('/dashboard/gerer/preparer')}>
-                  Ouvrir l'assistant
+                  {prochainCours ? `Préparer ${prochainCours.nom_classe}` : 'Préparer une leçon'}
                 </button>
               </div>
             </section>
@@ -530,7 +532,7 @@ export default function DashboardPage() {
                 </section>
 
                 {/* ── 6 : REPRENDRE LE TRAVAIL ────────────────────────────────── */}
-                {leconsRecentes.length > 0 && (
+                {conversationsRecentes.length > 0 && (
                   <section aria-labelledby="reprendre-heading">
                     <div className="glass-light" style={card}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -544,28 +546,30 @@ export default function DashboardPage() {
                         </button>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {leconsRecentes.map((l) => {
-                          const sm     = STATUT_META[l.statut] ?? { label: l.statut, color: '#8B97AC' }
-                          const classe = classes.find((c: any) => c.id === l.classe_id)
-                          const tsStr  = l.updated_at || l.created_at
+                        {conversationsRecentes.map((conv) => {
+                          const classe  = classes.find((c: any) => c.id === conv.classe_id)
+                          const destUrl = `/dashboard/gerer/preparer?conversation=${conv.id}${conv.classe_id ? `&classe_id=${conv.classe_id}` : ''}`
                           return (
-                            <button key={l.id} className="db-row-btn"
-                              onClick={() => router.push('/dashboard/bibliotheque')}
-                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(15,35,65,0.02)', border: '1px solid transparent', cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: 'inherit', minHeight: 44, transition: 'background 0.12s, border-color 0.12s' }}>
+                            <div key={conv.id} className="db-row-btn"
+                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(15,35,65,0.02)', border: '1px solid transparent', cursor: 'default', textAlign: 'left', width: '100%', transition: 'background 0.12s, border-color 0.12s' }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-                                  {l.titre}
+                                  {conv.titre || 'Conversation'}
                                 </div>
                                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
                                   {classe?.nom && <span>{classe.nom} · </span>}
-                                  {formatRelative(tsStr)}
+                                  {formatRelative(conv.updated_at)}
                                 </div>
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: sm.color }}>{sm.label}</span>
-                                <span style={{ fontSize: 12, color: 'var(--violet)', fontWeight: 600 }}>Reprendre →</span>
+                                <button className="tj-doc-link" onClick={() => {
+                                  if (conv.classe_id && typeof window !== 'undefined') localStorage.setItem('klassia_active_classe', conv.classe_id)
+                                  router.push(destUrl)
+                                }}>
+                                  Continuer →
+                                </button>
                               </div>
-                            </button>
+                            </div>
                           )
                         })}
                       </div>
@@ -796,27 +800,45 @@ export default function DashboardPage() {
                   </div>
                 </section>
 
-                {/* ── ACTIVITÉ RÉCENTE — conditionnel ─────────────────────────── */}
+                {/* ── ACTIVITÉ RÉCENTE — premium feed ──────────────────────────── */}
                 {recentActivity.length > 0 && (
                   <div className="glass-light" style={card}>
                     <h2 style={secTitle}>Activité récente</h2>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {recentActivity.slice(0, 5).map((entry) => (
-                        <div key={entry.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                          <span style={{ fontSize: 13, flexShrink: 0, marginTop: 1 }} aria-hidden>
-                            {activityIcon(entry.type)}
-                          </span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-                              {activityLabel(entry.type)}
+                    <div className="tj-feed">
+                      {recentActivity.slice(0, 5).map((entry) => {
+                        const dotClass = entry.type.startsWith('ia_') ? 'tj-feed-dot--ia'
+                          : ['lesson_created', 'evaluation_created', 'workflow_completed', 'mission_completed'].includes(entry.type) ? 'tj-feed-dot--success'
+                          : entry.type.startsWith('document_') ? 'tj-feed-dot--document'
+                          : 'tj-feed-dot--default'
+                        return (
+                          <div key={entry.id} className="tj-feed-item">
+                            <div className={`tj-feed-dot ${dotClass}`} aria-hidden>
+                              {activityIcon(entry.type)}
                             </div>
-                            {entry.subject && (
-                              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{entry.subject}</div>
-                            )}
+                            <div className="tj-feed-content">
+                              <div className="tj-feed-label">{activityLabel(entry.type)}</div>
+                              {entry.subject && <div className="tj-feed-sub">{entry.subject}</div>}
+                            </div>
+                            <span className="tj-feed-time">{formatRelative(entry.occurredAt)}</span>
                           </div>
-                          <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
-                            {formatRelative(entry.occurredAt)}
-                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── RECOMMANDATIONS — si disponibles ──────────────────────────── */}
+                {recommendations.length > 0 && (
+                  <div className="glass-light" style={card}>
+                    <h2 style={secTitle}>ScorgIA suggère</h2>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {recommendations.slice(0, 3).map(rec => (
+                        <div key={rec.id} className="tj-rec-card">
+                          <div className={`tj-rec-priority tj-rec-priority--${rec.priority}`} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{rec.title}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{rec.description}</div>
+                          </div>
                         </div>
                       ))}
                     </div>

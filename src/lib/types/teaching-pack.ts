@@ -77,6 +77,8 @@ export type TeachingPackContenu = {
   premiere_lecon_titre?: string
   premier_quiz_id?: string
   etapes_completees?: BuildYearStep[]
+  // SPIE-PERSISTENCE-01 : BuildState persisté pour reprise exacte (Mission 11/12)
+  build_state?: Record<string, unknown>
 }
 
 // ─── Pack complet (DB row) ────────────────────────────────────────────────────
@@ -159,6 +161,9 @@ export type BuildYearWizardInput = {
 
   // Étape 4 — Calendrier
   calendrier: SchoolCalendar
+
+  // SPIE-PERSISTENCE-01 : reprise exacte (Mission 12)
+  reprendre?: boolean
 }
 
 // ─── Curriculum officiel disponible ──────────────────────────────────────────

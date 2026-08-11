@@ -5,7 +5,6 @@ import type {
   BuildYearWizardInput, SchoolCalendar, PackGabarits,
   BuildYearEvent, BuildYearStep, BuildYearStepStatut,
 } from '@/lib/types/teaching-pack'
-import { getEntitlementSummary } from '@/lib/entitlements'
 import type { ForfaitType } from '@/lib/types/database'
 
 // ─── Types internes ───────────────────────────────────────────────────────────
@@ -21,7 +20,9 @@ interface WizardProps {
   provinceInitiale?: string
   anneeInitiale?: string
   forfait?: ForfaitType
+  reprendre?: boolean
   onDone: (teachingPackId: string, progId: string) => void
+  onOpenWorkspace?: () => void
 }
 
 // ─── Provinces disponibles ────────────────────────────────────────────────────
@@ -84,7 +85,7 @@ const STEP_LABELS: Record<BuildYearStep, string> = {
 
 export default function BuildMyYearWizard({
   classeId, classeNom, niveauInitial, matiereInitiale,
-  langueInitiale, provinceInitiale, anneeInitiale, forfait, onDone,
+  langueInitiale, provinceInitiale, anneeInitiale, forfait, reprendre, onDone, onOpenWorkspace,
 }: WizardProps) {
   const anneeDefaut = anneeInitiale ?? '2026-2027'
 
@@ -154,6 +155,7 @@ export default function BuildMyYearWizard({
       curriculum_fichier_nom:     fichierNom || undefined,
       gabarits,
       calendrier,
+      reprendre:                  reprendre ?? false,
     }
 
     try {
@@ -215,13 +217,10 @@ export default function BuildMyYearWizard({
     5: true,
   }
 
-  // ─── Résumé entitlements ──────────────────────────────────────────────────
-  const { inclus, verrouille } = getEntitlementSummary(forfait)
-
   // ─── Rendu ─────────────────────────────────────────────────────────────────
 
-  if (isGenerating || pipelineEvents.some(e => e.step === 'termine')) {
-    return <PipelineProgressView events={pipelineEvents} globalError={globalError} isRunning={isGenerating} />
+  if (isGenerating || pipelineEvents.some(e => e.step === 'termine') || pipelineEvents.some(e => e.step === 'erreur')) {
+    return <BuildProgressView events={pipelineEvents} globalError={globalError} isRunning={isGenerating} onOpenWorkspace={onOpenWorkspace} matiere={matiere} niveau={niveau} />
   }
 
   return (
@@ -241,7 +240,7 @@ export default function BuildMyYearWizard({
       <StepIndicator current={currentStep} />
 
       {/* Corps */}
-      <div style={{ marginTop: 28, background: 'var(--color-bg-secondary)', borderRadius: 14, border: '1px solid var(--color-border)', padding: '28px 28px' }}>
+      <div className="d7-step-body">
 
         {currentStep === 1 && (
           <StepContexte
@@ -283,9 +282,8 @@ export default function BuildMyYearWizard({
         {currentStep === 5 && (
           <StepResume
             province={province} niveau={niveau} matiere={matiere} annee={annee}
-            curriculumSource={curriculumSource} curriculumOfficiel={curriculumOfficiel} fichierNom={fichierNom}
+            curriculumSource={curriculumSource} fichierNom={fichierNom}
             gabarits={gabarits} calendrier={calendrier}
-            inclus={inclus} verrouille={verrouille}
           />
         )}
       </div>
@@ -316,7 +314,7 @@ export default function BuildMyYearWizard({
           <button
             onClick={handleBuild}
             style={{ padding: '12px 32px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg, #7F77DD, #4F46E5)', color: '#FFF', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: 'var(--font-display)', boxShadow: '0 4px 18px rgba(79,70,229,.4)' }}>
-            ✦ Construire mon année scolaire
+            Construire mon année
           </button>
         )}
       </div>
@@ -327,22 +325,24 @@ export default function BuildMyYearWizard({
 // ─── Indicateur d'étapes ──────────────────────────────────────────────────────
 
 function StepIndicator({ current }: { current: WizardStep }) {
-  const steps = ['Contexte', 'Curriculum', 'Gabarits', 'Calendrier', 'Résumé']
+  const steps = ['Contexte', 'Curriculum', 'Gabarits', 'Calendrier', 'Validation']
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+    <div className="d7-stepper">
       {steps.map((label, i) => {
         const n = (i + 1) as WizardStep
-        const done = n < current
+        const done   = n < current
         const active = n === current
         return (
-          <div key={n} style={{ display: 'flex', alignItems: 'center', flex: i < 4 ? 1 : 'none' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <div style={{ width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, background: done ? '#34D399' : active ? 'linear-gradient(135deg,#7F77DD,#4F46E5)' : 'var(--color-bg-secondary)', border: done || active ? 'none' : '2px solid var(--color-border)', color: done || active ? '#FFF' : 'var(--text-muted)' }}>
-                {done ? '✓' : n}
-              </div>
-              <span style={{ fontSize: 10, color: active ? 'var(--color-accent-violet)' : 'var(--text-muted)', fontWeight: active ? 700 : 400, whiteSpace: 'nowrap' }}>{label}</span>
+          <div key={n} className="d7-step">
+            <div
+              className={`d7-step-dot ${done ? 'd7-step-dot--done' : active ? 'd7-step-dot--active' : 'd7-step-dot--future'}`}
+              aria-current={active ? 'step' : undefined}>
+              {done ? '✓' : null}
             </div>
-            {i < 4 && <div style={{ flex: 1, height: 2, background: done ? '#34D399' : 'var(--color-border)', margin: '0 6px', marginBottom: 18 }} />}
+            <span className={`d7-step-label${active ? ' d7-step-label--active' : ''}`}>{label}</span>
+            {i < 4 && (
+              <div style={{ position: 'absolute', top: 10, left: '50%', right: '-50%', height: 1, background: done ? 'rgba(52,211,153,0.3)' : 'rgba(15,35,65,0.1)', zIndex: 0 }} />
+            )}
           </div>
         )
       })}
@@ -363,36 +363,45 @@ function StepContexte({ province, setProvince, pays, setPays, juridiction, setJu
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Étape 1 — Contexte pédagogique</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <Field label="Province / Territoire *">
-          <select value={province} onChange={e => setProvince(e.target.value)} style={selectStyle}>
-            {PROVINCES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
-        </Field>
-        <Field label="Pays">
-          <input value={pays} onChange={e => setPays(e.target.value)} placeholder="Canada" style={inputStyle} />
-        </Field>
-        <Field label="Juridiction / Conseil scolaire (optionnel)">
-          <input value={juridiction} onChange={e => setJuridiction(e.target.value)} placeholder="ex. CSFCB, CSCM…" style={inputStyle} />
-        </Field>
-        <Field label="Année scolaire *">
-          <select value={annee} onChange={e => setAnnee(e.target.value)} style={selectStyle}>
-            {['2025-2026', '2026-2027', '2027-2028'].map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </Field>
-        <Field label="Niveau *">
-          <input value={niveau} onChange={e => setNiveau(e.target.value)} placeholder="ex. 5e année, Secondaire 3…" style={inputStyle} />
-        </Field>
-        <Field label="Matière *">
-          <input value={matiere} onChange={e => setMatiere(e.target.value)} placeholder="ex. Mathématiques, Français…" style={inputStyle} />
-        </Field>
+      <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>Configurez une fois votre contexte. ScorgIA structurera le reste.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <Field label="Province *">
+            <select value={province} onChange={e => setProvince(e.target.value)} style={selectStyle}>
+              {PROVINCES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Année scolaire *">
+            <select value={annee} onChange={e => setAnnee(e.target.value)} style={selectStyle}>
+              {['2025-2026', '2026-2027', '2027-2028'].map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </Field>
+          <Field label="Niveau *">
+            <input value={niveau} onChange={e => setNiveau(e.target.value)} placeholder="ex. 5e année, Secondaire 3…" style={inputStyle} />
+          </Field>
+          <Field label="Matière *">
+            <input value={matiere} onChange={e => setMatiere(e.target.value)} placeholder="ex. Mathématiques, Français…" style={inputStyle} />
+          </Field>
+        </div>
         <Field label="Langue d'enseignement">
-          <select value={langue} onChange={e => setLangue(e.target.value)} style={selectStyle}>
+          <select value={langue} onChange={e => setLangue(e.target.value)} style={{ ...selectStyle, maxWidth: 220 }}>
             <option value="fr">Français</option>
             <option value="en">English</option>
           </select>
         </Field>
+        <details style={{ marginTop: 4 }}>
+          <summary style={{ fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10 }}>▶</span> Options avancées
+          </summary>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
+            <Field label="Pays">
+              <input value={pays} onChange={e => setPays(e.target.value)} placeholder="Canada" style={inputStyle} />
+            </Field>
+            <Field label="Juridiction / Conseil scolaire">
+              <input value={juridiction} onChange={e => setJuridiction(e.target.value)} placeholder="ex. CSFCB, CSCM…" style={inputStyle} />
+            </Field>
+          </div>
+        </details>
       </div>
     </div>
   )
@@ -580,125 +589,185 @@ function StepCalendrier({ calendrier, setCalendrier }: { calendrier: SchoolCalen
 
 // ─── Étape 5 : Résumé ─────────────────────────────────────────────────────────
 
-function StepResume({ province, niveau, matiere, annee, curriculumSource, curriculumOfficiel, fichierNom, gabarits, calendrier, inclus, verrouille }: {
+function StepResume({ province, niveau, matiere, annee, curriculumSource, fichierNom, gabarits, calendrier }: {
   province: string; niveau: string; matiere: string; annee: string
-  curriculumSource: 'televerse' | 'officiel'; curriculumOfficiel: string; fichierNom: string
+  curriculumSource: 'televerse' | 'officiel'; fichierNom: string
   gabarits: PackGabarits; calendrier: SchoolCalendar
-  inclus: string[]; verrouille: string[]
 }) {
   const nbSemaines = calendrier.date_debut && calendrier.date_fin
     ? Math.round((new Date(calendrier.date_fin).getTime() - new Date(calendrier.date_debut).getTime()) / (7 * 24 * 3600 * 1000))
     : 36
-  const heuresTotal = Math.round(nbSemaines * calendrier.periodes_par_semaine * calendrier.duree_periode_minutes / 60)
+
+  const provinceName = PROVINCES.find(p => p.value === province)?.label ?? province
+  const curriculumVal = curriculumSource === 'officiel' ? 'Curriculum ScorgIA' : (fichierNom || 'Curriculum téléversé')
+
+  const gabaritLabel = (g: string) => g === 'generique' ? 'Modèle ScorgIA' : g === 'scorgia_alberta' ? 'ScorgIA Alberta' : 'Mon gabarit'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Étape 5 — Résumé avant génération</h2>
-
-      <InfoBlock icon="📍" label="Contexte" value={`${matiere} · ${niveau} · ${PROVINCES.find(p => p.value === province)?.label ?? province} · ${annee}`} />
-      <InfoBlock icon="📄" label="Curriculum" value={curriculumSource === 'officiel' ? `Officiel : ${curriculumOfficiel}` : fichierNom || 'Téléversé (générique si vide)'} />
-      <InfoBlock icon="📐" label="Gabarits" value={`Plan annuel : ${gabarits.plan_annuel} · Séquence : ${gabarits.plan_sequence} · Leçon : ${gabarits.plan_lecon}`} />
-      <InfoBlock icon="🗓️" label="Calendrier" value={`${nbSemaines} semaines · ${heuresTotal}h d'enseignement estimées · ${calendrier.semaines_tampon} semaines tampon`} />
-
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>✅ Ce que vous obtiendrez :</div>
-        <ul style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {inclus.map((item, i) => (
-            <li key={i} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item}</li>
-          ))}
-        </ul>
-      </div>
-
-      {verrouille.length > 0 && (
-        <div style={{ padding: '14px 18px', borderRadius: 10, background: 'rgba(148,163,184,.08)', border: '1px solid var(--color-border)' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>🔒 Disponible selon votre forfait :</div>
-          <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {verrouille.map((item, i) => (
-              <li key={i} style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item}</li>
-            ))}
-          </ul>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+          {matiere || '—'}{niveau ? ` · ${niveau}` : ''}
         </div>
-      )}
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{provinceName} · {annee}</div>
+      </div>
 
-      <div style={{ padding: '14px 18px', borderRadius: 10, background: 'rgba(52,211,153,.07)', border: '1px solid rgba(52,211,153,.2)', fontSize: 13, color: 'var(--text-secondary)' }}>
-        <strong>Votre année est structurée. La première leçon est prête à enseigner.</strong>
-        <br />Les autres contenus détaillés seront disponibles selon votre forfait.
+      <div className="d7-resume-row">
+        <span className="d7-resume-key">Curriculum</span>
+        <span className="d7-resume-val">{curriculumVal}</span>
+        <span className="d7-resume-badge">✓</span>
+      </div>
+      <div className="d7-resume-row">
+        <span className="d7-resume-key">Plan annuel</span>
+        <span className="d7-resume-val">{gabaritLabel(gabarits.plan_annuel)}</span>
+      </div>
+      <div className="d7-resume-row">
+        <span className="d7-resume-key">Séquence</span>
+        <span className="d7-resume-val">{gabaritLabel(gabarits.plan_sequence)}</span>
+      </div>
+      <div className="d7-resume-row">
+        <span className="d7-resume-key">Leçon</span>
+        <span className="d7-resume-val">{gabaritLabel(gabarits.plan_lecon)}</span>
+      </div>
+      <div className="d7-resume-row">
+        <span className="d7-resume-key">Calendrier</span>
+        <span className="d7-resume-val">{nbSemaines} semaines</span>
       </div>
     </div>
   )
 }
 
-function InfoBlock({ icon, label, value }: { icon: string; label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-      <span style={{ fontSize: 18, flexShrink: 0 }}>{icon}</span>
-      <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{value}</div>
-      </div>
-    </div>
-  )
-}
 
-// ─── Pipeline progress ────────────────────────────────────────────────────────
+// ─── Build Progress View — DESIGN-07 (M8, M9, M13) ──────────────────────────
 
-function PipelineProgressView({ events, globalError, isRunning }: {
-  events: BuildYearEvent[]; globalError: string | null; isRunning: boolean
+const VISIBLE_CHECKPOINTS: Array<{ step: BuildYearStep; label: string }> = [
+  { step: 'curriculum',       label: 'Curriculum' },
+  { step: 'syllabus',         label: 'Syllabus' },
+  { step: 'programme_annuel', label: 'Plan annuel' },
+  { step: 'sequences',        label: 'Séquences' },
+  { step: 'plans_lecon',      label: 'Plans de leçon' },
+  { step: 'premiere_lecon',   label: 'Première leçon' },
+  { step: 'quiz',             label: 'Quiz' },
+]
+
+function BuildProgressView({ events, globalError, isRunning, onOpenWorkspace, matiere, niveau }: {
+  events: BuildYearEvent[]
+  globalError: string | null
+  isRunning: boolean
+  onOpenWorkspace?: () => void
+  matiere?: string
+  niveau?: string
 }) {
   const termineEvent = events.find(e => e.step === 'termine')
-  const progress = termineEvent ? 100 : (events.at(-1)?.progress ?? 0)
+  const erreurEvent  = events.find(e => e.step === 'erreur')
+  const isDone  = !!termineEvent
+  const isError = !isDone && !!erreurEvent
+
+  const eventMap = new Map(events.map(e => [e.step, e]))
+
+  // Live preview numbers from events
+  const sequencesEvent = eventMap.get('sequences')
+  const plansEvent     = eventMap.get('plans_lecon')
+  const liveChips: string[] = []
+  if (sequencesEvent?.statut === 'termine' && sequencesEvent.message) {
+    const m = sequencesEvent.message.match(/(\d+)\s+séquence/i)
+    if (m) liveChips.push(`${m[1]} séquences structurées`)
+  }
+  if (plansEvent?.statut === 'termine' && plansEvent.message) {
+    const m = plansEvent.message.match(/(\d+)\s+plan/i)
+    if (m) liveChips.push(`${m[1]} plans de leçon`)
+  }
+  if (termineEvent) liveChips.push('1 Teaching Pack créé')
+
+  // Completed items for success view
+  const doneSteps = VISIBLE_CHECKPOINTS.filter(cp => eventMap.get(cp.step)?.statut === 'termine')
 
   return (
-    <div style={{ maxWidth: 560, margin: '0 auto', padding: '40px 24px' }}>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{ fontSize: 36, marginBottom: 12 }}>
-          {termineEvent ? '🎉' : isRunning ? '⚙️' : globalError ? '❌' : '⏳'}
-        </div>
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-          {termineEvent ? 'Votre année est construite !' : isRunning ? 'Génération en cours…' : globalError ? 'Erreur' : 'Préparation…'}
-        </h2>
-        {isRunning && (
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
-            Cela peut prendre 1 à 2 minutes. Ne fermez pas cet onglet.
-          </p>
-        )}
+    <div style={{ maxWidth: 520, margin: '0 auto', padding: '40px 24px' }}>
+      <h2 className="d7-build-title">
+        {isDone ? 'Votre année est prête.' : isError ? 'Construction interrompue.' : 'Votre année prend forme.'}
+      </h2>
+      <p className="d7-build-sub">
+        {isDone
+          ? [matiere, niveau].filter(Boolean).join(' · ')
+          : isRunning
+          ? 'Cela prend environ 1 à 2 minutes.'
+          : isError
+          ? 'Certaines étapes n\'ont pas pu être finalisées.'
+          : 'Préparation…'}
+      </p>
+
+      {/* Timeline */}
+      <div className="d7-timeline">
+        {VISIBLE_CHECKPOINTS.map(cp => {
+          const ev     = eventMap.get(cp.step)
+          const statut = ev?.statut ?? 'en_attente'
+          const dotClass =
+            statut === 'termine' ? 'd7-tl-dot--done'
+            : statut === 'en_cours' ? 'd7-tl-dot--active'
+            : statut === 'erreur'   ? 'd7-tl-dot--error'
+            : 'd7-tl-dot--pending'
+          const labelClass =
+            statut === 'termine' ? 'd7-tl-label--done'
+            : statut === 'en_attente' ? 'd7-tl-label--pending'
+            : ''
+          return (
+            <div key={cp.step} className="d7-timeline-item">
+              <div className={`d7-tl-dot ${dotClass}`} aria-label={statut}>
+                {statut === 'termine' ? '✓' : statut === 'erreur' ? '✕' : null}
+              </div>
+              <div className="d7-tl-content">
+                <div className={`d7-tl-label ${labelClass}`}>{cp.label}</div>
+                {ev?.message && statut !== 'en_attente' && (
+                  <div className="d7-tl-msg">{ev.message}</div>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
 
-      {/* Barre de progression */}
-      <div style={{ height: 6, background: 'var(--color-border)', borderRadius: 99, marginBottom: 28, overflow: 'hidden' }}>
-        <div style={{ height: '100%', background: 'linear-gradient(90deg, #7F77DD, #34D399)', borderRadius: 99, width: `${progress}%`, transition: 'width .5s ease' }} />
-      </div>
-
-      {/* Étapes */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {events.map((ev, i) => (
-          <PipelineStepRow key={i} event={ev} />
-        ))}
-      </div>
-
-      {globalError && !termineEvent && (
-        <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 10, background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.3)', color: '#F87171', fontSize: 13 }}>
-          {globalError}
+      {/* Live preview chips (M9) */}
+      {liveChips.length > 0 && !isDone && (
+        <div className="d7-live-preview">
+          {liveChips.map((c, i) => <span key={i} className="d7-live-chip">{c}</span>)}
         </div>
       )}
-    </div>
-  )
-}
 
-function PipelineStepRow({ event }: { event: BuildYearEvent }) {
-  const icon: Record<BuildYearStepStatut, string> = {
-    en_attente: '⏳', en_cours: '🔄', termine: '✅', erreur: '❌', ignore: '—',
-  }
-  const color: Record<BuildYearStepStatut, string> = {
-    en_attente: 'var(--text-muted)', en_cours: '#FBC34A', termine: '#34D399', erreur: '#F87171', ignore: 'var(--text-muted)',
-  }
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 9, background: event.statut === 'en_cours' ? 'rgba(251,195,74,.07)' : 'transparent' }}>
-      <span style={{ fontSize: 16 }}>{icon[event.statut]}</span>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: color[event.statut] }}>{STEP_LABELS[event.step] ?? event.step}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{event.message}</div>
-      </div>
+      {/* Success state (M13) */}
+      {isDone && (
+        <>
+          {doneSteps.length > 0 && (
+            <ul className="d7-success-list" style={{ marginTop: 24 }}>
+              {doneSteps.map(cp => <li key={cp.step}>{cp.label}</li>)}
+            </ul>
+          )}
+          <button
+            onClick={onOpenWorkspace}
+            style={{ padding: '12px 28px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg, #7F77DD, #4F46E5)', color: '#FFF', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-display)', boxShadow: '0 4px 18px rgba(79,70,229,.35)' }}>
+            Ouvrir mon année →
+          </button>
+        </>
+      )}
+
+      {/* Error state (M12) */}
+      {isError && (
+        <div className="d7-error-block">
+          <div className="d7-error-title">
+            {erreurEvent?.message ?? globalError ?? 'Une étape n\'a pas pu être finalisée.'}
+          </div>
+          {doneSteps.length > 0 && (
+            <div className="d7-error-ready">
+              {doneSteps.map(cp => <span key={cp.step}>{cp.label}</span>)}
+            </div>
+          )}
+          <button
+            onClick={() => window.location.reload()}
+            style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid rgba(248,113,113,.4)', background: 'transparent', color: '#EF4444', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Reprendre la construction
+          </button>
+        </div>
+      )}
     </div>
   )
 }

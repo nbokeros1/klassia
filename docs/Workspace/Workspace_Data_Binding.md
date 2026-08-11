@@ -1,5 +1,5 @@
 # Workspace 2.0 — Data Binding
-**ScorgIA · RELEASE-P0.2 · 2026-08-09**
+**ScorgIA · SPIE-PERSISTENCE-01 · 2026-08-09**
 
 ---
 
@@ -90,6 +90,34 @@ Elles apparaissent dans :
 - **"Préparations IA"** si la classe n'a pas de Teaching Pack
 
 Aucune donnée supprimée, aucune migration requise.
+
+---
+
+## SPIE-PERSISTENCE-01 — Binding du CTA Reprendre
+
+Depuis SPIE-PERSISTENCE-01, la page `programme/page.tsx` lit le `build_state`
+du Teaching Pack pour proposer des CTAs adaptatifs :
+
+```typescript
+const buildState = pack?.contenu_json?.build_state
+const missing = {
+  syllabus:       !buildState?.syllabus?.objectId && !pack?.programme_annuel_id,
+  plan_annuel:    buildState?.programme_annuel?.status !== 'success',
+  premiere_lecon: buildState?.premiere_lecon?.status !== 'success',
+  quiz:           buildState?.quiz?.status !== 'success',
+}
+const hasPartialBuild = pack && (missing.syllabus || missing.plan_annuel || ...)
+```
+
+| État | CTA principal | Action |
+|------|--------------|--------|
+| Pas de pack | "Construire mon année" | `reprendre: false` |
+| Pack partiel (`hasPartialBuild`) | "Reprendre la génération" | `reprendre: true` |
+| Pack complet | "Reconstruire l'année" | modal confirmation |
+
+L'EmptyState de chaque onglet affiche un message précis (ex: "Syllabus non
+généré — une erreur s'est produite lors de la génération") avec un CTA
+"Reprendre la génération" si un pack partiel existe.
 
 ---
 

@@ -1,7 +1,7 @@
 # Teaching Pack — Définition et structure
 
-**Statut :** SPIE-BETA-02 · Actif  
-**Dernière mise à jour :** 2026-08-04
+**Statut :** SPIE-PERSISTENCE-01 · Actif  
+**Dernière mise à jour :** 2026-08-09
 
 ---
 
@@ -142,9 +142,53 @@ Voir [Teaching_Pack_Exports.md](Teaching_Pack_Exports.md).
 
 ---
 
+---
+
+## SPIE-PERSISTENCE-01 — BuildState et complétude
+
+### BuildState dans contenu_json
+
+Depuis SPIE-PERSISTENCE-01, `contenu_json.build_state` stocke l'état exact
+de chaque étape de construction, avec `objectId`, `persisted`, `verified`.
+Ce BuildState survit aux refreshs, déconnexions, et nouvel onglet.
+
+```typescript
+contenu_json: {
+  ...TeachingPackContenu,
+  build_state: {
+    buildId: "uuid-...",
+    pack:             { status: "success", objectId: "...", verified: true },
+    curriculum:       { status: "success", verified: true },
+    syllabus:         { status: "success", verified: true },
+    programme_annuel: { status: "success", objectId: "...", verified: true },
+    premiere_lecon:   { status: "success", objectId: "...", verified: true },
+    quiz:             { status: "success", objectId: "...", verified: true },
+    finalized: true
+  }
+}
+```
+
+### Règle de statut
+
+Le champ `statut` du Teaching Pack est toujours déterminé par
+`verifyTeachingPackCompleteness()` — une relecture complète depuis Supabase.
+Il ne peut jamais être `pret` si les données ne sont pas présentes en base.
+
+### Endpoint de vérification
+
+`POST /api/spie/verify-pack` — disponible pour le diagnostic founder et
+la récupération après build interrompu.  
+Voir [Teaching_Pack_Completeness.md](Teaching_Pack_Completeness.md).
+
+---
+
 ## Voir aussi
 
 - [Build_My_Year_Workflow.md](Build_My_Year_Workflow.md) — Pipeline de génération
+- [Persistence_Pipeline.md](Persistence_Pipeline.md) — Pattern GENERATE→VERIFY
+- [Build_Checkpoints.md](Build_Checkpoints.md) — BuildState structure
+- [Teaching_Pack_Completeness.md](Teaching_Pack_Completeness.md) — verifyTeachingPackCompleteness
+- [Build_Recovery.md](Build_Recovery.md) — Smart resume et anti-doublon
 - [Entitlements.md](Entitlements.md) — Droits d'accès par forfait
 - [Persistence.md](Persistence.md) — Migration SQL et indexation
 - [Alberta_Teaching_Pack.md](Alberta_Teaching_Pack.md) — Métadonnées Alberta

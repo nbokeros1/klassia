@@ -145,9 +145,9 @@ export default function SuivrePage() {
               </div>
 
               {classes.length === 0 ? (
-                <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>🏫</div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-4)' }}>Aucune classe — crée-en une dans <strong>Préparer</strong></div>
+                <div className="card" style={{ textAlign: 'center', padding: '40px 24px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-2)', marginBottom: '8px' }}>Aucune classe créée</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-4)', lineHeight: 1.6 }}>Crée ta première classe dans <strong style={{ color: 'var(--text-3)' }}>Mes classes</strong> pour suivre la progression de tes leçons.</div>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px' }}>
@@ -244,9 +244,9 @@ export default function SuivrePage() {
 
                 {/* Par classe */}
                 {classes.length === 0 ? (
-                  <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-                    <div style={{ fontSize: '36px', marginBottom: '10px' }}>📝</div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-4)' }}>Aucune classe — crée-en une dans <strong>Mes classes</strong></div>
+                  <div className="card" style={{ textAlign: 'center', padding: '40px 24px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-2)', marginBottom: '8px' }}>Aucune donnée d&apos;avancement</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-4)', lineHeight: 1.6 }}>Crée des classes et prépare des leçons — les données d&apos;avancement apparaîtront automatiquement.</div>
                   </div>
                 ) : (
                   classes.map(cls => {
@@ -328,9 +328,9 @@ export default function SuivrePage() {
 
                 {/* Per-class activity */}
                 {classes.length === 0 ? (
-                  <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-                    <div style={{ fontSize: '36px', marginBottom: '10px' }}>🙋</div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-4)' }}>Aucune classe encore</div>
+                  <div className="card" style={{ textAlign: 'center', padding: '40px 24px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-2)', marginBottom: '8px' }}>Aucune classe à afficher</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-4)', lineHeight: 1.6 }}>Crée des classes pour commencer à suivre l&apos;activité de tes enseignements.</div>
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
@@ -466,9 +466,9 @@ export default function SuivrePage() {
 
                 {/* Per-class report cards */}
                 {classes.length === 0 ? (
-                  <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-                    <div style={{ fontSize: '36px', marginBottom: '10px' }}>📋</div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-4)' }}>Aucune classe à rapporter</div>
+                  <div className="card" style={{ textAlign: 'center', padding: '40px 24px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-2)', marginBottom: '8px' }}>Aucune donnée à rapporter</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-4)', lineHeight: 1.6 }}>Les rapports apparaîtront dès que tu auras créé des classes et préparé des leçons.</div>
                   </div>
                 ) : (
                   classes.map(cls => {

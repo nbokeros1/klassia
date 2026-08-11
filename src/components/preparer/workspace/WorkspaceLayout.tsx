@@ -18,20 +18,17 @@ export function WorkspaceLayout({
   children,
   rightPanel,
   inspectorPanel,
-  explorerOpen  = true,
-  explorerWidth = 272,
+  explorerOpen = true,
   onOpenExplorer,
   isFr = true,
 }: WorkspaceLayoutProps) {
   return (
     <div style={{
-      marginLeft:     explorerOpen ? explorerWidth : 0,
-      flex:           1,
-      display:        'flex',
-      flexDirection:  'column',
-      overflow:       'hidden',
-      height:         '100vh',
-      transition:     'margin-left 0.22s cubic-bezier(0.4,0,0.2,1)',
+      flex:          1,
+      display:       'flex',
+      flexDirection: 'column',
+      overflow:      'hidden',
+      height:        '100vh',
     }}>
 
       {/* Explorer re-open button — visible only when explorer is collapsed */}
@@ -40,58 +37,59 @@ export function WorkspaceLayout({
           onClick={onOpenExplorer}
           title={isFr ? 'Ouvrir l\'explorateur' : 'Open explorer'}
           style={{
-            position:   'fixed',
-            left:       0,
-            top:        '50%',
-            transform:  'translateY(-50%)',
-            zIndex:     99,
-            width:      18,
-            height:     52,
-            borderRadius: '0 8px 8px 0',
-            border:     '1px solid rgba(108,92,231,0.3)',
-            borderLeft: 'none',
-            background: 'rgba(108,92,231,0.18)',
-            color:      'rgba(196,181,253,0.7)',
-            cursor:     'pointer',
-            fontSize:   10,
-            display:    'flex',
-            alignItems: 'center',
+            position:       'fixed',
+            left:           0,
+            top:            '50%',
+            transform:      'translateY(-50%)',
+            zIndex:         99,
+            width:          18,
+            height:         52,
+            borderRadius:   '0 8px 8px 0',
+            border:         '1px solid rgba(108,92,231,0.3)',
+            borderLeft:     'none',
+            background:     'rgba(108,92,231,0.18)',
+            color:          'rgba(196,181,253,0.7)',
+            cursor:         'pointer',
+            fontSize:       10,
+            display:        'flex',
+            alignItems:     'center',
             justifyContent: 'center',
-            transition: 'all 0.15s',
+            transition:     'all 0.15s',
             backdropFilter: 'blur(8px)',
           }}
           onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = 'rgba(108,92,231,0.35)'
+            ;(e.currentTarget as HTMLElement).style.background = 'rgba(108,92,231,0.35)'
             ;(e.currentTarget as HTMLElement).style.color = '#c4b5fd'
           }}
           onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.background = 'rgba(108,92,231,0.18)'
+            ;(e.currentTarget as HTMLElement).style.background = 'rgba(108,92,231,0.18)'
             ;(e.currentTarget as HTMLElement).style.color = 'rgba(196,181,253,0.7)'
           }}>
           ▷
         </button>
       )}
-      {/* Header landmark — rendu par le composant enfant WorkspaceHeader */}
+
+      {/* Header */}
       {header}
 
-      {/* Main workspace area */}
+      {/* Main workspace — horizontal flex: document | inspector | copilot */}
       <main style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* Canvas / contenu principal */}
+        {/* Document zone */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {children}
         </div>
 
-        {/* Panneau inspecteur */}
+        {/* Inspector panel */}
         {inspectorPanel && (
           <aside aria-label="Inspecteur du document">
             {inspectorPanel}
           </aside>
         )}
 
-        {/* Panneau assistant IA */}
+        {/* Copilote IA */}
         {rightPanel && (
-          <aside aria-label="Assistant IA">
+          <aside aria-label="Copilote IA">
             {rightPanel}
           </aside>
         )}

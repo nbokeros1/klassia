@@ -1,7 +1,7 @@
 # Persistence — Teaching Pack & Plan annuel
 
-**Statut :** SPIE-BETA-03 · Actif  
-**Dernière mise à jour :** 2026-08-05
+**Statut :** SPIE-PERSISTENCE-01 · Actif  
+**Dernière mise à jour :** 2026-08-09
 
 ---
 
@@ -155,6 +155,58 @@ Avant chaque écriture sur `programme_annuel.syllabus_json`, `syllabus-save` :
 2. L'archive dans `pack_versions` avec `modifie_par` et `version_numero` courant
 3. Écrit la nouvelle version
 4. Incrémente `version_numero` et met `modifie_par = 'utilisateur'`
+
+---
+
+---
+
+## SPIE-PERSISTENCE-01 — BuildState et vérification
+
+### BuildState persisté dans teaching_packs.contenu_json
+
+```sql
+-- Colonne existante — contenu enrichi depuis SPIE-PERSISTENCE-01
+-- teaching_packs.contenu_json inclut maintenant :
+{
+  "build_state": {
+    "buildId": "uuid",
+    "startedAt": "ISO",
+    "completedAt": "ISO",
+    "pack":             { "status": "success", "objectId": "uuid", "persisted": true, "verified": true },
+    "curriculum":       { "status": "success", "persisted": true, "verified": true },
+    "syllabus":         { "status": "success", "persisted": true, "verified": true },
+    "programme_annuel": { "status": "success", "objectId": "uuid", "persisted": true, "verified": true },
+    "plans_lecon":      { "status": "success", "persisted": true, "verified": true },
+    "premiere_lecon":   { "status": "success", "objectId": "uuid", "persisted": true, "verified": true },
+    "quiz":             { "status": "success", "objectId": "uuid", "persisted": true, "verified": true },
+    "finalized": true
+  }
+}
+```
+
+Aucune migration requise — `contenu_json` est déjà JSONB (migration 036).
+
+### Endpoint verify-pack
+
+```
+POST /api/spie/verify-pack
+Body: { "pack_id": "uuid", "classe_id": "uuid" }
+```
+
+Re-lit toutes les tables depuis la DB et retourne la complétude réelle.
+Protégé par `requireAuth()` + vérification propriétaire du pack.
+
+### Fichier utilitaires
+
+```
+src/lib/spie/build-pipeline.ts
+  ├── StepResult, BuildState, StepStatus   (types)
+  ├── stepSuccess(objectId?)               (helper)
+  ├── stepError(error)                     (helper)
+  ├── stepSkipped(objectId?)               (helper)
+  ├── initBuildState()                     (initialise tous les steps à 'pending')
+  └── verifyTeachingPackCompleteness()     (re-lit DB → CompletenessResult)
+```
 
 ---
 

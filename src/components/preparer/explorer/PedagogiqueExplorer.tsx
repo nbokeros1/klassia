@@ -8,7 +8,7 @@ import type { ConversationIAResume } from '@/lib/types/database'
 
 // ─── Data types ───────────────────────────────────────────────────────────────
 
-type PackItem     = { id: string; classe_id: string; programme_annuel_id: string | null; statut: string }
+type PackItem     = { id: string; classe_id: string; programme_annuel_id: string | null; statut: string; province?: string; annee_scolaire?: string }
 type ProgrammeData = { id: string; classe_id: string; contenu_json: any; syllabus_json: any }
 type FichierItem  = { id: string; nom: string; type_fichier: string; classe_id: string; statut: string; created_at: string }
 
@@ -125,6 +125,23 @@ function DocRow({
   )
 }
 
+// ─── Build state dot ──────────────────────────────────────────────────────────
+
+function BuildDot({ statut }: { statut: string }) {
+  const STATE_MAP: Record<string, { symbol: string; state: string; title: string }> = {
+    pret:                  { symbol: '●', state: 'pret',    title: 'Prêt' },
+    partiellement_genere:  { symbol: '◐', state: 'partial', title: 'Partiel' },
+    generation_en_cours:   { symbol: '◌', state: 'active',  title: 'En cours' },
+    erreur:                { symbol: '⚠', state: 'error',   title: 'Erreur' },
+    brouillon:             { symbol: '●', state: 'todo',    title: 'Brouillon' },
+    configuration:         { symbol: '●', state: 'todo',    title: 'À configurer' },
+  }
+  const s = STATE_MAP[statut] || { symbol: '●', state: 'todo', title: statut }
+  return (
+    <span className="ws-build-dot" data-state={s.state} title={s.title}>{s.symbol}</span>
+  )
+}
+
 // Collapsible section row (for folders within a class)
 function FolderRow({
   icon, label, count, color, isExpanded, onClick,
@@ -174,6 +191,7 @@ export default function PedagogiqueExplorer({
   const [loading,           setLoading]           = useState(true)
   const [searchQuery,       setSearchQuery]       = useState('')
   const [expandedKeys,      setExpandedKeys]      = useState<Set<string>>(() => loadExpandedKeys())
+  const [hoveredSeqKey,     setHoveredSeqKey]     = useState<string | null>(null)
 
   // ── Load all data ────────────────────────────────────────────────────────────
   const loadAllData = useCallback(async () => {
@@ -186,7 +204,7 @@ export default function PedagogiqueExplorer({
       const [{ data: packs }, { data: fichiers }, { data: convs }] = await Promise.all([
         supabase
           .from('teaching_packs')
-          .select('id, classe_id, programme_annuel_id, statut')
+          .select('id, classe_id, programme_annuel_id, statut, province, annee_scolaire')
           .in('classe_id', classIds),
         supabase
           .from('fichiers_dossier')
@@ -282,7 +300,7 @@ export default function PedagogiqueExplorer({
   }
 
   // ── Sidebar width ─────────────────────────────────────────────────────────
-  const sidebarW = 272
+  const sidebarW = 280
 
   // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
@@ -295,9 +313,6 @@ export default function PedagogiqueExplorer({
       flexDirection: 'column',
       overflow:   'hidden',
       flexShrink: 0,
-      position:   'fixed',
-      left:       0, top: 0,
-      zIndex:     100,
       borderRight: '1px solid rgba(255,255,255,0.06)',
       transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1), min-width 0.22s cubic-bezier(0.4,0,0.2,1)',
     }}>
@@ -422,6 +437,8 @@ export default function PedagogiqueExplorer({
               const fichiers    = fichiersByClasse[classe.id] || []
               const leconFich   = fichiers.filter(f => f.type_fichier === 'lecon_complete')
               const quizFich    = fichiers.filter(f => f.type_fichier === 'quiz')
+              // Ressources = fichiers non encore affichés (pas lecon/quiz)
+              const ressourcesFich = fichiers.filter(f => !['lecon_complete', 'quiz'].includes(f.type_fichier))
 
               // Conversations for this class
               const classeConvs = conversations.filter(c => c.classe_id === classe.id)
@@ -484,13 +501,16 @@ export default function PedagogiqueExplorer({
                       {matiere && (
                         <div style={{ fontSize: 9, fontWeight: 500, color: 'rgba(255,255,255,0.35)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {matiere}{classe.niveau ? ` · ${classe.niveau}` : ''}
+                          {pack && unites.length > 0 && (
+                            <span style={{ marginLeft: 4, color: pack.statut === 'pret' ? '#34D399' : 'rgba(255,255,255,0.22)' }}>
+                              · {unites.length} séq.
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                      {pack && (
-                        <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 99, background: 'rgba(52,211,153,0.12)', color: '#34D399', fontWeight: 700 }}>✓</span>
-                      )}
+                      {pack && <BuildDot statut={pack.statut} />}
                       <span style={{ fontSize: 9, opacity: 0.4 }}>{isExpanded ? '▾' : '▸'}</span>
                     </div>
                   </div>
@@ -529,6 +549,22 @@ export default function PedagogiqueExplorer({
 
                           {isAnneeExp && (
                             <div style={{ paddingLeft: 10, borderLeft: '1px solid rgba(255,255,255,0.05)', marginLeft: 10 }}>
+
+                              {/* Context chips: province + year */}
+                              {(pack.province || pack.annee_scolaire) && (
+                                <div className="ws-pack-context">
+                                  {pack.province && (
+                                    <span className="ws-pack-chip">{pack.province}</span>
+                                  )}
+                                  {pack.annee_scolaire && (
+                                    <span className="ws-pack-chip">{pack.annee_scolaire}</span>
+                                  )}
+                                  <span className="ws-pack-chip">
+                                    <BuildDot statut={pack.statut} />
+                                    &nbsp;{pack.statut === 'pret' ? 'Prêt' : pack.statut === 'partiellement_genere' ? 'Partiel' : pack.statut === 'generation_en_cours' ? 'En cours' : 'Brouillon'}
+                                  </span>
+                                </div>
+                              )}
 
                               {/* Curriculum */}
                               <DocRow
@@ -570,15 +606,56 @@ export default function PedagogiqueExplorer({
                                       <div style={{ padding: '6px 8px', fontSize: 10, color: 'rgba(255,255,255,0.25)', lineHeight: 1.5 }}>
                                         {isFr ? 'Aucune séquence générée.' : 'No sequences generated.'}
                                       </div>
-                                    ) : unites.map((u: any, i: number) => (
-                                      <DocRow
-                                        key={i}
-                                        icon="▸"
-                                        label={`${u.numero || i + 1}. ${u.titre}`}
-                                        sublabel={`${(u.lecons || []).length} leçon${(u.lecons || []).length !== 1 ? 's' : ''} · sem. ${u.semaine_debut}–${u.semaine_fin}`}
-                                        onClick={() => goTab(classe.id, 'sequences')}
-                                      />
-                                    ))}
+                                    ) : unites.map((u: any, i: number) => {
+                                      const seqItemKey = `seq-item:${classe.id}:${i}`
+                                      const isHovering = hoveredSeqKey === seqItemKey
+                                      return (
+                                        <div
+                                          key={i}
+                                          className="ws-doc-row"
+                                          style={{ position: 'relative' }}
+                                          onMouseEnter={() => setHoveredSeqKey(seqItemKey)}
+                                          onMouseLeave={() => setHoveredSeqKey(null)}
+                                        >
+                                          <DocRow
+                                            icon="▸"
+                                            label={`${u.numero || i + 1}. ${u.titre}`}
+                                            sublabel={`${(u.lecons || []).length} leçon${(u.lecons || []).length !== 1 ? 's' : ''} · sem. ${u.semaine_debut}–${u.semaine_fin}`}
+                                            onClick={() => goTab(classe.id, 'sequences')}
+                                          />
+                                          {isHovering && (
+                                            <div className="ws-quick-menu">
+                                              <button
+                                                className="ws-quick-btn"
+                                                onClick={e => {
+                                                  e.stopPropagation()
+                                                  onNewDocument(
+                                                    isFr
+                                                      ? `Développe une leçon complète pour la séquence "${u.titre}".`
+                                                      : `Develop a complete lesson for the sequence "${u.titre}".`,
+                                                    classe.id,
+                                                  )
+                                                }}>
+                                                {isFr ? 'Leçon' : 'Lesson'}
+                                              </button>
+                                              <button
+                                                className="ws-quick-btn"
+                                                onClick={e => {
+                                                  e.stopPropagation()
+                                                  onNewDocument(
+                                                    isFr
+                                                      ? `Crée un quiz formatif pour la séquence "${u.titre}".`
+                                                      : `Create a formative quiz for the sequence "${u.titre}".`,
+                                                    classe.id,
+                                                  )
+                                                }}>
+                                                Quiz
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
                                   </div>
                                 )}
                               </div>
@@ -639,6 +716,50 @@ export default function PedagogiqueExplorer({
                                     ))}
                                   </div>
                                 )}
+                              </div>
+
+                              {/* ── Ressources ───────────────────────────── */}
+                              {(ressourcesFich.length > 0) && (() => {
+                                const resFKey   = `resf:${classe.id}`
+                                const isResFExp = expandedKeys.has(resFKey)
+                                return (
+                                  <div style={{ marginBottom: 1 }}>
+                                    <FolderRow
+                                      icon="📎"
+                                      label={isFr ? 'Ressources' : 'Resources'}
+                                      count={ressourcesFich.length}
+                                      color="#94A3B8"
+                                      isExpanded={isResFExp}
+                                      onClick={() => toggle(resFKey)}
+                                    />
+                                    {isResFExp && (
+                                      <div style={{ paddingLeft: 10, borderLeft: '1px solid rgba(255,255,255,0.04)', marginLeft: 10 }}>
+                                        {ressourcesFich.map(f => (
+                                          <DocRow
+                                            key={f.id}
+                                            icon="📄"
+                                            label={f.nom}
+                                            sublabel={formatRelativeDate(f.created_at, isFr)}
+                                            onClick={() => goTab(classe.id, 'plans_lecon')}
+                                          />
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+
+                              {/* ── Archives — stub bêta ─────────────────── */}
+                              <div style={{ marginBottom: 1, opacity: 0.45 }}>
+                                <div style={{
+                                  display: 'flex', alignItems: 'center', gap: 5,
+                                  padding: '5px 8px', borderRadius: 6, fontSize: 11,
+                                  fontWeight: 600, color: 'rgba(255,255,255,0.3)',
+                                }}>
+                                  <span style={{ fontSize: 12, opacity: 0.5 }}>🗃️</span>
+                                  <span style={{ flex: 1 }}>{isFr ? 'Archives' : 'Archives'}</span>
+                                  <span style={{ fontSize: 8, opacity: 0.3 }}>—</span>
+                                </div>
                               </div>
 
                             </div>

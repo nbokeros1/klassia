@@ -43,6 +43,8 @@ export default function ProgrammePage() {
   const [forfait,    setForfait]    = useState<ForfaitType | undefined>()
   const [showWizard,          setShowWizard]          = useState(false)
   const [showRebuildConfirm, setShowRebuildConfirm]  = useState(false)
+  // SPIE-PERSISTENCE-01 : reprendre = smart resume (skip étapes réussies)
+  const [reprendreMode,      setReprendreMode]        = useState(false)
   const [activeTab,  setActiveTab]  = useState<TabId>((searchParams.get('tab') as TabId) ?? 'apercu')
   const [qualite,    setQualite]    = useState<QualityGateResultat | null>(null)
   const [qualLoading,setQualLoading]= useState(false)
@@ -120,15 +122,26 @@ export default function ProgrammePage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  const handleWizardDone = useCallback(async () => {
-    setShowWizard(false)
+  const handleWizardDone = useCallback(async (_teachingPackId: string, _progId: string) => {
     await loadData()
+    // Wizard stays open — BuildProgressView shows success + "Ouvrir mon année"
   }, [loadData])
+
+  const handleOpenWorkspace = useCallback(() => {
+    setShowWizard(false)
+    if (typeof window !== 'undefined') localStorage.setItem('klassia_active_classe', id)
+    router.push('/dashboard/gerer/preparer')
+  }, [id, router])
 
   const handleConstruireAnnee = useCallback(() => {
     if (pack) setShowRebuildConfirm(true)
-    else setShowWizard(true)
+    else { setReprendreMode(false); setShowWizard(true) }
   }, [pack])
+
+  const handleReprendre = useCallback(() => {
+    setReprendreMode(true)
+    setShowWizard(true)
+  }, [])
 
   const lancerQualite = useCallback(async (docType: string = 'plan_annuel') => {
     if (!pack?.id) return
@@ -235,6 +248,15 @@ export default function ProgrammePage() {
   const isAlberta  = pack?.province === 'alberta'
   const isReady    = pack?.statut === 'pret' || pack?.statut === 'partiellement_genere'
   const ctaLabel   = pack ? 'Reprendre la génération' : 'Construire mon année'
+  // SPIE-PERSISTENCE-01 : éléments manquants depuis build_state persisté
+  const buildState = pack?.contenu_json?.build_state as Record<string, { status: string }> | undefined
+  const missing    = {
+    syllabus:         !syllabus?.titre_cours,
+    plan_annuel:      !contenu?.unites?.length,
+    premiere_lecon:   buildState?.premiere_lecon?.status === 'error',
+    quiz:             buildState?.quiz?.status === 'error',
+  }
+  const hasPartialBuild = isReady && (missing.syllabus || missing.plan_annuel || missing.premiere_lecon || missing.quiz)
 
   // ─── Wizard ────────────────────────────────────────────────────────────────
   if (showWizard || (!pack && !programme)) {
@@ -257,7 +279,9 @@ export default function ProgrammePage() {
           niveauInitial={classe.niveau ?? undefined}
           matiereInitiale={classe.matiere ?? undefined}
           forfait={forfait}
+          reprendre={reprendreMode}
           onDone={handleWizardDone}
+          onOpenWorkspace={handleOpenWorkspace}
         />
       </div>
     )
@@ -358,7 +382,7 @@ export default function ProgrammePage() {
 
         {/* ── Syllabus ───────────────────────────────────────────── */}
         {activeTab === 'syllabus' && (
-          syllabus ? (
+          syllabus?.titre_cours ? (
             <SyllabusEditor
               syllabus={syllabus}
               teachingPackId={pack!.id}
@@ -368,7 +392,13 @@ export default function ProgrammePage() {
               }}
             />
           ) : (
-            <EmptyState icon="📋" titre="Syllabus non généré" desc="Le syllabus sera disponible après la génération du Teaching Pack." cta={ctaLabel} onCta={handleConstruireAnnee} />
+            <EmptyState
+              icon="📋"
+              titre="Syllabus non généré"
+              desc={pack ? 'La génération du syllabus n\'a pas pu être finalisée. Utilisez « Reprendre la génération » pour relancer uniquement cette étape.' : 'Le syllabus sera disponible après la génération du Teaching Pack.'}
+              cta={pack ? 'Reprendre la génération' : ctaLabel}
+              onCta={pack ? handleReprendre : handleConstruireAnnee}
+            />
           )
         )}
 
@@ -600,28 +630,43 @@ export default function ProgrammePage() {
         )}
       </div>
 
-      {/* ── Modal confirmation Reconstruire ──────────────────────────────────── */}
+      {/* ── Modal confirmation Reconstruire / Reprendre (Mission 12/17) ─────── */}
       {showRebuildConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div className="glass-light" style={{ maxWidth: 440, width: '100%', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-card)' }}>
+          <div className="glass-light" style={{ maxWidth: 480, width: '100%', borderRadius: 'var(--radius-lg)', padding: 28, boxShadow: 'var(--shadow-card)' }}>
             <div style={{ fontSize: 32, textAlign: 'center', marginBottom: 12 }}>🔄</div>
             <h2 style={{ margin: '0 0 10px', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', textAlign: 'center' }}>
-              Reconstruire l&apos;année scolaire ?
+              Que souhaitez-vous faire ?
             </h2>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.6 }}>
-              Cette action va <strong>régénérer</strong> le plan annuel et toutes les leçons pour cette classe.
-              Le contenu actuel sera remplacé. Cette opération ne peut pas être annulée.
+              Un Teaching Pack existe déjà pour cette classe.
             </p>
-            <div style={{ display: 'flex', gap: 10 }}>
+            {hasPartialBuild && (
+              <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(251,195,74,.08)', border: '1px solid rgba(251,195,74,.25)', marginBottom: 16, fontSize: 12, color: '#FBC34A', lineHeight: 1.6 }}>
+                ⚠️ Construction partielle détectée — éléments manquants :
+                {' '}{[missing.syllabus && 'Syllabus', missing.plan_annuel && 'Plan annuel', missing.premiere_lecon && '1re leçon', missing.quiz && 'Quiz'].filter(Boolean).join(', ')}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Option 1 — Reprendre (smart resume) */}
               <button
-                onClick={() => { setShowRebuildConfirm(false); setShowWizard(true) }}
-                style={{ flex: 1, padding: '10px 0', borderRadius: 9, border: 'none', background: 'linear-gradient(135deg,#EF4444,#B91C1C)', color: '#FFF', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                onClick={() => { setShowRebuildConfirm(false); handleReprendre() }}
+                style={{ width: '100%', padding: '12px 16px', borderRadius: 9, border: 'none', background: 'linear-gradient(135deg,#7F77DD,#4F46E5)', color: '#FFF', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2 }}
               >
-                Oui, reconstruire
+                <span>✦ Reprendre la génération</span>
+                <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.85 }}>Continue uniquement les étapes manquantes. Conserve ce qui existe.</span>
+              </button>
+              {/* Option 2 — Reconstruire complètement */}
+              <button
+                onClick={() => { setShowRebuildConfirm(false); setReprendreMode(false); setShowWizard(true) }}
+                style={{ width: '100%', padding: '12px 16px', borderRadius: 9, border: '1px solid rgba(239,68,68,.4)', background: 'rgba(239,68,68,.08)', color: '#F87171', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2 }}
+              >
+                <span>🔄 Reconstruire complètement</span>
+                <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.85 }}>Régénère tout depuis le début. Remplace le contenu actuel.</span>
               </button>
               <button
                 onClick={() => setShowRebuildConfirm(false)}
-                style={{ flex: 1, padding: '10px 0', borderRadius: 9, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ width: '100%', padding: '10px 0', borderRadius: 9, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Annuler
               </button>

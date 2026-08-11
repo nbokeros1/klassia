@@ -4,14 +4,17 @@ import { usePathname } from 'next/navigation'
 import AssistantFlottant from './AssistantFlottant'
 import FeedbackWidget    from './feedback/FeedbackWidget'
 import BetaTour          from './onboarding/BetaTour'
+import CommandBar        from './ui/CommandBar'
 
 export default function DashboardFloats() {
   const pathname = usePathname()
-  if (pathname?.startsWith('/dashboard/gerer/preparer')) return null
+  const isPreparer = pathname?.startsWith('/dashboard/gerer/preparer')
   return (
     <>
-      <AssistantFlottant />
-      <FeedbackWidget />
+      {/* DS 2.0 — Command Bar global (Ctrl+K) — actif sur toutes les pages */}
+      <CommandBar />
+      {!isPreparer && <AssistantFlottant />}
+      {!isPreparer && <FeedbackWidget />}
       <BetaTour />
     </>
   )
