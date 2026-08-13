@@ -272,8 +272,8 @@ export default function LandingPage() {
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <ScorgiaLogo
             variant="dark"
-            height={56}
-            style={{ height: 'clamp(38px, 3.8vw, 56px)' }}
+            height={72}
+            style={{ height: 'clamp(48px, 5vw, 72px)' }}
           />
         </div>
 
