@@ -29,6 +29,9 @@ export function ScorgiaLogo({
   const imgH = height ?? (isIcon ? 48 : 72)
   const imgW = width  ?? (isIcon ? 48 : 220)
 
+  // width et height props requis par Next.js pour les URLs dynamiques (E451 si absents).
+  // Pour le wordmark : style.width: 'auto' prend le dessus sur le prop (comportement voulu).
+  // Ce conflit génère un warning Next/Image — acceptable ; le prop est néanmoins requis.
   return (
     <Image
       src={logoSources[variant]}
@@ -37,7 +40,11 @@ export function ScorgiaLogo({
       height={imgH}
       className={['object-contain', isIcon ? 'aspect-square' : '', className].filter(Boolean).join(' ')}
       preload={preload}
-      style={{ display: 'block', flexShrink: 0, height: imgH, width: 'auto', ...style }}
+      style={
+        isIcon
+          ? { display: 'block', flexShrink: 0, width: imgW, height: imgH, ...style }
+          : { display: 'block', flexShrink: 0, height: imgH, width: 'auto', ...style }
+      }
     />
   )
 }

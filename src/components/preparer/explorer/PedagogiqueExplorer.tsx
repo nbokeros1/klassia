@@ -243,7 +243,7 @@ export default function PedagogiqueExplorer({
       if (packProgIds.length > 0) {
         const { data: progs } = await supabase
           .from('programme_annuel')
-          .select('id, classe_id, contenu_json, syllabus_json')
+          .select('*')
           .in('id', packProgIds)
         for (const prog of (progs || [])) newProgByClasse[prog.classe_id] = prog
       }
@@ -255,7 +255,7 @@ export default function PedagogiqueExplorer({
       if (needFallback.length > 0) {
         const { data: fallbackProgs } = await supabase
           .from('programme_annuel')
-          .select('id, classe_id, contenu_json, syllabus_json')
+          .select('*')
           .in('classe_id', needFallback)
           .order('created_at', { ascending: false })
         for (const prog of (fallbackProgs || [])) {

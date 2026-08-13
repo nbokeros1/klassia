@@ -192,13 +192,15 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
     return (
       <aside className={`sidebar${compact ? ' sidebar--compact' : ''}`}>
         <div className="sidebar-logo" onClick={() => router.push('/dashboard')} style={{ cursor: 'pointer' }}>
-          <ScorgiaLogo variant="icon" width={24} height={24} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-brand">ScorgIA</div>
-          </div>
-          <span style={{ fontSize: 8.5, fontWeight: 700, color: '#60A5FA', padding: '2px 7px', background: 'rgba(96,165,250,0.12)', borderRadius: 99 }}>
-            ADMIN
-          </span>
+          {compact
+            ? <ScorgiaLogo variant="icon" width={24} height={24} />
+            : <ScorgiaLogo variant="dark" height={32} />
+          }
+          {!compact && (
+            <span style={{ fontSize: 8.5, fontWeight: 700, color: '#60A5FA', padding: '2px 7px', background: 'rgba(96,165,250,0.12)', borderRadius: 99, flexShrink: 0 }}>
+              ADMIN
+            </span>
+          )}
         </div>
 
         <div style={{ margin: '8px 10px 4px', padding: '5px 10px', background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.15)', borderRadius: 7, fontSize: 9.5, color: '#60A5FA', fontWeight: 600, textAlign: 'center', letterSpacing: '0.4px' }}>
@@ -237,16 +239,18 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
         onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
         onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
       >
-        <ScorgiaLogo variant="icon" width={24} height={24} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="sidebar-brand">ScorgIA</div>
-        </div>
-        <span style={{
-          fontSize: 8.5, fontWeight: 700,
-          color: badge.color, padding: '2px 7px',
-          background: badge.bg, borderRadius: 99,
-          letterSpacing: '0.3px', flexShrink: 0,
-        }}>{badge.label}</span>
+        {compact
+          ? <ScorgiaLogo variant="icon" width={24} height={24} />
+          : <ScorgiaLogo variant="dark" height={32} />
+        }
+        {!compact && (
+          <span style={{
+            fontSize: 8.5, fontWeight: 700,
+            color: badge.color, padding: '2px 7px',
+            background: badge.bg, borderRadius: 99,
+            letterSpacing: '0.3px', flexShrink: 0,
+          }}>{badge.label}</span>
+        )}
       </div>
 
       {/* ── Navigation ────────────────────────────────────────────────────── */}

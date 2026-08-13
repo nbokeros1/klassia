@@ -83,7 +83,7 @@ export default function ProgrammePage() {
       // Fallback : programme_annuel_id non renseigné sur le pack — chercher par classe_id
       const { data: prog } = await supabase
         .from('programme_annuel').select('*').eq('classe_id', id)
-        .order('created_at', { ascending: false }).limit(1).single()
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
       if (prog) {
         setProgramme(prog as ProgrammeAnnuel | null)
         // Réparer le FK silencieusement pour les prochains chargements
