@@ -226,6 +226,25 @@ export type Lecon = {
 
 // ─── Programme annuel ─────────────────────────────────────────────────────────
 
+// ── V2 : Résultats d'apprentissage normalisés ─────────────────────────────────
+
+export type CurriculumOutcomeType =
+  | 'resultat_apprentissage'
+  | 'grande_idee'
+  | 'competence'
+  | 'connaissance'
+  | 'standard'
+  | 'attente'
+
+export type CurriculumOutcome = {
+  id: string
+  code?: string
+  titre: string
+  description: string
+  type: CurriculumOutcomeType
+  parentId?: string
+}
+
 export type LeconProgramme = {
   numero: number
   titre: string
@@ -234,6 +253,16 @@ export type LeconProgramme = {
   type: 'introduction' | 'developpement' | 'evaluation' | 'synthese'
   statut?: StatutLecon
   lecon_id?: string
+  // ── Champs V2 (MON-ANNEE-V2) ─────────────────────────────────────────────
+  progression_role?: 'introduction' | 'acquisition' | 'pratique' | 'approfondissement' | 'integration' | 'evaluation' | 'autre'
+  objectif_apprentissage?: string
+  curriculum_outcome_ids?: string[]
+  activite_principale?: string
+  preuve_apprentissage?: string
+  justification?: string
+  // ── Champs V4 (MON-ANNEE-V4) — tracking enseignement ─────────────────────
+  date_enseignee?: string      // ISO date (YYYY-MM-DD) — renseignée lors du marquage
+  note_enseignement?: string   // note optionnelle laissée par l'enseignant
 }
 
 export type Unite = {
@@ -247,6 +276,14 @@ export type Unite = {
   lecons: LeconProgramme[]
   jours_feries?: string[]
   celebrations?: string[]
+  // ── Champs V2 (MON-ANNEE-V2) ─────────────────────────────────────────────
+  justification_pedagogique?: string
+  curriculum_outcome_ids?: string[]
+  grandes_idees?: string[]
+  concepts_cles?: string[]
+  prerequis?: string[]
+  activite_culminante?: string
+  evaluation_prevue?: string
 }
 
 export type ContenuProgramme = {
@@ -254,19 +291,51 @@ export type ContenuProgramme = {
   nb_semaines: number
   source_curriculum: string
   unites: Unite[]
+  curriculum_outcomes?: CurriculumOutcome[]
 }
 
 export type ProgrammeAnnuel = {
   id: string
   classe_id: string
-  titre: string
-  nb_semaines: number
-  contenu_json: ContenuProgramme
-  genere_par_ia: boolean
+  // ── Colonnes ajoutées par migration 039 (absentes en prod avant migration) ─
+  titre?: string
+  nb_semaines?: number
+  contenu_json?: ContenuProgramme
+  // ── Colonnes présentes en production (hors schema.sql) ───────────────────
+  curriculum_id?: string
+  nb_unites?: number
+  nb_lecons_total?: number
+  semaines_total?: number
+  genere_par_ia?: boolean
+  valide_par_prof?: boolean
   // ── Champs migration 036 ──────────────────────────────────────────────────
   teaching_pack_id?: string
   calendrier_json?: Record<string, unknown>
   syllabus_json?: Record<string, unknown>
+  // ── Champs migration 037 ──────────────────────────────────────────────────
+  modifie_par?: 'ia' | 'utilisateur' | null
+  version_numero?: number
+  qualite_json?: Record<string, unknown>
+  created_at: string
+}
+
+// ─── Teaching Events (V5) ─────────────────────────────────────────────────────
+
+export type TeachingEventType = 'lesson_taught' | 'lesson_taught_cancelled'
+
+export type TeachingEvent = {
+  id: string
+  enseignant_id: string
+  classe_id: string
+  teaching_pack_id: string
+  programme_annuel_id: string | null
+  sequence_index: number   // 0-based index into contenu_json.unites[]
+  lecon_index: number      // 0-based index into unite.lecons[]
+  lesson_ref: string | null // "packId:seqIdx:leconIdx"
+  event_type: TeachingEventType
+  occurred_at: string      // ISO 8601
+  note: string | null
+  metadata_json: Record<string, unknown>
   created_at: string
 }
 
@@ -426,6 +495,7 @@ export type FichierDossier = {
   type_fichier: TypeFichier
   url?: string
   storage_path?: string
+  mime_type?: string
   taille_bytes?: number
   statut: 'brouillon' | 'valide' | 'enseigne' | 'archive'
   lecon_id?: string
@@ -433,6 +503,15 @@ export type FichierDossier = {
   tags: string[]
   description?: string
   indexe_studio_ia: boolean
+  // ── Champs ajoutés par migration 037 (Teaching Pack Versions) ────────────
+  teaching_pack_id?: string
+  sequence_index?: number
+  lecon_index?: number
+  modifie_par_user?: boolean
+  version_numero?: number
+  source_meta_json?: Record<string, unknown>
+  // ── Champs ajoutés par migration 038 (Detailed Lesson) ───────────────────
+  contenu_json?: Record<string, unknown>
   created_at: string
   updated_at: string
 }
