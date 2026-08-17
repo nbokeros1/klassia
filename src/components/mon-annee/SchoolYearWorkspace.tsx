@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Classe, ProgrammeAnnuel, LeconProgramme, TeachingEvent } from '@/lib/types/database'
+import type { Classe, ProgrammeAnnuel, LeconProgramme, TeachingEvent, Lecon, Eleve, StudentSupportPlanRow } from '@/lib/types/database'
 import type { TeachingPack } from '@/lib/types/teaching-pack'
 import type { SchoolYearDashboardData, LessonTeachingState } from '@/lib/types/school-year-dashboard'
 import { makeLessonKey } from '@/lib/spie/teaching-events'
@@ -13,11 +13,16 @@ import CurriculumProgressSummary from '@/components/mon-annee/CurriculumProgress
 import QuickActions from '@/components/mon-annee/QuickActions'
 import ClassSupportSummary from '@/components/mon-annee/student-support/ClassSupportSummary'
 import StudentSupportList from '@/components/mon-annee/student-support/StudentSupportList'
-import type { Eleve, StudentSupportPlanRow } from '@/lib/types/database'
+import CurriculumView from '@/components/mon-annee/academic/CurriculumView'
+import SyllabusTab from '@/components/mon-annee/academic/SyllabusTab'
+import PlanAnnuelView from '@/components/mon-annee/academic/PlanAnnuelView'
+import SequencesView from '@/components/mon-annee/academic/SequencesView'
+import PlansLeconView from '@/components/mon-annee/academic/PlansLeconView'
+import LeconsWorkspace from '@/components/mon-annee/academic/LeconsWorkspace'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'apercu' | 'eleves_soutien' | 'curriculum' | 'syllabus' | 'plan_annuel' | 'sequences' | 'plans_lecon' | 'evaluations' | 'ressources'
+type Tab = 'apercu' | 'eleves_soutien' | 'curriculum' | 'syllabus' | 'plan_annuel' | 'sequences' | 'plans_lecon' | 'lecons' | 'evaluations' | 'ressources'
 
 interface Props {
   profil:         { id: string; prenom: string; nom: string; langue: string } | null
@@ -32,6 +37,7 @@ interface Props {
   onRefresh:      () => void
   eleves?:        Eleve[]
   supportPlans?:  StudentSupportPlanRow[]
+  lecons?:        Lecon[]
 }
 
 type ModalTarget = { lecon: LeconProgramme; seqIdx: number; leconIdx: number }
@@ -41,11 +47,12 @@ type ModalTarget = { lecon: LeconProgramme; seqIdx: number; leconIdx: number }
 const TABS: { id: Tab; label: string; migrated: boolean }[] = [
   { id: 'apercu',          label: 'Aperçu',          migrated: true },
   { id: 'eleves_soutien',  label: 'Élèves & Soutien', migrated: true },
-  { id: 'curriculum',      label: 'Curriculum',       migrated: false },
-  { id: 'syllabus',        label: 'Syllabus',         migrated: false },
-  { id: 'plan_annuel',     label: 'Plan Annuel',      migrated: false },
-  { id: 'sequences',       label: 'Séquences',        migrated: false },
-  { id: 'plans_lecon',     label: 'Plans de Leçon',   migrated: false },
+  { id: 'curriculum',      label: 'Curriculum',       migrated: true },
+  { id: 'syllabus',        label: 'Syllabus',         migrated: true },
+  { id: 'plan_annuel',     label: 'Plan Annuel',      migrated: true },
+  { id: 'sequences',       label: 'Séquences',        migrated: true },
+  { id: 'plans_lecon',     label: 'Plans de Leçon',   migrated: true },
+  { id: 'lecons',          label: 'Leçons',           migrated: true },
   { id: 'evaluations',     label: 'Évaluations',      migrated: false },
   { id: 'ressources',      label: 'Ressources',       migrated: false },
 ]
@@ -222,7 +229,7 @@ function NoPack({ classeId }: { classeId: string }) {
 export default function SchoolYearWorkspace({
   profil, allClasses, classeId, classe, pack, programme,
   dashboardData, loadingPack, onRefresh,
-  eleves = [], supportPlans = [],
+  eleves = [], supportPlans = [], lecons = [],
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('apercu')
 
@@ -248,6 +255,9 @@ export default function SchoolYearWorkspace({
     : null
 
   const anneeScolaire = pack?.annee_scolaire ?? classe?.annee_scolaire ?? ''
+  // ContenuProgramme vient du programme annuel
+  const contenu = programme?.contenu_json
+  const lessonStateMap = mergedData?.lessonStateMap
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary, #0F1B2D)' }}>
@@ -388,6 +398,45 @@ export default function SchoolYearWorkspace({
               classeId={classeId}
             />
           </div>
+        ) : activeTab === 'curriculum' ? (
+          <CurriculumView
+            contenu={contenu}
+            curriculumCoverage={mergedData?.curriculumCoverage}
+            lessonStateMap={lessonStateMap}
+            classeId={classeId}
+          />
+        ) : activeTab === 'syllabus' ? (
+          <SyllabusTab
+            pack={pack}
+            programme={programme}
+            classeId={classeId}
+          />
+        ) : activeTab === 'plan_annuel' ? (
+          <PlanAnnuelView
+            contenu={contenu}
+            lessonStateMap={lessonStateMap}
+            classeId={classeId}
+          />
+        ) : activeTab === 'sequences' ? (
+          <SequencesView
+            contenu={contenu}
+            lessonStateMap={lessonStateMap}
+            classeId={classeId}
+          />
+        ) : activeTab === 'plans_lecon' ? (
+          <PlansLeconView
+            contenu={contenu}
+            lecons={lecons}
+            lessonStateMap={lessonStateMap}
+            classeId={classeId}
+          />
+        ) : activeTab === 'lecons' ? (
+          <LeconsWorkspace
+            contenu={contenu}
+            lecons={lecons}
+            lessonStateMap={lessonStateMap}
+            classeId={classeId}
+          />
         ) : null /* non-migrated tabs handled via link — tab content never shown */}
       </div>
     </div>

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import LoadingScreen from '@/components/LoadingScreen'
 import SchoolYearWorkspace from '@/components/mon-annee/SchoolYearWorkspace'
-import type { Classe, ProgrammeAnnuel, ContenuProgramme, TeachingEvent, Eleve, StudentSupportPlanRow } from '@/lib/types/database'
+import type { Classe, ProgrammeAnnuel, ContenuProgramme, TeachingEvent, Eleve, StudentSupportPlanRow, Lecon } from '@/lib/types/database'
 import type { TeachingPack } from '@/lib/types/teaching-pack'
 import type { SchoolYearDashboardData } from '@/lib/types/school-year-dashboard'
 import { deriveData } from '@/lib/spie/derive-dashboard-data'
@@ -25,6 +25,7 @@ export default function WorkspacePage() {
   const [dashboardData,  setDashboardData]  = useState<SchoolYearDashboardData | null>(null)
   const [eleves,         setEleves]         = useState<Eleve[]>([])
   const [supportPlans,   setSupportPlans]   = useState<StudentSupportPlanRow[]>([])
+  const [lecons,         setLecons]         = useState<Lecon[]>([])
 
   const loadUser = useCallback(async () => {
     setLoading(true)
@@ -68,19 +69,21 @@ export default function WorkspacePage() {
     }
     setProgramme(prog)
 
-    // Fetch élèves de la classe + support plans (graceful si table non existante)
-    const [eventsRes, elevesRes, plansRes] = await Promise.all([
+    // Fetch élèves, support plans, teaching events et leçons en parallèle
+    const [eventsRes, elevesRes, plansRes, leconsRes] = await Promise.all([
       tp?.id
         ? supabase.from('teaching_events').select('*').eq('teaching_pack_id', tp.id).order('occurred_at', { ascending: true })
         : Promise.resolve({ data: [] }),
       supabase.from('eleves').select('id, classe_id, enseignant_id, prenom, nom, besoins, notes_enseignant').eq('classe_id', cid),
       supabase.from('student_support_plans').select('*').eq('classe_id', cid),
+      supabase.from('lecons').select('id, titre, sujet, numero, statut, duree_minutes, contenu_json, created_at, updated_at, classe_id, unite_id, enseignant_id').eq('classe_id', cid),
     ])
 
     const events = (eventsRes.data as TeachingEvent[] | null) ?? []
     setTeachingEvents(events)
     setEleves((elevesRes.data as Eleve[] | null) ?? [])
     setSupportPlans((plansRes.data as StudentSupportPlanRow[] | null) ?? [])
+    setLecons((leconsRes.data as Lecon[] | null) ?? [])
 
     if (typeof window !== 'undefined') localStorage.setItem('klassia_active_classe', cid)
 
@@ -114,6 +117,7 @@ export default function WorkspacePage() {
       onRefresh={handleRefresh}
       eleves={eleves}
       supportPlans={supportPlans}
+      lecons={lecons}
     />
   )
 }
