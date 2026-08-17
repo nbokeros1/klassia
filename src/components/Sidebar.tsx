@@ -43,6 +43,7 @@ interface NavItemDef {
   adminOnly?:   boolean
   communaute?:  boolean
   programmeNav?: boolean
+  newTab?:   boolean
 }
 
 interface NavSection {
@@ -60,7 +61,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { labelFr: 'Tableau de bord', labelEn: 'Dashboard',  icon: LayoutDashboard, href: '/dashboard' },
       { labelFr: 'Mes classes',     labelEn: 'My Classes', icon: GraduationCap,   href: '/dashboard/classes' },
-      { labelFr: 'Mon Année',       labelEn: 'My Year',    icon: BookOpen,        href: '/dashboard/classes', programmeNav: true },
+      { labelFr: 'Mon Année',       labelEn: 'My Year',    icon: BookOpen,        href: '/dashboard/mon-annee', newTab: true },
       { labelFr: 'Préparer',        labelEn: 'Prepare',    icon: PenLine,         href: '/dashboard/gerer/preparer' },
       { labelFr: 'Enseigner',       labelEn: 'Teach',      icon: Monitor,         href: '/dashboard/gerer/enseigner' },
       { labelFr: 'Bibliothèque',    labelEn: 'Library',    icon: Library,         href: '/dashboard/bibliotheque' },
@@ -116,23 +117,22 @@ function NavItem({
   badge?:  React.ReactNode
 }) {
   const Icon = def.icon
-  return (
-    <div
-      className={`sidebar-item${active ? ' active' : ''}`}
-      onClick={onClick}
-      onMouseEnter={e => {
-        if (!active) {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-          e.currentTarget.style.color = 'rgba(255,255,255,0.88)'
-        }
-      }}
-      onMouseLeave={e => {
-        if (!active) {
-          e.currentTarget.style.background = 'transparent'
-          e.currentTarget.style.color = 'rgba(255,255,255,0.52)'
-        }
-      }}
-    >
+  const hoverStyle = {
+    onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+      if (!active) {
+        (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)'
+        ;(e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.88)'
+      }
+    },
+    onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+      if (!active) {
+        (e.currentTarget as HTMLElement).style.background = 'transparent'
+        ;(e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.52)'
+      }
+    },
+  }
+  const inner = (
+    <>
       <span className="sidebar-item-icon">
         <Icon size={15} strokeWidth={1.75} />
       </span>
@@ -140,6 +140,31 @@ function NavItem({
         {isFr ? def.labelFr : def.labelEn}
       </span>
       {badge}
+    </>
+  )
+
+  if (def.newTab) {
+    return (
+      <a
+        href={def.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`sidebar-item${active ? ' active' : ''}`}
+        style={{ textDecoration: 'none', color: 'inherit' }}
+        {...hoverStyle}
+      >
+        {inner}
+      </a>
+    )
+  }
+
+  return (
+    <div
+      className={`sidebar-item${active ? ' active' : ''}`}
+      onClick={onClick}
+      {...hoverStyle}
+    >
+      {inner}
     </div>
   )
 }
