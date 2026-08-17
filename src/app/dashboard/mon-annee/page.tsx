@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import LoadingScreen from '@/components/LoadingScreen'
-import SchoolYearHub from '@/components/mon-annee/SchoolYearHub'
-import type { Classe, ProgrammeAnnuel, TeachingEvent } from '@/lib/types/database'
+import GlobalTeacherCockpit from '@/components/mon-annee/global/GlobalTeacherCockpit'
+import type { Classe, ProgrammeAnnuel, TeachingEvent, Eleve, StudentSupportPlanRow } from '@/lib/types/database'
 import type { TeachingPack } from '@/lib/types/teaching-pack'
 
 // ─── Hub inner (lit useSearchParams) ─────────────────────────────────────────
@@ -14,12 +14,14 @@ function MonAnneeHubInner() {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
-  const [loading,    setLoading]    = useState(true)
-  const [profil,     setProfil]     = useState<{ id: string; prenom: string; nom: string; langue: string } | null>(null)
-  const [classes,    setClasses]    = useState<Classe[]>([])
-  const [packs,      setPacks]      = useState<Record<string, TeachingPack>>({})
-  const [programmes, setProgrammes] = useState<Record<string, ProgrammeAnnuel>>({})
-  const [eventCounts,setEventCounts]= useState<Record<string, number>>({})  // packId → nb taught
+  const [loading,      setLoading]      = useState(true)
+  const [profil,       setProfil]       = useState<{ id: string; prenom: string; nom: string; langue: string } | null>(null)
+  const [classes,      setClasses]      = useState<Classe[]>([])
+  const [packs,        setPacks]        = useState<Record<string, TeachingPack>>({})
+  const [programmes,   setProgrammes]   = useState<Record<string, ProgrammeAnnuel>>({})
+  const [eventCounts,  setEventCounts]  = useState<Record<string, number>>({})  // packId → nb taught
+  const [eleves,       setEleves]       = useState<Eleve[]>([])
+  const [supportPlans, setSupportPlans] = useState<StudentSupportPlanRow[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -41,11 +43,12 @@ function MonAnneeHubInner() {
 
     const classeIds = cls.map(c => c.id)
 
-    // Batch : packs, programmes, events en parallèle
-    const [packsRes, progRes, eventsRes] = await Promise.all([
+    // Batch : packs, programmes, events, élèves en parallèle
+    const [packsRes, progRes, eventsRes, elevesRes] = await Promise.all([
       supabase.from('teaching_packs').select('*').in('classe_id', classeIds),
       supabase.from('programme_annuel').select('id, classe_id, nb_unites, nb_lecons_total, syllabus_json, contenu_json').in('classe_id', classeIds),
       supabase.from('teaching_events').select('teaching_pack_id, sequence_index, lecon_index, event_type, occurred_at').in('classe_id', classeIds).order('occurred_at', { ascending: true }),
+      supabase.from('eleves').select('id, classe_id, enseignant_id, prenom, nom, besoins, notes_enseignant').eq('enseignant_id', profilData.id),
     ])
 
     // Indexer packs par classe_id (prend le plus récent si plusieurs)
@@ -77,6 +80,15 @@ function MonAnneeHubInner() {
     }
     setEventCounts(counts)
 
+    setEleves((elevesRes.data as Eleve[] | null) ?? [])
+
+    // Plans de soutien — graceful: table PROPOSÉE (migration 042), peut ne pas exister
+    const { data: plansData } = await supabase
+      .from('student_support_plans')
+      .select('*')
+      .eq('enseignant_id', profilData.id)
+    setSupportPlans((plansData as StudentSupportPlanRow[] | null) ?? [])
+
     // Préférence de classe active pour lien hub
     const qParam = searchParams.get('classeId')
     if (qParam && typeof window !== 'undefined') {
@@ -91,12 +103,14 @@ function MonAnneeHubInner() {
   if (loading) return <LoadingScreen />
 
   return (
-    <SchoolYearHub
+    <GlobalTeacherCockpit
       profil={profil}
       classes={classes}
       packs={packs}
       programmes={programmes}
       eventCounts={eventCounts}
+      eleves={eleves}
+      supportPlans={supportPlans}
     />
   )
 }

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import LoadingScreen from '@/components/LoadingScreen'
 import SchoolYearWorkspace from '@/components/mon-annee/SchoolYearWorkspace'
-import type { Classe, ProgrammeAnnuel, ContenuProgramme, TeachingEvent } from '@/lib/types/database'
+import type { Classe, ProgrammeAnnuel, ContenuProgramme, TeachingEvent, Eleve, StudentSupportPlanRow } from '@/lib/types/database'
 import type { TeachingPack } from '@/lib/types/teaching-pack'
 import type { SchoolYearDashboardData } from '@/lib/types/school-year-dashboard'
 import { deriveData } from '@/lib/spie/derive-dashboard-data'
@@ -23,6 +23,8 @@ export default function WorkspacePage() {
   const [teachingEvents, setTeachingEvents] = useState<TeachingEvent[]>([])
   const [loadingPack,    setLoadingPack]    = useState(false)
   const [dashboardData,  setDashboardData]  = useState<SchoolYearDashboardData | null>(null)
+  const [eleves,         setEleves]         = useState<Eleve[]>([])
+  const [supportPlans,   setSupportPlans]   = useState<StudentSupportPlanRow[]>([])
 
   const loadUser = useCallback(async () => {
     setLoading(true)
@@ -66,17 +68,22 @@ export default function WorkspacePage() {
     }
     setProgramme(prog)
 
-    let events: TeachingEvent[] = []
-    if (tp?.id) {
-      const { data: eventsData } = await supabase
-        .from('teaching_events').select('*').eq('teaching_pack_id', tp.id).order('occurred_at', { ascending: true })
-      events = (eventsData as TeachingEvent[] | null) ?? []
-    }
+    // Fetch élèves de la classe + support plans (graceful si table non existante)
+    const [eventsRes, elevesRes, plansRes] = await Promise.all([
+      tp?.id
+        ? supabase.from('teaching_events').select('*').eq('teaching_pack_id', tp.id).order('occurred_at', { ascending: true })
+        : Promise.resolve({ data: [] }),
+      supabase.from('eleves').select('id, classe_id, enseignant_id, prenom, nom, besoins, notes_enseignant').eq('classe_id', cid),
+      supabase.from('student_support_plans').select('*').eq('classe_id', cid),
+    ])
+
+    const events = (eventsRes.data as TeachingEvent[] | null) ?? []
     setTeachingEvents(events)
+    setEleves((elevesRes.data as Eleve[] | null) ?? [])
+    setSupportPlans((plansRes.data as StudentSupportPlanRow[] | null) ?? [])
 
     if (typeof window !== 'undefined') localStorage.setItem('klassia_active_classe', cid)
 
-    const contenu = prog?.contenu_json as ContenuProgramme | undefined
     const annee   = tp?.annee_scolaire ?? (classeData as Classe | null)?.annee_scolaire ?? undefined
     const derived = deriveData(tp, prog, events, annee)
     setDashboardData(derived)
@@ -105,6 +112,8 @@ export default function WorkspacePage() {
       dashboardData={dashboardData}
       loadingPack={loadingPack}
       onRefresh={handleRefresh}
+      eleves={eleves}
+      supportPlans={supportPlans}
     />
   )
 }

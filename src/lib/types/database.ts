@@ -664,6 +664,38 @@ export type Eleve = {
   updated_at: string
 }
 
+// ─── Student Support Plans (V7.1 — table PROPOSÉE, migration 042) ────────────
+// Forme DB d'un plan de soutien — colonnes JSONB non typées à la couche DB.
+// La couche application (src/lib/pedagogy/student/) impose les types métier.
+
+export type SupportPlanStatut = 'brouillon' | 'actif' | 'en_revue' | 'archive'
+export type SupportPlanConfidentialite = 'enseignant' | 'equipe_ecole' | 'direction'
+
+export type StudentSupportPlanRow = {
+  id: string
+  eleve_id: string
+  classe_id: string
+  enseignant_id: string
+  annee_scolaire: string
+  statut: SupportPlanStatut
+  date_creation: string
+  date_revision?: string | null
+  date_archive?: string | null
+  equipe_roles?: string[] | null
+  profil_pedagogique?: unknown
+  support_data?: unknown
+  baseline?: string | null
+  sources_baseline?: string[] | null
+  objectifs: unknown[]
+  interventions: unknown[]
+  review_entries: unknown[]
+  ai_suggestions: unknown[]
+  changes_log: unknown[]
+  niveau_confidentialite: SupportPlanConfidentialite
+  created_at: string
+  updated_at: string
+}
+
 // ─── Activités (table DB) ─────────────────────────────────────────────────────
 
 export type TypeActivite =

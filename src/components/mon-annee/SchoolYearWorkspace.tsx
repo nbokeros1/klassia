@@ -11,10 +11,13 @@ import NowSection from '@/components/mon-annee/NowSection'
 import AnnualFlightPlan from '@/components/mon-annee/AnnualFlightPlan'
 import CurriculumProgressSummary from '@/components/mon-annee/CurriculumProgressSummary'
 import QuickActions from '@/components/mon-annee/QuickActions'
+import ClassSupportSummary from '@/components/mon-annee/student-support/ClassSupportSummary'
+import StudentSupportList from '@/components/mon-annee/student-support/StudentSupportList'
+import type { Eleve, StudentSupportPlanRow } from '@/lib/types/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'apercu' | 'curriculum' | 'syllabus' | 'plan_annuel' | 'sequences' | 'plans_lecon' | 'evaluations' | 'ressources'
+type Tab = 'apercu' | 'eleves_soutien' | 'curriculum' | 'syllabus' | 'plan_annuel' | 'sequences' | 'plans_lecon' | 'evaluations' | 'ressources'
 
 interface Props {
   profil:         { id: string; prenom: string; nom: string; langue: string } | null
@@ -27,6 +30,8 @@ interface Props {
   dashboardData:  SchoolYearDashboardData | null
   loadingPack:    boolean
   onRefresh:      () => void
+  eleves?:        Eleve[]
+  supportPlans?:  StudentSupportPlanRow[]
 }
 
 type ModalTarget = { lecon: LeconProgramme; seqIdx: number; leconIdx: number }
@@ -34,14 +39,15 @@ type ModalTarget = { lecon: LeconProgramme; seqIdx: number; leconIdx: number }
 // ─── Mini-nav tabs ────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; migrated: boolean }[] = [
-  { id: 'apercu',      label: 'Aperçu',          migrated: true },
-  { id: 'curriculum',  label: 'Curriculum',       migrated: false },
-  { id: 'syllabus',    label: 'Syllabus',         migrated: false },
-  { id: 'plan_annuel', label: 'Plan Annuel',      migrated: false },
-  { id: 'sequences',   label: 'Séquences',        migrated: false },
-  { id: 'plans_lecon', label: 'Plans de Leçon',   migrated: false },
-  { id: 'evaluations', label: 'Évaluations',      migrated: false },
-  { id: 'ressources',  label: 'Ressources',       migrated: false },
+  { id: 'apercu',          label: 'Aperçu',          migrated: true },
+  { id: 'eleves_soutien',  label: 'Élèves & Soutien', migrated: true },
+  { id: 'curriculum',      label: 'Curriculum',       migrated: false },
+  { id: 'syllabus',        label: 'Syllabus',         migrated: false },
+  { id: 'plan_annuel',     label: 'Plan Annuel',      migrated: false },
+  { id: 'sequences',       label: 'Séquences',        migrated: false },
+  { id: 'plans_lecon',     label: 'Plans de Leçon',   migrated: false },
+  { id: 'evaluations',     label: 'Évaluations',      migrated: false },
+  { id: 'ressources',      label: 'Ressources',       migrated: false },
 ]
 
 function tabHref(tab: Tab, classeId: string): string {
@@ -216,6 +222,7 @@ function NoPack({ classeId }: { classeId: string }) {
 export default function SchoolYearWorkspace({
   profil, allClasses, classeId, classe, pack, programme,
   dashboardData, loadingPack, onRefresh,
+  eleves = [], supportPlans = [],
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('apercu')
 
@@ -349,7 +356,7 @@ export default function SchoolYearWorkspace({
 
       {/* ── Contenu ──────────────────────────────────────────────────────────── */}
       <div style={{ padding: '32px 28px 56px', maxWidth: 1320, margin: '0 auto' }}>
-        {loadingPack && !mergedData ? (
+        {loadingPack && !mergedData && activeTab === 'apercu' ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)', fontSize: 14 }}>
             Chargement…
           </div>
@@ -367,6 +374,20 @@ export default function SchoolYearWorkspace({
           ) : (
             <NoPack classeId={classeId} />
           )
+        ) : activeTab === 'eleves_soutien' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <ClassSupportSummary
+              eleves={eleves}
+              supportPlans={supportPlans}
+              classeId={classeId}
+            />
+            <StudentSupportList
+              eleves={eleves}
+              supportPlans={supportPlans}
+              classes={allClasses}
+              classeId={classeId}
+            />
+          </div>
         ) : null /* non-migrated tabs handled via link — tab content never shown */}
       </div>
     </div>
