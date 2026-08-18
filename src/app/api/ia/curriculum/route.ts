@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getMaxTokens } from '@/lib/ia/get-max-tokens'
 import { requireAuth } from '@/lib/api-auth'
+import { validatePedagogicalProgramme, summariseViolations } from '@/lib/spie/validate-pedagogical-programme'
 
 export const maxDuration = 60
 
@@ -114,27 +115,35 @@ Same JSON structure but in English.`
       const clean = texte.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
       programme = JSON.parse(clean)
     } catch {
-      programme = {
-        titre: `Programme de ${matiere || 'Matière'} — ${niveau || 'Niveau'}`,
-        nb_semaines,
-        source_curriculum: curriculum_officiel || 'personnalisé',
-        unites: Array.from({ length: 6 }, (_, i) => ({
-          numero: i + 1,
-          titre: `Unité ${i + 1}`,
-          theme: '',
-          semaine_debut: i * 6 + 1,
-          semaine_fin: (i + 1) * 6,
-          objectifs: ['Objectif principal', 'Objectif secondaire'],
-          competences: [],
-          lecons: Array.from({ length: 5 }, (_, j) => ({
-            numero: i * 5 + j + 1,
-            titre: `Leçon ${i * 5 + j + 1}`,
-            sujet: 'Contenu à définir',
-            duree_minutes: 75,
-            type: 'developpement',
-          })),
-        })),
-      }
+      console.error('[SPIE_CURRICULUM_GENERATION_INVALID]', {
+        step:            'parse',
+        code:            'CURRICULUM_GENERATION_INVALID',
+        matiere,
+        niveau,
+        curriculum_officiel,
+        responseLength:  texte.length,
+        responsePreview: texte.substring(0, 200),
+      })
+      return NextResponse.json(
+        { success: false, error: 'Le curriculum n\'a pas pu être généré. Réessayez dans quelques instants.', code: 'CURRICULUM_GENERATION_INVALID' },
+        { status: 422 },
+      )
+    }
+
+    // Block placeholder data before any DB write
+    const validation = validatePedagogicalProgramme(programme)
+    if (!validation.valid) {
+      console.error('[SPIE_PLACEHOLDER_BLOCKED]', {
+        step:    'validate',
+        code:    'CURRICULUM_GENERATION_INVALID',
+        matiere,
+        niveau,
+        summary: summariseViolations(validation.violations),
+      })
+      return NextResponse.json(
+        { success: false, error: 'Le programme généré contient des données génériques. Réessayez.', code: 'CURRICULUM_GENERATION_INVALID' },
+        { status: 422 },
+      )
     }
 
     // Save to programme_annuel (no unites table dependency)
