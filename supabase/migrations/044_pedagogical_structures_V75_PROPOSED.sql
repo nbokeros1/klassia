@@ -1,7 +1,7 @@
 -- ╔══════════════════════════════════════════════════════════════════════════════╗
--- ║  MIGRATION 044 — PEDAGOGICAL STRUCTURES V7.5                               ║
+-- ║  MIGRATION 044 — PEDAGOGICAL STRUCTURES V7.5.1                             ║
 -- ║  STATUS : PROPOSED — DO NOT EXECUTE WITHOUT PRODUCT OWNER APPROVAL         ║
--- ║  Author  : ScorgIA V7.5 / 2026-08-18                                       ║
+-- ║  Author  : ScorgIA V7.5.1 / 2026-08-18                                     ║
 -- ╚══════════════════════════════════════════════════════════════════════════════╝
 --
 -- This file is architecture documentation only. Applying it requires:
@@ -13,10 +13,49 @@
 -- Ghost table 'unites' (created in migration 038, never populated) should be
 -- reviewed and either populated or dropped before this migration runs.
 -- See docs/Architecture/SCORGIA_V7_5_PRE_IMPLEMENTATION_AUDIT.md §5 for context.
+--
+-- V7.5.1 CHANGE: Added pedagogical_units table (macro level).
+-- Canonical hierarchy: pedagogical_units → pedagogical_sequences → pedagogical_lessons
+-- 1 unit → N sequences (N ≥ 1). Never 1:1 by assumption.
 
--- ─── 1. Canonical pedagogical_sequences ───────────────────────────────────────
+-- ─── 1. Canonical pedagogical_units ───────────────────────────────────────────
+-- New in V7.5.1. Represents the macro thematic grouping level above sequences.
+-- One unit groups one or more sequences sharing a curricular domain (RAG code prefix).
+-- Corresponds to UnitScaffold in the TypeScript layer and units[] in ContenuProgramme.
+
+CREATE TABLE IF NOT EXISTS pedagogical_units (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  teaching_pack_id     UUID NOT NULL REFERENCES teaching_packs(id) ON DELETE CASCADE,
+  programme_annuel_id  UUID REFERENCES programme_annuel(id) ON DELETE SET NULL,
+  enseignant_id        UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+  classe_id            UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+
+  -- Identity
+  numero               INTEGER NOT NULL,          -- 1-based ordering
+  titre                TEXT NOT NULL,
+  domain_code          TEXT,                       -- "A", "B", "C" from RAG prefix; "G1" fallback
+
+  -- Curriculum linkage
+  curriculum_outcome_ids   TEXT[] DEFAULT '{}',   -- NormalizedOutcome codes (all sequences)
+
+  -- Status
+  statut               TEXT NOT NULL DEFAULT 'planifiee'
+                         CHECK (statut IN ('planifiee', 'en_cours', 'terminee', 'reportee')),
+
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT uq_unit_numero_programme UNIQUE (programme_annuel_id, numero)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ped_unit_pack       ON pedagogical_units(teaching_pack_id);
+CREATE INDEX IF NOT EXISTS idx_ped_unit_classe      ON pedagogical_units(classe_id);
+CREATE INDEX IF NOT EXISTS idx_ped_unit_programme   ON pedagogical_units(programme_annuel_id);
+
+-- ─── 2. Canonical pedagogical_sequences ───────────────────────────────────────
 -- Replaces the AYDTE SequenceBlock JSON blob with a first-class DB record.
 -- Corresponds to the current "unité" concept (= what JSON calls a "séquence").
+-- FK to pedagogical_units enforces 1 unit → N sequences (N ≥ 1).
 
 CREATE TABLE IF NOT EXISTS pedagogical_sequences (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -24,6 +63,9 @@ CREATE TABLE IF NOT EXISTS pedagogical_sequences (
   programme_annuel_id  UUID REFERENCES programme_annuel(id) ON DELETE SET NULL,
   enseignant_id        UUID NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
   classe_id            UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+
+  -- Unit grouping (1 unit → N sequences — new in V7.5.1)
+  unit_id              UUID REFERENCES pedagogical_units(id) ON DELETE SET NULL,
 
   -- Identity
   numero               INTEGER NOT NULL,          -- 1-based ordering (stable sort key)
@@ -132,8 +174,38 @@ ALTER TABLE fichiers_dossier
 
 -- ─── 4. Row Level Security ────────────────────────────────────────────────────
 
+ALTER TABLE pedagogical_units     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pedagogical_sequences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pedagogical_lessons   ENABLE ROW LEVEL SECURITY;
+
+-- Units: teacher owns their class's units
+CREATE POLICY unit_select ON pedagogical_units
+  FOR SELECT USING (
+    enseignant_id IN (
+      SELECT id FROM utilisateurs WHERE user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY unit_insert ON pedagogical_units
+  FOR INSERT WITH CHECK (
+    enseignant_id IN (
+      SELECT id FROM utilisateurs WHERE user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY unit_update ON pedagogical_units
+  FOR UPDATE USING (
+    enseignant_id IN (
+      SELECT id FROM utilisateurs WHERE user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY unit_delete ON pedagogical_units
+  FOR DELETE USING (
+    enseignant_id IN (
+      SELECT id FROM utilisateurs WHERE user_id = auth.uid()
+    )
+  );
 
 -- Sequences: teacher owns their class's sequences
 CREATE POLICY seq_select ON pedagogical_sequences
@@ -200,6 +272,10 @@ RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$;
 
+CREATE TRIGGER unit_updated_at
+  BEFORE UPDATE ON pedagogical_units
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 CREATE TRIGGER seq_updated_at
   BEFORE UPDATE ON pedagogical_sequences
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -210,21 +286,27 @@ CREATE TRIGGER lesson_updated_at
 
 -- ─── Migration notes ──────────────────────────────────────────────────────────
 --
--- Data migration (V2 → V3) is NOT included here. Steps when GO decision is made:
+-- Data migration (V1/V2 → V3) is NOT included here. Steps when GO decision is made:
 --
--- 1. For each programme_annuel with schema_version = 'v2':
---    a. Re-run AYDTE bridge on curriculum_contenu to get SequenceBlock[]
---    b. INSERT INTO pedagogical_sequences one row per unite
---    c. INSERT INTO pedagogical_lessons one row per leçon
---    d. UPDATE contenu_json: set sequence_id on each unite
---    e. UPDATE schema_version = 'v3'
+-- 1. For each programme_annuel with schema_version 'v1'/'v2':
+--    a. Re-run AYDTE bridge on curriculum_contenu to get UnitScaffold[] + SequenceBlock[]
+--    b. INSERT INTO pedagogical_units one row per UnitScaffold
+--       (unit_id = UnitScaffold.unitId, domain_code = UnitScaffold.domainCode)
+--    c. INSERT INTO pedagogical_sequences one row per unite, with unit_id FK
+--    d. INSERT INTO pedagogical_lessons one row per leçon
+--    e. UPDATE contenu_json: set sequence_id + unit_id on each unite, populate units[]
+--    f. UPDATE schema_version = 'v3'
 --
 -- 2. For each teaching_event:
 --    a. Resolve lesson by (sequence_index, lecon_index) → pedagogical_lesson_id
 --    b. UPDATE teaching_events SET pedagogical_lesson_id = resolved_id
 --
 -- 3. Toggle reads: getCanonicalPedagogicalYear() already reads canonical tables
---    first (via pedagogical_sequences), then falls back to JSON — toggle is safe.
+--    first, then falls back to JSON — toggle is safe.
+--
+-- Cardinality invariant to verify after migration:
+--    SELECT unit_id, COUNT(*) FROM pedagogical_sequences GROUP BY unit_id
+--    — every unit_id must have >= 1 sequence; no unit with 0 sequences allowed.
 --
 -- Estimated impact: ~0 existing rows (tables are new). No backfill unless
 -- the ghost 'unites' table migration is also triggered simultaneously.

@@ -23,6 +23,7 @@ import { validatePedagogicalProgramme, summariseViolations } from '@/lib/spie/va
 import { extractOutcomesFromText, formatOutcomesForPrompt } from '@/lib/spie/curriculum/extraction/curriculum-bridge'
 import type { NormalizedOutcome } from '@/lib/spie/curriculum/extraction/types'
 import { buildAydtePlanningBridge } from '@/lib/spie/curriculum/planning/aydte-planning-bridge'
+import { reconstructFromScaffold, validateV3Structure } from '@/lib/spie/validate-v3-structure'
 
 export const maxDuration = 300
 
@@ -321,6 +322,7 @@ export async function POST(request: Request) {
               console.info('[AYDTE_COMPLETE]', {
                 packId,
                 classeId:        input.classe_id,
+                units:           aydteBridgeResult.units.length,
                 sequences:       aydteBridgeResult.sequences.length,
                 coveragePercent: aydteBridgeResult.coveragePercent,
                 pacingScore:     aydteBridgeResult.pacingScore,
@@ -368,7 +370,7 @@ export async function POST(request: Request) {
 - Durée : ${nbSemaines} semaines
 - Curriculum : ${input.curriculum_officiel ?? 'personnalisé'}
 ${structuredCtx.outcomesExtracted ? `- Résultats d'apprentissage normalisés : ${structuredCtx.outcomeCount} outcomes extraits (voir ci-dessous)` : ''}
-${aydteBridgeResult?.success ? `- Structure AYDTE : ${aydteBridgeResult.sequences.length} séquences calculées (couverture ${aydteBridgeResult.coveragePercent}%)` : ''}
+${aydteBridgeResult?.success ? `- Structure AYDTE : ${aydteBridgeResult.units.length} unités, ${aydteBridgeResult.sequences.length} séquences (couverture ${aydteBridgeResult.coveragePercent}%)` : ''}
 
 ${structuredCtx.contextBlock}
 ${aydteBridgeResult?.success ? `\n${aydteBridgeResult.scaffoldPrompt}` : ''}
@@ -376,10 +378,13 @@ ${aydteBridgeResult?.success ? `\n${aydteBridgeResult.scaffoldPrompt}` : ''}
 RÈGLES IMPÉRATIVES :
 1. Titres réels pour unités et leçons (JAMAIS "Unité 1", "Leçon 1", "Contenu à définir")
 2. objectif_apprentissage de chaque leçon commence par "L'élève peut..."
-3. justification_pedagogique de chaque unité : 2 phrases max
-4. Nombre d'unités et leçons déterminé par le curriculum (cible 4 à 8 unités, 2 à 6 leçons par unité selon la complexité pédagogique), distribué sur ${nbSemaines} semaines
-5. 4 à 8 curriculum_outcomes au niveau racine — utilise les codes réels du curriculum si disponibles${structuredCtx.outcomesExtracted ? ', sinon codes descriptifs' : ''}
-6. Ne fabrique AUCUN champ absent du curriculum source (question_directrice, CCHP, etc.) — laisse vide plutôt qu'inventer
+3. justification_pedagogique de chaque unité : 2 phrases max${aydteBridgeResult?.success ? `
+4. COPIE EXACTEMENT les unit_id et sequence_id du scaffold AYDTE dans ton JSON
+5. "units" contient les unités macro (une par domaine AYDTE) avec leurs sequence_ids[]
+6. "unites" contient les séquences détaillées (une par sequence_id) avec unit_id ET sequence_id exacts` : `
+4. Nombre d'unités et leçons déterminé par le curriculum (cible 4 à 8 unités, 2 à 6 leçons par unité), distribué sur ${nbSemaines} semaines`}
+${aydteBridgeResult?.success ? '7.' : '5.'} 4 à 8 curriculum_outcomes au niveau racine — utilise les codes réels du curriculum si disponibles${structuredCtx.outcomesExtracted ? ', sinon codes descriptifs' : ''}
+${aydteBridgeResult?.success ? '8.' : '6.'} Ne fabrique AUCUN champ absent du curriculum source (question_directrice, CCHP, etc.) — laisse vide plutôt qu'inventer
 
 Format JSON EXACT :
 {
@@ -388,10 +393,21 @@ Format JSON EXACT :
   "source_curriculum": "${input.curriculum_officiel ?? 'personnalisé'}",
   "curriculum_outcomes": [
     {"id": "RA-1.1", "code": "1.1", "titre": "Titre RA court", "description": "Description concise du résultat.", "type": "resultat_apprentissage"}
-  ],
+  ]${aydteBridgeResult?.success ? `,
+  "units": [
+    {
+      "id": "<unit_id exact du scaffold>",
+      "numero": 1,
+      "titre": "Titre thématique réel de l'unité macro",
+      "outcome_ids": ["code1", "code2"],
+      "sequence_ids": ["<sequence_id exact du scaffold>"]
+    }
+  ]` : ''},
   "unites": [
     {
-      "numero": 1,
+      "numero": 1,${aydteBridgeResult?.success ? `
+      "sequence_id": "<sequence_id exact du scaffold>",
+      "unit_id": "<unit_id exact du scaffold>",` : ''}
       "titre": "Titre réel et descriptif de la séquence",
       "theme": "Thème central",
       "justification_pedagogique": "Pourquoi cette séquence à ce moment et ses liens avec le curriculum.",
@@ -484,23 +500,40 @@ Format JSON EXACT :
             controller.close(); return
           }
 
-          // V7.5 — stamp AYDTE sequence_id on each unite (positional best-effort match)
+          // V7.5.1 — canonical stamping: ID-based match then positional fallback (NO POSITIONAL-ONLY)
           if (aydteBridgeResult?.success && aydteBridgeResult.sequences.length > 0) {
-            const stampedUnites = parsedProg.unites.map((u, i) => ({
-              ...u,
-              sequence_id: aydteBridgeResult!.sequences[i]?.id,
-            }))
+            const scaffold = {
+              units:       aydteBridgeResult.units,
+              sequenceIds: aydteBridgeResult.sequences.map(s => s.id),
+            }
+
+            // Reconstruct canonical IDs (uses ID-based match + positional fallback)
+            const reconstructed = reconstructFromScaffold(parsedProg, scaffold.units, aydteBridgeResult.sequences)
+
+            // Validate structural cardinality
+            const structureCheck = validateV3Structure(reconstructed, scaffold)
+            if (!structureCheck.valid) {
+              console.warn('[V3_STRUCTURE_WARNINGS]', {
+                packId,
+                classeId: input.classe_id,
+                errors:   structureCheck.errors.map(e => e.code),
+                warnings: structureCheck.warnings.slice(0, 3),
+              })
+            }
+
             programme = {
-              ...parsedProg,
-              unites:        stampedUnites,
+              ...reconstructed,
               schema_version: 'v3' as const,
             }
             console.info('[PEDAGOGICAL_STRUCTURE_CREATED]', {
               packId,
-              classeId:       input.classe_id,
-              schema_version: 'v3',
-              sequences:      aydteBridgeResult.sequences.length,
-              unitesStamped:  stampedUnites.filter(u => u.sequence_id).length,
+              classeId:        input.classe_id,
+              schema_version:  'v3',
+              units:           structureCheck.unitCount,
+              sequences:       structureCheck.sequenceCount,
+              lessons:         structureCheck.lessonCount,
+              structureValid:  structureCheck.valid,
+              missingIds:      structureCheck.missingScaffoldIds.length,
             })
           } else {
             programme = { ...parsedProg, schema_version: 'v2' as const }
