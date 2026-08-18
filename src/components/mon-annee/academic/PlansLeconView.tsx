@@ -1,283 +1,98 @@
 'use client'
 
-import { useState } from 'react'
-import type { ContenuProgramme, Unite, LeconProgramme, Lecon, ContenuLecon } from '@/lib/types/database'
+import { useState, useMemo } from 'react'
+import type { ContenuProgramme, Lecon } from '@/lib/types/database'
 import type { LessonTeachingState } from '@/lib/types/school-year-dashboard'
+import {
+  buildPedagogicalYearTree,
+  LESSON_STATUS_CFG,
+  htmlToText,
+  type LessonNode,
+  type PedagogicalYearTree,
+} from '@/lib/spie/pedagogical-year-tree'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Props {
   contenu:        ContenuProgramme | undefined
-  lecons:         Lecon[]                                         // DB rows préparées
+  lecons:         Lecon[]
   lessonStateMap: Record<string, LessonTeachingState> | undefined
   classeId:       string
 }
 
-type SelectedLecon = { seqIdx: number; leconIdx: number; leconProg: LeconProgramme }
+// ─── Design tokens — two-pane system ─────────────────────────────────────────
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-type LeconStatus = 'enseignee' | 'preparee' | 'planifiee'
-
-function resolveStatus(l: LeconProgramme, si: number, li: number, map?: Record<string, LessonTeachingState>): LeconStatus {
-  if (map?.[`${si}:${li}`]?.isTaught ?? l.statut === 'enseignee') return 'enseignee'
-  if (l.lecon_id) return 'preparee'
-  return 'planifiee'
+const NAV = {
+  bg:       'rgba(13,30,58,0.95)',
+  blur:     'blur(10px)',
+  border:   '1px solid rgba(255,255,255,0.07)',
+  text:     'rgba(255,255,255,0.92)',
+  sub:      'rgba(255,255,255,0.52)',
+  muted:    'rgba(255,255,255,0.32)',
+  hover:    'rgba(255,255,255,0.05)',
+  selBg:    'rgba(108,92,231,0.22)',
+  selBord:  '#6C5CE7',
 }
 
-const STATUS_CFG: Record<LeconStatus, { label: string; color: string }> = {
-  enseignee: { label: 'Enseignée', color: '#22C55E' },
-  preparee:  { label: 'Préparée',  color: '#6C5CE7' },
-  planifiee: { label: 'Planifiée', color: '#94A3B8' },
-}
+// ─── Shared micro-components ──────────────────────────────────────────────────
 
-function htmlToText(html: string | undefined): string {
-  if (!html) return ''
-  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
-function sectionText(val: string | string[] | undefined): string | null {
-  if (!val) return null
-  if (Array.isArray(val)) return val.filter(Boolean).join('\n')
-  return htmlToText(val) || null
-}
-
-// ─── Section collapsable du plan ──────────────────────────────────────────────
-
-function PlanSection({ titre, children, defaultOpen = true }: {
-  titre: string; children: React.ReactNode; defaultOpen?: boolean
-}) {
-  const [open, setOpen] = useState(defaultOpen)
+function SectionLabel({ children }: { children: string }) {
   return (
-    <div style={{ borderBottom: '1px solid var(--card-border)' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', padding: '12px 0', textAlign: 'left',
-          background: 'none', border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}
-      >
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.5px', color: 'var(--text-muted)', textTransform: 'uppercase', flex: 1 }}>
-          {titre}
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--text-muted)', transform: open ? 'rotate(180deg)' : '', transition: 'transform 0.15s' }}>▼</span>
-      </button>
-      {open && (
-        <div style={{ paddingBottom: 16, fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-          {children}
-        </div>
-      )}
+    <div style={{
+      fontSize: 8.5, fontWeight: 800, letterSpacing: '0.9px', textTransform: 'uppercase',
+      color: '#8B97AC', borderBottom: '1px solid rgba(15,35,65,0.07)',
+      paddingBottom: 7, marginBottom: 14,
+    }}>{children}</div>
+  )
+}
+
+function MetaField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 9 }}>
+      <div style={{
+        fontSize: 10, fontWeight: 700, color: '#8B97AC', width: 110,
+        flexShrink: 0, paddingTop: 1, textTransform: 'uppercase', letterSpacing: '0.3px',
+      }}>{label}</div>
+      <div style={{ flex: 1, fontSize: 12.5, color: '#5B6B85', lineHeight: 1.55 }}>
+        {children}
+      </div>
     </div>
   )
 }
 
-function Absent({ label }: { label: string }) {
-  return <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontStyle: 'italic' }}>— {label}</span>
-}
-
-function TextContent({ val }: { val: string | undefined | null }) {
-  if (!val) return <Absent label="À compléter" />
-  return <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{val}</div>
-}
-
-function ListContent({ items }: { items: string[] | undefined }) {
-  if (!items || items.length === 0) return <Absent label="À compléter" />
+function PlanCheck({ label, done }: { label: string; done: boolean }) {
   return (
-    <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {items.map((it, i) => (
-        <li key={i} style={{ display: 'flex', gap: 8 }}>
-          <span style={{ color: '#6C5CE7', flexShrink: 0, fontWeight: 700 }}>·</span>
-          {it}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-// ─── Rendu document plan de leçon ─────────────────────────────────────────────
-
-function LessonPlanDocument({
-  leconProg, lecon, classeId,
-}: {
-  leconProg: LeconProgramme
-  lecon:     Lecon | null
-  classeId:  string
-}) {
-  const c: ContenuLecon | null = lecon?.contenu_json ?? null
-
-  const objectifs     = sectionText(c?.objectifs)
-  const criteres      = sectionText(c?.criteres)
-  const materiel      = sectionText(c?.materiel)
-  const differentiation = sectionText(c?.differentiation)
-  const avant         = c?.avant?.amorce ?? sectionText(c?.avant_amorce)
-  const modelisation  = c?.pendant?.modelisation ?? sectionText(c?.pendant_modelisation)
-  const pratGuidee    = c?.pendant?.pratique_guidee ?? sectionText(c?.pendant_pratique_guidee)
-  const pratAuto      = c?.pendant?.pratique_autonome ?? sectionText(c?.pendant_pratique_autonome)
-  const cloture       = c?.apres?.retour ?? sectionText(c?.apres_cloture)
-  const evalForm      = sectionText(c?.evaluation_formative)
-  const notes         = c?.notes_enseignant
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-
-      {/* ── IDENTIFICATION ── */}
-      <PlanSection titre="Identification" defaultOpen>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
-          {[
-            { label: 'Leçon', value: `L${leconProg.numero} — ${leconProg.titre}` },
-            { label: 'Type',  value: leconProg.type ?? '—' },
-            { label: 'Durée', value: `${leconProg.duree_minutes} min` },
-            { label: 'Statut', value: lecon ? (lecon.statut ?? '—') : 'Non préparée' },
-          ].map(f => (
-            <div key={f.label}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 2 }}>{f.label}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{f.value}</div>
-            </div>
-          ))}
-        </div>
-      </PlanSection>
-
-      {/* ── ANCRAGE CURRICULAIRE ── */}
-      <PlanSection titre="Ancrage curriculaire" defaultOpen={!!(leconProg.curriculum_outcome_ids?.length)}>
-        {leconProg.curriculum_outcome_ids && leconProg.curriculum_outcome_ids.length > 0 ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {leconProg.curriculum_outcome_ids.map((id, i) => (
-              <span key={i} style={{
-                fontSize: 11.5, fontWeight: 700, color: '#6C5CE7',
-                background: 'rgba(108,92,231,0.08)', border: '1px solid rgba(108,92,231,0.2)',
-                borderRadius: 6, padding: '3px 10px',
-              }}>{id}</span>
-            ))}
-          </div>
-        ) : <Absent label="Résultats d'apprentissage non spécifiés" />}
-      </PlanSection>
-
-      {/* ── OBJECTIFS ── */}
-      <PlanSection titre="Objectifs d'apprentissage" defaultOpen>
-        {leconProg.objectif_apprentissage ? (
-          <div>{leconProg.objectif_apprentissage}</div>
-        ) : <TextContent val={objectifs} />}
-      </PlanSection>
-
-      {/* ── CRITÈRES DE RÉUSSITE ── */}
-      <PlanSection titre="Critères de réussite" defaultOpen={!!criteres}>
-        <TextContent val={criteres} />
-      </PlanSection>
-
-      {/* ── MATÉRIEL ── */}
-      <PlanSection titre="Matériel / Ressources" defaultOpen={!!materiel}>
-        {Array.isArray(c?.materiel)
-          ? <ListContent items={c.materiel as string[]} />
-          : <TextContent val={materiel} />}
-      </PlanSection>
-
-      {/* ── AMORCE ── */}
-      <PlanSection titre="Ouverture / Amorce" defaultOpen={!!avant}>
-        <TextContent val={avant} />
-        {c?.avant?.temps_prevu && (
-          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-            Temps prévu : {c.avant.temps_prevu} min
-          </div>
-        )}
-      </PlanSection>
-
-      {/* ── ENSEIGNEMENT EXPLICITE ── */}
-      <PlanSection titre="Enseignement explicite / Modelage" defaultOpen={!!modelisation}>
-        <TextContent val={modelisation} />
-      </PlanSection>
-
-      {/* ── PRATIQUE GUIDÉE ── */}
-      <PlanSection titre="Pratique guidée" defaultOpen={!!pratGuidee}>
-        <TextContent val={pratGuidee} />
-      </PlanSection>
-
-      {/* ── PRATIQUE AUTONOME ── */}
-      <PlanSection titre="Pratique autonome / Activité" defaultOpen={!!pratAuto}>
-        <TextContent val={pratAuto} />
-        {c?.pendant?.temps_prevu && (
-          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-            Temps prévu : {c.pendant.temps_prevu} min
-          </div>
-        )}
-      </PlanSection>
-
-      {/* ── CONSOLIDATION ── */}
-      <PlanSection titre="Consolidation / Clôture" defaultOpen={!!cloture}>
-        <TextContent val={cloture} />
-      </PlanSection>
-
-      {/* ── ÉVALUATION FORMATIVE ── */}
-      <PlanSection titre="Vérification de la compréhension" defaultOpen={!!evalForm}>
-        <TextContent val={evalForm} />
-        {leconProg.preuve_apprentissage && (
-          <div style={{ marginTop: 8 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.4px', marginRight: 6 }}>Preuve</span>
-            {leconProg.preuve_apprentissage}
-          </div>
-        )}
-      </PlanSection>
-
-      {/* ── DIFFÉRENCIATION ── */}
-      <PlanSection titre="Différenciation" defaultOpen={false}>
-        <TextContent val={differentiation} />
-        {c?.differentiation_universelle && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>Universelle</div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{htmlToText(c.differentiation_universelle)}</div>
-          </div>
-        )}
-        {c?.differentiation_ciblee && (
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>Ciblée</div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{htmlToText(c.differentiation_ciblee)}</div>
-          </div>
-        )}
-      </PlanSection>
-
-      {/* ── NOTES ENSEIGNANT ── */}
-      {notes && (
-        <PlanSection titre="Réflexion / Notes enseignant" defaultOpen>
-          <TextContent val={htmlToText(notes)} />
-        </PlanSection>
-      )}
-
-      {/* Lien vers Préparer si plan disponible */}
-      {lecon && (
-        <div style={{ padding: '16px 0', textAlign: 'right' }}>
-          <a
-            href={`/dashboard/classes/${classeId}/lecons/${lecon.id}`}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '9px 18px', borderRadius: 8, textDecoration: 'none',
-              background: 'rgba(108,92,231,0.1)', border: '1px solid rgba(108,92,231,0.2)',
-              color: '#6C5CE7', fontSize: 13, fontWeight: 600,
-            }}
-          >
-            Ouvrir dans Préparer →
-          </a>
-        </div>
-      )}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 5 }}>
+      <div style={{
+        width: 15, height: 15, borderRadius: 3.5, flexShrink: 0,
+        background: done ? 'rgba(34,197,94,0.1)' : 'rgba(139,151,172,0.06)',
+        border: done ? '1px solid rgba(34,197,94,0.35)' : '1px solid rgba(139,151,172,0.18)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 8, color: done ? '#22C55E' : 'rgba(139,151,172,0.35)',
+        fontWeight: 800,
+      }}>
+        {done ? '✓' : '–'}
+      </div>
+      <span style={{ fontSize: 12, color: done ? '#5B6B85' : '#8B97AC', fontWeight: done ? 500 : 400 }}>
+        {label}
+      </span>
     </div>
   )
 }
 
-// ─── Sidebar de navigation ────────────────────────────────────────────────────
+// ─── LEFT: Pedagogical Navigator ──────────────────────────────────────────────
 
-function Sidebar({
-  contenu, lessonStateMap, selected, onSelect,
+function PlanNavigator({
+  tree, selectedKey, onSelect,
 }: {
-  contenu:        ContenuProgramme
-  lessonStateMap: Record<string, LessonTeachingState> | undefined
-  selected:       SelectedLecon | null
-  onSelect:       (s: SelectedLecon) => void
+  tree:        PedagogicalYearTree
+  selectedKey: string | null
+  onSelect:    (node: LessonNode) => void
 }) {
-  const [expandedUnites, setExpandedUnites] = useState<Set<number>>(
-    () => new Set([0]),
-  )
+  const [openUnits, setOpenUnits] = useState<Set<number>>(() => new Set([0]))
 
-  function toggleUnite(idx: number) {
-    setExpandedUnites(prev => {
+  function toggleUnit(idx: number) {
+    setOpenUnits(prev => {
       const next = new Set(prev)
       next.has(idx) ? next.delete(idx) : next.add(idx)
       return next
@@ -285,66 +100,394 @@ function Sidebar({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-      {contenu.unites.map((unite, si) => {
-        const isOpen = expandedUnites.has(si)
-        return (
-          <div key={si}>
-            {/* Unité */}
-            <button
-              onClick={() => toggleUnite(si)}
-              style={{
-                width: '100%', padding: '8px 12px', textAlign: 'left',
-                background: 'none', border: 'none', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 8, borderRadius: 8,
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(139,151,172,0.06)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '' }}
-            >
-              <span style={{
-                width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-                background: 'rgba(108,92,231,0.12)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 9, fontWeight: 800, color: '#6C5CE7',
-              }}>U{unite.numero}</span>
-              <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {unite.titre}
-              </span>
-              <span style={{ fontSize: 9, color: 'var(--text-muted)', transform: isOpen ? 'rotate(180deg)' : '', transition: 'transform 0.15s' }}>▼</span>
-            </button>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <div style={{
+        padding: '14px 16px 10px', borderBottom: `1px solid ${NAV.border.split(' ').slice(2).join(' ')}`,
+      }}>
+        <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.7px', textTransform: 'uppercase', color: NAV.muted, marginBottom: 2 }}>
+          Plans de leçon
+        </div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: NAV.text, lineHeight: 1.2 }}>
+          {tree.contenu.titre}
+        </div>
+        <div style={{ fontSize: 10, color: NAV.muted, marginTop: 3 }}>
+          {tree.units.reduce((s, u) => s + u.stats.total, 0)} leçons · {tree.units.length} unités
+        </div>
+      </div>
 
-            {/* Leçons */}
-            {isOpen && unite.lecons.map((l, li) => {
-              const status = resolveStatus(l, si, li, lessonStateMap)
-              const cfg = STATUS_CFG[status]
-              const isSelected = selected?.seqIdx === si && selected?.leconIdx === li
-              return (
-                <button
-                  key={li}
-                  onClick={() => onSelect({ seqIdx: si, leconIdx: li, leconProg: l })}
-                  style={{
-                    width: '100%', padding: '7px 12px 7px 28px', textAlign: 'left',
-                    background: isSelected ? 'rgba(108,92,231,0.1)' : 'none',
-                    border: 'none', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    borderRadius: 6,
-                  }}
-                  onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(139,151,172,0.06)' }}
-                  onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = '' }}
-                >
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: 11.5, color: isSelected ? '#6C5CE7' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: isSelected ? 700 : 400 }}>
-                    L{l.numero} {l.titre}
-                  </span>
-                  <span style={{ fontSize: 9.5, flexShrink: 0, fontWeight: 600, color: cfg.color }}>
-                    {cfg.label.slice(0, 3)}
-                  </span>
-                </button>
-              )
-            })}
+      {/* Tree */}
+      <div style={{ overflowY: 'auto', flex: 1 }}>
+        {tree.units.map(unit => {
+          const isOpen = openUnits.has(unit.seqIdx)
+          const pct    = unit.stats.pctTaught
+
+          return (
+            <div key={unit.seqIdx}>
+              {/* Unit row */}
+              <button
+                onClick={() => toggleUnit(unit.seqIdx)}
+                style={{
+                  width: '100%', padding: '9px 14px', background: 'none',
+                  border: 'none', cursor: 'pointer', textAlign: 'left',
+                  display: 'flex', alignItems: 'center', gap: 9,
+                  borderTop: '1px solid rgba(255,255,255,0.04)',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = NAV.hover }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+              >
+                {/* Unit badge */}
+                <div style={{
+                  width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                  background: 'rgba(108,92,231,0.18)', border: '1px solid rgba(108,92,231,0.35)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 8, fontWeight: 800, color: '#A78BFA',
+                }}>U{unit.unite.numero}</div>
+
+                {/* Labels */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 11.5, fontWeight: 700, color: NAV.text,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {unit.unite.titre}
+                  </div>
+                  <div style={{ fontSize: 9, color: NAV.muted, marginTop: 1.5 }}>
+                    {unit.stats.taught}/{unit.stats.total} ens. · Sem. {unit.unite.semaine_debut}–{unit.unite.semaine_fin}
+                  </div>
+                </div>
+
+                {/* Mini progress + chevron */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <div style={{ width: 24, height: 3, borderRadius: 99, background: 'rgba(255,255,255,0.08)' }}>
+                    <div style={{
+                      width: `${pct}%`, height: '100%', borderRadius: 99,
+                      background: pct === 100 ? '#22C55E' : pct > 0 ? '#6C5CE7' : 'rgba(255,255,255,0.12)',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: 8, color: NAV.muted, transform: isOpen ? 'rotate(180deg)' : '', transition: 'transform 0.15s' }}>▼</span>
+                </div>
+              </button>
+
+              {/* Lesson rows */}
+              {isOpen && unit.lessons.map(lesson => {
+                const isSelected = lesson.lessonKey === selectedKey
+                const cfg        = LESSON_STATUS_CFG[lesson.status]
+                return (
+                  <button
+                    key={lesson.lessonKey}
+                    onClick={() => onSelect(lesson)}
+                    style={{
+                      width: '100%', padding: '6px 14px 6px 36px',
+                      background: isSelected ? NAV.selBg : 'none',
+                      borderLeft: isSelected ? `2px solid ${NAV.selBord}` : '2px solid transparent',
+                      border: 'none', cursor: 'pointer', textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}
+                    onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = NAV.hover }}
+                    onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = isSelected ? NAV.selBg : 'none' }}
+                  >
+                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 11, color: isSelected ? '#C4B5FD' : NAV.text,
+                        fontWeight: isSelected ? 700 : 400,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        L{lesson.leconProg.numero} — {lesson.leconProg.titre}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 5, flexShrink: 0, alignItems: 'center' }}>
+                      <span style={{ fontSize: 9, color: NAV.muted }}>{lesson.leconProg.duree_minutes}m</span>
+                      <span style={{
+                        fontSize: 8, fontWeight: 700, color: cfg.color,
+                        background: `${cfg.color}22`, borderRadius: 99, padding: '1px 5px',
+                      }}>{cfg.abbr}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── RIGHT: Plan Inspector ────────────────────────────────────────────────────
+
+function PlanInspector({
+  lesson, tree, classeId,
+}: {
+  lesson:   LessonNode
+  tree:     PedagogicalYearTree
+  classeId: string
+}) {
+  const { leconProg, leconDB, status, teachState, outcomes } = lesson
+  const unit = tree.units[lesson.seqIdx]
+  const cfg  = LESSON_STATUS_CFG[status]
+  const c    = leconDB?.contenu_json
+
+  const planSections = leconDB ? [
+    { label: 'Objectifs d\'apprentissage',  done: !!(c?.objectifs && (Array.isArray(c.objectifs) ? c.objectifs.length > 0 : (c.objectifs as string).trim())) },
+    { label: 'Critères de réussite',        done: !!(c?.criteres && (Array.isArray(c.criteres) ? c.criteres.length > 0 : (c.criteres as string).trim())) },
+    { label: 'Matériel',                    done: !!(c?.materiel && (Array.isArray(c.materiel) ? c.materiel.length > 0 : (c.materiel as string).trim())) },
+    { label: 'Amorce / ouverture',          done: !!(c?.avant?.amorce || c?.avant_amorce) },
+    { label: 'Modelage / enseignement',     done: !!(c?.pendant?.modelisation || c?.pendant_modelisation) },
+    { label: 'Pratique guidée',             done: !!(c?.pendant?.pratique_guidee || c?.pendant_pratique_guidee) },
+    { label: 'Pratique autonome',           done: !!(c?.pendant?.pratique_autonome || c?.pendant_pratique_autonome) },
+    { label: 'Clôture / consolidation',     done: !!(c?.apres?.retour || c?.apres_cloture) },
+    { label: 'Évaluation formative',        done: !!(c?.evaluation_formative) },
+    { label: 'Différenciation',             done: !!(c?.differentiation || c?.differentiation_universelle) },
+  ] : []
+
+  const completeSections = planSections.filter(s => s.done).length
+  const planScore = planSections.length > 0
+    ? Math.round((completeSections / planSections.length) * 100)
+    : null
+
+  return (
+    <div style={{ padding: '28px 32px', overflowY: 'auto', height: '100%', display: 'flex', flexDirection: 'column', gap: 22 }}>
+
+      {/* ── HEADER ── */}
+      <div>
+        <div style={{ fontSize: 10.5, color: '#8B97AC', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span>U{unit?.unite.numero} — {unit?.unite.titre}</span>
+          <span style={{ opacity: 0.4 }}>›</span>
+          <span style={{ fontWeight: 700, color: '#5B6B85' }}>Leçon {leconProg.numero}</span>
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: '#0F1B2D', lineHeight: 1.2, marginBottom: 14 }}>
+          {leconProg.titre}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+          <span style={{
+            fontSize: 11.5, fontWeight: 700, color: cfg.color,
+            background: cfg.bg, border: `1px solid ${cfg.color}35`,
+            borderRadius: 99, padding: '4px 12px',
+          }}>{cfg.label}</span>
+          <span style={{
+            fontSize: 11, color: '#5B6B85',
+            background: 'rgba(91,107,133,0.08)', border: '1px solid rgba(91,107,133,0.15)',
+            borderRadius: 99, padding: '4px 12px',
+          }}>{leconProg.duree_minutes} min</span>
+          {leconProg.type && (
+            <span style={{
+              fontSize: 11, color: '#5B6B85',
+              background: 'rgba(91,107,133,0.08)', border: '1px solid rgba(91,107,133,0.15)',
+              borderRadius: 99, padding: '4px 12px', textTransform: 'capitalize',
+            }}>{leconProg.type}</span>
+          )}
+          {leconProg.progression_role && leconProg.progression_role !== 'autre' && (
+            <span style={{
+              fontSize: 11, color: '#5B6B85',
+              background: 'rgba(91,107,133,0.08)', border: '1px solid rgba(91,107,133,0.15)',
+              borderRadius: 99, padding: '4px 12px', textTransform: 'capitalize',
+            }}>{leconProg.progression_role}</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── ANCRAGE CURRICULAIRE ── */}
+      <div>
+        <SectionLabel>Ancrage curriculaire</SectionLabel>
+        {leconProg.objectif_apprentissage && (
+          <MetaField label="Objectif">
+            {leconProg.objectif_apprentissage}
+          </MetaField>
+        )}
+        {!leconProg.objectif_apprentissage && leconProg.sujet && (
+          <MetaField label="Sujet">{leconProg.sujet}</MetaField>
+        )}
+        {leconProg.activite_principale && (
+          <MetaField label="Activité">{leconProg.activite_principale}</MetaField>
+        )}
+        {leconProg.preuve_apprentissage && (
+          <MetaField label="Preuve d'app.">
+            <span style={{ fontStyle: 'italic' }}>{leconProg.preuve_apprentissage}</span>
+          </MetaField>
+        )}
+
+        {/* Resolved outcomes */}
+        {outcomes.length > 0 && (
+          <MetaField label="Résultats">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {outcomes.map((o, i) => (
+                <span key={i} style={{
+                  fontSize: 10.5, fontWeight: 700, color: '#6C5CE7',
+                  background: 'rgba(108,92,231,0.08)', border: '1px solid rgba(108,92,231,0.2)',
+                  borderRadius: 5, padding: '2px 8px', cursor: 'help',
+                }} title={o.description}>
+                  {o.code ?? o.id.slice(0, 8)}
+                </span>
+              ))}
+            </div>
+          </MetaField>
+        )}
+
+        {/* Outcome IDs when no resolved data */}
+        {outcomes.length === 0 && leconProg.curriculum_outcome_ids && leconProg.curriculum_outcome_ids.length > 0 && (
+          <MetaField label="RA (codes)">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {leconProg.curriculum_outcome_ids.map((id, i) => (
+                <span key={i} style={{
+                  fontSize: 10.5, fontWeight: 700, color: '#6C5CE7',
+                  background: 'rgba(108,92,231,0.08)', border: '1px solid rgba(108,92,231,0.2)',
+                  borderRadius: 5, padding: '2px 8px',
+                }}>{id}</span>
+              ))}
+            </div>
+          </MetaField>
+        )}
+
+        {/* Data limitations */}
+        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {!tree.hasV2Data && (
+            <div style={{ fontSize: 10.5, color: '#8B97AC', fontStyle: 'italic' }}>
+              ⓘ Résultats d'apprentissage : disponibles avec les programmes V2
+            </div>
+          )}
+          <div style={{ fontSize: 10.5, color: '#8B97AC', fontStyle: 'italic' }}>
+            ⓘ Question directrice — non disponible dans le schéma actuel (prévu V8)
           </div>
-        )
-      })}
+          <div style={{ fontSize: 10.5, color: '#8B97AC', fontStyle: 'italic' }}>
+            ⓘ CCHP — non disponible dans le schéma actuel (prévu V8)
+          </div>
+        </div>
+      </div>
+
+      {/* ── STATUT DU PLAN ── */}
+      <div>
+        <SectionLabel>Statut du plan de leçon</SectionLabel>
+        {!leconProg.lecon_id ? (
+          <div style={{
+            padding: '16px 18px', borderRadius: 10,
+            background: 'rgba(139,151,172,0.06)', border: '1px solid rgba(139,151,172,0.15)',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#5B6B85', marginBottom: 5 }}>Plan non préparé</div>
+            <div style={{ fontSize: 12, color: '#8B97AC', lineHeight: 1.6 }}>
+              Cette leçon est planifiée dans le programme annuel. Son plan détaillé n'a pas encore été créé dans Préparer.
+            </div>
+          </div>
+        ) : (
+          <div>
+            {planScore !== null && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                <div style={{ flex: 1, height: 5, borderRadius: 99, background: 'rgba(15,35,65,0.07)' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 99,
+                    width: `${planScore}%`,
+                    background: planScore >= 70 ? '#22C55E' : planScore >= 40 ? '#6C5CE7' : '#F59E0B',
+                    transition: 'width 0.3s',
+                  }} />
+                </div>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#5B6B85', minWidth: 40 }}>
+                  {completeSections}/{planSections.length} sections
+                </span>
+              </div>
+            )}
+            <div style={{ columns: 2, gap: 12 }}>
+              {planSections.map((s, i) => <PlanCheck key={i} label={s.label} done={s.done} />)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── DOCUMENT ── */}
+      {leconDB && (
+        <div>
+          <SectionLabel>Document</SectionLabel>
+          <MetaField label="Statut">
+            <span style={{ color: '#22C55E', fontWeight: 600 }}>Plan créé</span>
+          </MetaField>
+          {leconDB.updated_at && (
+            <MetaField label="Dernière modif.">
+              {new Date(leconDB.updated_at).toLocaleDateString('fr-CA', { year: 'numeric', month: 'short', day: 'numeric' })}
+            </MetaField>
+          )}
+        </div>
+      )}
+
+      {/* ── TRACE D'ENSEIGNEMENT ── */}
+      {teachState?.isTaught && (
+        <div>
+          <SectionLabel>Trace d'enseignement</SectionLabel>
+          {teachState.taughtAt && (
+            <MetaField label="Enseignée le">
+              <span style={{ color: '#22C55E', fontWeight: 600 }}>
+                {new Date(teachState.taughtAt).toLocaleDateString('fr-CA', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </span>
+            </MetaField>
+          )}
+          {teachState.note && (
+            <MetaField label="Note enseignant">
+              <span style={{ fontStyle: 'italic' }}>{teachState.note}</span>
+            </MetaField>
+          )}
+        </div>
+      )}
+
+      {/* ── ACTIONS ── */}
+      <div>
+        <SectionLabel>Actions</SectionLabel>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {leconDB && (
+            <a
+              href={`/dashboard/classes/${classeId}/lecons/${leconDB.id}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '9px 16px', borderRadius: 8, textDecoration: 'none',
+                background: 'rgba(108,92,231,0.09)', border: '1px solid rgba(108,92,231,0.22)',
+                color: '#6C5CE7', fontSize: 12.5, fontWeight: 600,
+              }}
+            >
+              Voir le plan complet →
+            </a>
+          )}
+          {leconDB && (
+            <a
+              href={`/dashboard/classes/${classeId}/lecons/${leconDB.id}/modifier`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '9px 16px', borderRadius: 8, textDecoration: 'none',
+                background: 'rgba(91,107,133,0.07)', border: '1px solid rgba(91,107,133,0.15)',
+                color: '#5B6B85', fontSize: 12.5, fontWeight: 600,
+              }}
+            >
+              Modifier →
+            </a>
+          )}
+          {!leconDB && (
+            <a
+              href={`/dashboard/gerer/preparer`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '9px 16px', borderRadius: 8, textDecoration: 'none',
+                background: 'rgba(108,92,231,0.09)', border: '1px solid rgba(108,92,231,0.22)',
+                color: '#6C5CE7', fontSize: 12.5, fontWeight: 600,
+              }}
+            >
+              Préparer avec ScorgIA →
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
+
+function EmptyInspector() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      height: '100%', flexDirection: 'column', gap: 10, padding: 40,
+    }}>
+      <div style={{ fontSize: 32, opacity: 0.12, color: '#0F1B2D' }}>←</div>
+      <div style={{ fontSize: 13, color: '#8B97AC', textAlign: 'center', maxWidth: 260, lineHeight: 1.65 }}>
+        Sélectionnez une leçon dans le navigateur pour inspecter son plan
+      </div>
     </div>
   )
 }
@@ -352,110 +495,73 @@ function Sidebar({
 // ─── PlansLeconView ───────────────────────────────────────────────────────────
 
 export default function PlansLeconView({ contenu, lecons, lessonStateMap, classeId }: Props) {
-  const [selected, setSelected] = useState<SelectedLecon | null>(null)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
-  if (!contenu || contenu.unites.length === 0) {
+  const tree = useMemo(() =>
+    contenu ? buildPedagogicalYearTree(contenu, lecons, lessonStateMap) : null,
+  [contenu, lecons, lessonStateMap])
+
+  if (!tree || tree.units.length === 0) {
     return (
       <div style={{
-        background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-        borderRadius: 12, padding: '40px 32px', textAlign: 'center',
+        background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.9)',
+        borderRadius: 16, padding: '48px 32px', textAlign: 'center',
+        boxShadow: '0 8px 32px rgba(15,35,65,0.08)',
       }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>Plans de leçon non disponibles</div>
-        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 400, margin: '0 auto 20px' }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#0F1B2D', marginBottom: 8 }}>
+          Plans de leçon non disponibles
+        </div>
+        <div style={{ fontSize: 12.5, color: '#8B97AC', lineHeight: 1.65, maxWidth: 380, margin: '0 auto 20px' }}>
           Les plans de leçon sont générés lors de la construction de l&apos;année scolaire.
         </div>
         <a href={`/dashboard/classes/${classeId}/programme`} style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '10px 20px', borderRadius: 8, textDecoration: 'none',
-          background: 'rgba(108,92,231,0.1)', border: '1px solid rgba(108,92,231,0.2)',
+          padding: '10px 20px', borderRadius: 9, textDecoration: 'none',
+          background: 'rgba(108,92,231,0.09)', border: '1px solid rgba(108,92,231,0.22)',
           color: '#6C5CE7', fontSize: 13, fontWeight: 600,
         }}>Construire mon année →</a>
       </div>
     )
   }
 
-  // Lookup lecons by lecon_id
-  const leconById: Record<string, Lecon> = {}
-  for (const l of lecons) leconById[l.id] = l
-
-  const selectedLecon = selected?.leconProg?.lecon_id
-    ? (leconById[selected.leconProg.lecon_id] ?? null)
+  // Find selected lesson node
+  const selectedLesson = selectedKey
+    ? tree.units.flatMap(u => u.lessons).find(l => l.lessonKey === selectedKey) ?? null
     : null
 
   return (
     <div style={{
-      display: 'flex', gap: 0,
-      background: 'var(--card-bg)', border: '1px solid var(--card-border)',
-      borderRadius: 12, overflow: 'hidden', minHeight: '70vh',
+      display: 'flex', borderRadius: 16, overflow: 'hidden',
+      border: '1px solid rgba(15,35,65,0.1)',
+      boxShadow: '0 8px 32px rgba(15,35,65,0.08)',
+      minHeight: '75vh',
     }}>
-      {/* Sidebar */}
+      {/* LEFT — Pedagogical Navigator */}
       <div style={{
-        width: 260, flexShrink: 0, borderRight: '1px solid var(--card-border)',
-        padding: '16px 8px', overflowY: 'auto', maxHeight: '80vh',
+        width: 310, flexShrink: 0,
+        background: NAV.bg,
+        backdropFilter: NAV.blur,
+        WebkitBackdropFilter: NAV.blur,
+        borderRight: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', flexDirection: 'column',
+        overflowY: 'auto',
       }}>
-        <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.5px', color: 'var(--text-muted)', textTransform: 'uppercase', padding: '0 8px', marginBottom: 10 }}>
-          Plans de leçon
-        </div>
-        <Sidebar
-          contenu={contenu}
-          lessonStateMap={lessonStateMap}
-          selected={selected}
-          onSelect={setSelected}
+        <PlanNavigator
+          tree={tree}
+          selectedKey={selectedKey}
+          onSelect={n => setSelectedKey(n.lessonKey)}
         />
       </div>
 
-      {/* Panneau principal */}
-      <div style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', maxHeight: '80vh' }}>
-        {!selected ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60%', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-              Sélectionnez une leçon dans la liste pour afficher son plan.
-            </div>
-          </div>
-        ) : (
-          <div>
-            {/* Breadcrumb */}
-            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 20 }}>
-              U{contenu.unites[selected.seqIdx]?.numero} {contenu.unites[selected.seqIdx]?.titre}
-              {' / '}
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                L{selected.leconProg.numero} {selected.leconProg.titre}
-              </span>
-            </div>
-
-            {!selected.leconProg.lecon_id ? (
-              <div style={{
-                padding: '24px', borderRadius: 10,
-                background: 'rgba(139,151,172,0.04)', border: '1px solid var(--card-border)',
-                textAlign: 'center',
-              }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
-                  Plan non préparé
-                </div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 360, margin: '0 auto 16px' }}>
-                  Cette leçon est planifiée mais le plan détaillé n&apos;a pas encore été préparé dans Préparer.
-                </div>
-                <a
-                  href={`/dashboard/gerer/preparer`}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '9px 18px', borderRadius: 8, textDecoration: 'none',
-                    background: 'rgba(108,92,231,0.1)', border: '1px solid rgba(108,92,231,0.2)',
-                    color: '#6C5CE7', fontSize: 13, fontWeight: 600,
-                  }}
-                >
-                  Préparer cette leçon →
-                </a>
-              </div>
-            ) : (
-              <LessonPlanDocument
-                leconProg={selected.leconProg}
-                lecon={selectedLecon}
-                classeId={classeId}
-              />
-            )}
-          </div>
-        )}
+      {/* RIGHT — Inspector */}
+      <div style={{
+        flex: 1, background: 'rgba(255,255,255,0.95)',
+        overflowY: 'auto',
+      }}>
+        {selectedLesson
+          ? <PlanInspector lesson={selectedLesson} tree={tree} classeId={classeId} />
+          : <EmptyInspector />
+        }
       </div>
     </div>
   )

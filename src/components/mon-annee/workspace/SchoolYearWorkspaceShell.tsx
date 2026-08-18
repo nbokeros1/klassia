@@ -68,7 +68,7 @@ const NAV_SECTIONS: NavSection[] = [
       { id: 'curriculum',  label: 'Curriculum' },
       { id: 'syllabus',    label: 'Syllabus' },
       { id: 'plan_annuel', label: 'Plan annuel' },
-      { id: 'sequences',   label: 'Unités & séquences' },
+      { id: 'sequences',   label: 'Unités' },
       { id: 'plans_lecon', label: 'Plans de leçon' },
       { id: 'lecons',      label: 'Leçons' },
     ],
@@ -881,7 +881,7 @@ export default function SchoolYearWorkspaceShell({ initialClasseId }: ShellProps
                 <PlanAnnuelView contenu={contenu} lessonStateMap={mergedLSM} classeId={classeId} />
               )}
 
-              {/* ── UNITÉS & SÉQUENCES ──────────────────────────────── */}
+              {/* ── UNITÉS ─────────────────────────────────────────── */}
               {activeTab === 'sequences' && !classeId && (
                 <SelectClassePrompt tabLabel={tabLabel} classeCount={filteredClasses.length} />
               )}
