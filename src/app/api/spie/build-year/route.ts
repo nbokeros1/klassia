@@ -246,6 +246,38 @@ export async function POST(request: Request) {
           progress: 10,
         })
 
+        // Guard: uploaded curriculum must have extracted text before generation
+        if (!skipCurriculum
+          && input.curriculum_source === 'televerse'
+          && (!input.curriculum_fichier_contenu || input.curriculum_fichier_contenu.trim().length < 50)) {
+          console.error('[SPIE_CURRICULUM_UPLOAD_NOT_EXTRACTED]', {
+            packId,
+            classeId:      input.classe_id,
+            source:        input.curriculum_source,
+            contentLength: input.curriculum_fichier_contenu?.length ?? 0,
+          })
+          if (packId) {
+            await supabase.from('teaching_packs').update({
+              statut:        'erreur',
+              error_message: 'Curriculum téléversé non extrait — relancez après avoir retéléversé le fichier',
+            }).eq('id', packId)
+          }
+          send({ step: 'curriculum', statut: 'erreur', message: 'Le texte du curriculum n\'a pas été extrait. Retournez à l\'étape Curriculum et téléversez à nouveau votre document.', progress: 15 })
+          send({ step: 'erreur', statut: 'erreur', message: 'CURRICULUM_UPLOAD_NOT_EXTRACTED — Retournez à l\'étape Curriculum et téléversez votre document.', teaching_pack_id: packId ?? undefined, progress: 100 })
+          controller.close(); return
+        }
+
+        // Log when uploaded curriculum text is present and ready for SPIE-02
+        if (input.curriculum_source === 'televerse' && input.curriculum_fichier_contenu && input.curriculum_fichier_contenu.trim().length >= 50) {
+          console.info('[SPIE_CURRICULUM_SOURCE_READY]', {
+            classeId:         input.classe_id,
+            packId,
+            sourceType:       'televerse',
+            textLength:       input.curriculum_fichier_contenu.length,
+            extractionStatus: 'ready',
+          })
+        }
+
         const nbSemaines = input.calendrier
           ? Math.max(24, Math.round(
               (new Date(input.calendrier.date_fin).getTime() - new Date(input.calendrier.date_debut).getTime())

@@ -108,6 +108,7 @@ export default function BuildMyYearWizard({
   const [fichierContenu,     setFichierContenu]     = useState('')
   const [fichierNom,         setFichierNom]         = useState('')
   const [uploadLoading,      setUploadLoading]      = useState(false)
+  const [uploadError,        setUploadError]        = useState<string | null>(null)
 
   const [gabarits, setGabarits] = useState<PackGabarits>({
     plan_annuel:   'generique',
@@ -123,16 +124,22 @@ export default function BuildMyYearWizard({
   const handleFileUpload = useCallback(async (file: File) => {
     setUploadLoading(true)
     setFichierNom(file.name)
+    setFichierContenu('')
+    setUploadError(null)
     try {
       const formData = new FormData()
       formData.append('file', file)
       const res = await fetch('/api/import/docx', { method: 'POST', body: formData })
+      const data = await res.json()
       if (res.ok) {
-        const data = await res.json()
-        setFichierContenu(data.texte ?? data.content ?? '')
+        setFichierContenu(data.texte ?? '')
+      } else {
+        setUploadError(data.message ?? 'ScorgIA n\'a pas pu lire ce document de curriculum.')
+        setFichierNom('')
       }
     } catch {
-      // leave contenu empty — API will handle gracefully
+      setUploadError('Erreur de connexion — réessayez.')
+      setFichierNom('')
     } finally {
       setUploadLoading(false)
     }
@@ -211,7 +218,7 @@ export default function BuildMyYearWizard({
   // ─── Validation par étape ──────────────────────────────────────────────────
   const canProceed: Record<WizardStep, boolean> = {
     1: !!province && !!niveau.trim() && !!matiere.trim(),
-    2: curriculumSource === 'officiel' ? !!curriculumOfficiel : true,
+    2: curriculumSource === 'officiel' ? !!curriculumOfficiel : fichierContenu.length >= 50,
     3: true,
     4: !!calendrier.date_debut && !!calendrier.date_fin,
     5: true,
@@ -259,7 +266,7 @@ export default function BuildMyYearWizard({
             source={curriculumSource} setSource={setCurriculumSource}
             officiel={curriculumOfficiel} setOfficiel={setCurriculumOfficiel}
             fichierNom={fichierNom} fichierContenu={fichierContenu}
-            uploadLoading={uploadLoading}
+            uploadLoading={uploadLoading} uploadError={uploadError}
             province={province}
             onFileSelect={(f) => handleFileUpload(f)}
             fileRef={fileRef}
@@ -409,11 +416,11 @@ function StepContexte({ province, setProvince, pays, setPays, juridiction, setJu
 
 // ─── Étape 2 : Curriculum ─────────────────────────────────────────────────────
 
-function StepCurriculum({ source, setSource, officiel, setOfficiel, fichierNom, fichierContenu, uploadLoading, province, onFileSelect, fileRef }: {
+function StepCurriculum({ source, setSource, officiel, setOfficiel, fichierNom, fichierContenu, uploadLoading, uploadError, province, onFileSelect, fileRef }: {
   source: 'televerse' | 'officiel'; setSource: (v: 'televerse' | 'officiel') => void
   officiel: string; setOfficiel: (v: string) => void
   fichierNom: string; fichierContenu: string
-  uploadLoading: boolean; province: string
+  uploadLoading: boolean; uploadError: string | null; province: string
   onFileSelect: (f: File) => void
   fileRef: React.RefObject<HTMLInputElement | null>
 }) {
@@ -449,6 +456,12 @@ function StepCurriculum({ source, setSource, officiel, setOfficiel, fichierNom, 
           <input ref={fileRef} type="file" accept=".pdf,.docx,.doc,.txt,.md" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) onFileSelect(f) }} />
           {uploadLoading ? (
             <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>⏳ Lecture du document…</span>
+          ) : uploadError ? (
+            <div>
+              <div style={{ fontSize: 20 }}>⚠️</div>
+              <div style={{ fontSize: 13, color: '#F87171', fontWeight: 600, marginTop: 6 }}>{uploadError}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>Cliquez pour réessayer avec un autre fichier</div>
+            </div>
           ) : fichierNom ? (
             <div>
               <div style={{ fontSize: 20 }}>✅</div>
@@ -459,7 +472,7 @@ function StepCurriculum({ source, setSource, officiel, setOfficiel, fichierNom, 
             <div>
               <div style={{ fontSize: 32 }}>📤</div>
               <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 8 }}>Glissez votre curriculum ici ou cliquez pour parcourir</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>PDF, Word, texte ou Markdown acceptés</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>PDF, Word (.docx), texte ou Markdown acceptés</div>
             </div>
           )}
         </div>
@@ -703,18 +716,20 @@ function BuildProgressView({ events, globalError, isRunning, onOpenWorkspace, ma
           const ev     = eventMap.get(cp.step)
           const statut = ev?.statut ?? 'en_attente'
           const dotClass =
-            statut === 'termine' ? 'd7-tl-dot--done'
+            statut === 'termine'  ? 'd7-tl-dot--done'
             : statut === 'en_cours' ? 'd7-tl-dot--active'
             : statut === 'erreur'   ? 'd7-tl-dot--error'
+            : statut === 'bloque'   ? 'd7-tl-dot--blocked'
             : 'd7-tl-dot--pending'
           const labelClass =
-            statut === 'termine' ? 'd7-tl-label--done'
+            statut === 'termine'    ? 'd7-tl-label--done'
             : statut === 'en_attente' ? 'd7-tl-label--pending'
+            : statut === 'bloque'   ? 'd7-tl-label--pending'
             : ''
           return (
             <div key={cp.step} className="d7-timeline-item">
               <div className={`d7-tl-dot ${dotClass}`} aria-label={statut}>
-                {statut === 'termine' ? '✓' : statut === 'erreur' ? '✕' : null}
+                {statut === 'termine' ? '✓' : statut === 'erreur' ? '✕' : statut === 'bloque' ? '—' : null}
               </div>
               <div className="d7-tl-content">
                 <div className={`d7-tl-label ${labelClass}`}>{cp.label}</div>
@@ -750,11 +765,14 @@ function BuildProgressView({ events, globalError, isRunning, onOpenWorkspace, ma
         </>
       )}
 
-      {/* Error state (M12) */}
+      {/* Error state (MISSION 12, 15) */}
       {isError && (
         <div className="d7-error-block">
           <div className="d7-error-title">
             {erreurEvent?.message ?? globalError ?? 'Une étape n\'a pas pu être finalisée.'}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, marginBottom: 12, lineHeight: 1.5 }}>
+            La construction est arrêtée pour protéger la cohérence de votre année.
           </div>
           {doneSteps.length > 0 && (
             <div className="d7-error-ready">
@@ -764,7 +782,7 @@ function BuildProgressView({ events, globalError, isRunning, onOpenWorkspace, ma
           <button
             onClick={() => window.location.reload()}
             style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid rgba(248,113,113,.4)', background: 'transparent', color: '#EF4444', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            Reprendre la construction
+            Réessayer
           </button>
         </div>
       )}
