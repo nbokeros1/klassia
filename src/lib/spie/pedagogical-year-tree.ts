@@ -75,9 +75,10 @@ export type UnitStats = {
 }
 
 export type UnitNode = {
-  unite:    Unite
-  seqIdx:   number               // 0-based
-  lessons:  LessonNode[]
+  unite:       Unite
+  seqIdx:      number            // 0-based
+  sequenceId?: string            // V3: stable AYDTE sequence_id (absent on V1/V2)
+  lessons:     LessonNode[]
   stats:    UnitStats
   outcomes: CurriculumOutcome[]  // resolved for this unit's curriculum_outcome_ids
   status:   'terminee' | 'en_cours' | 'a_venir'
@@ -87,7 +88,8 @@ export type PedagogicalYearTree = {
   contenu:     ContenuProgramme
   units:       UnitNode[]
   allOutcomes: CurriculumOutcome[]
-  hasV2Data:   boolean  // false = V1 pack, no curriculum_outcomes
+  hasV2Data:   boolean   // false = V1 pack, no curriculum_outcomes
+  hasV3Data:   boolean   // true = schema_version 'v3', unites carry sequence_id
 }
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
@@ -140,6 +142,7 @@ export function buildPedagogicalYearTree(
     return {
       unite,
       seqIdx,
+      sequenceId: unite.sequence_id,
       lessons,
       stats,
       outcomes: resolveOutcomes(unite.curriculum_outcome_ids),
@@ -147,7 +150,9 @@ export function buildPedagogicalYearTree(
     }
   })
 
-  return { contenu, units, allOutcomes, hasV2Data }
+  const hasV3Data = contenu.schema_version === 'v3' && contenu.unites.some(u => !!u.sequence_id)
+
+  return { contenu, units, allOutcomes, hasV2Data, hasV3Data }
 }
 
 // ─── Pure text utilities ───────────────────────────────────────────────────────

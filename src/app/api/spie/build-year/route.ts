@@ -21,6 +21,8 @@ import { bindProgrammeToClassFolder } from '@/lib/spie/class-folder-binding'
 import { buildAperçuCalendrier } from '@/lib/spie/syllabus-v3'
 import { validatePedagogicalProgramme, summariseViolations } from '@/lib/spie/validate-pedagogical-programme'
 import { extractOutcomesFromText, formatOutcomesForPrompt } from '@/lib/spie/curriculum/extraction/curriculum-bridge'
+import type { NormalizedOutcome } from '@/lib/spie/curriculum/extraction/types'
+import { buildAydtePlanningBridge } from '@/lib/spie/curriculum/planning/aydte-planning-bridge'
 
 export const maxDuration = 300
 
@@ -58,7 +60,7 @@ function buildCurriculumContext(input: BuildYearWizardInput): string {
 async function buildStructuredCurriculumContext(
   input: BuildYearWizardInput,
   packId: string | null,
-): Promise<{ contextBlock: string; outcomesExtracted: boolean; outcomeCount: number }> {
+): Promise<{ contextBlock: string; outcomesExtracted: boolean; outcomeCount: number; outcomes: NormalizedOutcome[] }> {
   if (input.curriculum_fichier_contenu && input.curriculum_fichier_contenu.length >= 100) {
     try {
       const bridgeResult = await extractOutcomesFromText(
@@ -85,6 +87,7 @@ async function buildStructuredCurriculumContext(
           contextBlock: `RÉSULTATS D'APPRENTISSAGE NORMALISÉS (extraits du document curriculaire) :\n${outcomesJson}\n\nAperçu document :\n${input.curriculum_fichier_contenu.substring(0, 2000)}`,
           outcomesExtracted: true,
           outcomeCount: bridgeResult.outcomeCount,
+          outcomes: bridgeResult.outcomes,
         }
       }
 
@@ -109,10 +112,11 @@ async function buildStructuredCurriculumContext(
       contextBlock: `Curriculum fourni par l'enseignant (${input.curriculum_fichier_nom ?? 'fichier'}) :\n${input.curriculum_fichier_contenu.substring(0, 8000)}`,
       outcomesExtracted: false,
       outcomeCount: 0,
+      outcomes: [],
     }
   }
   // No uploaded file — use official key or generic string
-  return { contextBlock: buildCurriculumContext(input), outcomesExtracted: false, outcomeCount: 0 }
+  return { contextBlock: buildCurriculumContext(input), outcomesExtracted: false, outcomeCount: 0, outcomes: [] }
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
@@ -292,6 +296,46 @@ export async function POST(request: Request) {
         const structuredCtx = await buildStructuredCurriculumContext(input, packId)
         const curriculumCtx = buildCurriculumContext(input) // kept for syllabus prompt (600 char slice)
 
+        // AYDTE — Academic Year Digital Twin Engine (V7.5)
+        // Runs when SPIE-02 extracted outcomes; produces SequenceBlock[] with week allocation.
+        // Never blocks generation — errors are logged and production falls back to V2 flow.
+        const minutesParSemaine = input.calendrier
+          ? (input.calendrier.periodes_par_semaine ?? 4) * (input.calendrier.duree_periode_minutes ?? 50)
+          : 200
+        let aydteBridgeResult = null as Awaited<ReturnType<typeof buildAydtePlanningBridge>> | null
+        if (structuredCtx.outcomesExtracted && structuredCtx.outcomes.length > 0) {
+          try {
+            aydteBridgeResult = buildAydtePlanningBridge({
+              outcomes:         structuredCtx.outcomes,
+              totalSemaines:    nbSemaines,
+              minutesParSemaine,
+              packId:           packId ?? undefined,
+              classeId:         input.classe_id,
+              province:         input.province,
+              matiere:          input.matiere,
+              niveau:           input.niveau,
+              langue:           input.langue === 'en' ? 'en' : 'fr',
+              anneesScolaire:   input.annee_scolaire,
+            })
+            if (aydteBridgeResult.success) {
+              console.info('[AYDTE_COMPLETE]', {
+                packId,
+                classeId:        input.classe_id,
+                sequences:       aydteBridgeResult.sequences.length,
+                coveragePercent: aydteBridgeResult.coveragePercent,
+                pacingScore:     aydteBridgeResult.pacingScore,
+                durationMs:      aydteBridgeResult.durationMs,
+              })
+            } else {
+              console.warn('[AYDTE_FAILED]', { packId, error: aydteBridgeResult.error })
+              aydteBridgeResult = null
+            }
+          } catch (e) {
+            console.warn('[AYDTE_FAILED]', { packId, error: e instanceof Error ? e.message : String(e) })
+            aydteBridgeResult = null
+          }
+        }
+
         let programme: ContenuProgramme = {
           titre: `Programme de ${input.matiere} — ${input.niveau}`,
           nb_semaines: nbSemaines,
@@ -324,8 +368,10 @@ export async function POST(request: Request) {
 - Durée : ${nbSemaines} semaines
 - Curriculum : ${input.curriculum_officiel ?? 'personnalisé'}
 ${structuredCtx.outcomesExtracted ? `- Résultats d'apprentissage normalisés : ${structuredCtx.outcomeCount} outcomes extraits (voir ci-dessous)` : ''}
+${aydteBridgeResult?.success ? `- Structure AYDTE : ${aydteBridgeResult.sequences.length} séquences calculées (couverture ${aydteBridgeResult.coveragePercent}%)` : ''}
 
 ${structuredCtx.contextBlock}
+${aydteBridgeResult?.success ? `\n${aydteBridgeResult.scaffoldPrompt}` : ''}
 
 RÈGLES IMPÉRATIVES :
 1. Titres réels pour unités et leçons (JAMAIS "Unité 1", "Leçon 1", "Contenu à définir")
@@ -438,7 +484,27 @@ Format JSON EXACT :
             controller.close(); return
           }
 
-          programme = { ...parsedProg, schema_version: 'v2' as const }
+          // V7.5 — stamp AYDTE sequence_id on each unite (positional best-effort match)
+          if (aydteBridgeResult?.success && aydteBridgeResult.sequences.length > 0) {
+            const stampedUnites = parsedProg.unites.map((u, i) => ({
+              ...u,
+              sequence_id: aydteBridgeResult!.sequences[i]?.id,
+            }))
+            programme = {
+              ...parsedProg,
+              unites:        stampedUnites,
+              schema_version: 'v3' as const,
+            }
+            console.info('[PEDAGOGICAL_STRUCTURE_CREATED]', {
+              packId,
+              classeId:       input.classe_id,
+              schema_version: 'v3',
+              sequences:      aydteBridgeResult.sequences.length,
+              unitesStamped:  stampedUnites.filter(u => u.sequence_id).length,
+            })
+          } else {
+            programme = { ...parsedProg, schema_version: 'v2' as const }
+          }
           buildState.curriculum = stepSuccess()
           console.info('[SPIE_PROGRAMME_VALIDATION_OK]', {
             packId,
@@ -446,6 +512,7 @@ Format JSON EXACT :
             unites:             parsedProg.unites.length,
             outcomesExtracted:  structuredCtx.outcomesExtracted,
             outcomeCount:       structuredCtx.outcomeCount,
+            schemaVersion:      programme.schema_version,
           })
         }
 
