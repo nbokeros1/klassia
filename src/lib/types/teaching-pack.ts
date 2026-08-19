@@ -48,21 +48,72 @@ export type PackGabarits = {
 
 // ─── Syllabus ─────────────────────────────────────────────────────────────────
 
-export type PackSyllabus = {
-  titre_cours: string
-  niveau: string
-  matiere: string
-  enseignant?: string
+export type EvalCategorie = {
+  nom:          string
+  poids?:       number   // jamais inventé par l'IA — à remplir par l'enseignant
   description?: string
-  grandes_idees: string[]
-  resultats_apprentissage: string[]
-  methodes_pedagogiques: string[]
-  methodes_evaluation: string[]
-  ressources_suggeres?: string[]
-  attentes?: string[]
-  normes_reference?: string[]
-  version: string
-  created_at: string
+}
+
+export type EvalPolitique = {
+  categories?: EvalCategorie[]
+  modalites:   string[]
+  note_promotion?: string
+}
+
+export type AperçuCalendrierItem = {
+  semaines:     string   // ex. "S1–S3"
+  titre:        string
+  description?: string
+}
+
+export type PackSyllabus = {
+  // ── Champs V1 (maintenus pour rétrocompatibilité) ──
+  titre_cours:              string
+  niveau:                   string
+  matiere:                  string
+  enseignant?:              string
+  description?:             string   // V1 — préférer description_cours en V3
+  grandes_idees:            string[]
+  resultats_apprentissage:  string[]
+  methodes_pedagogiques:    string[]
+  methodes_evaluation:      string[]
+  ressources_suggeres?:     string[]
+  attentes?:                string[]   // V1 — préférer attentes_classe en V3
+  normes_reference?:        string[]
+  version:                  string
+  created_at:               string
+
+  // ── Champs V3 (tous optionnels — backward compat) ──
+  description_cours?:          string
+  mission_cours?:              string
+  objectifs_generaux?:         string[]
+  competences_developpees?:    string[]
+  prerequis?:                  string
+  materiel_requis?:            string[]
+  ressources_principales?:     string[]
+  organisation_cours?:         {
+    format:                    string
+    periodes_par_semaine?:     number
+    duree_periode_minutes?:    number
+  }
+  evaluation?:                 EvalPolitique
+  attentes_classe?:            string[]
+  politique_presence?:         string
+  politique_retards?:          string
+  politique_remise_travaux?:   string
+  politique_travaux_retard?:   string
+  integrite_academique?:       string
+  communication?:              {
+    courriel?:                 string
+    disponibilites?:           string
+    plateforme?:               string
+  }
+  inclusion_accessibilite?:    string
+  apercu_calendrier?:          AperçuCalendrierItem[]
+  note_flexibilite?:           string
+  genere_par_ia?:              boolean
+  generated_at?:               string
+  edited_sections?:            string[]
 }
 
 // ─── Contenu du pack (JSON persisté) ─────────────────────────────────────────
@@ -125,7 +176,7 @@ export type BuildYearStep =
   | 'termine'
   | 'erreur'
 
-export type BuildYearStepStatut = 'en_attente' | 'en_cours' | 'termine' | 'erreur' | 'ignore'
+export type BuildYearStepStatut = 'en_attente' | 'en_cours' | 'termine' | 'erreur' | 'ignore' | 'bloque'
 
 export type BuildYearEvent = {
   step: BuildYearStep

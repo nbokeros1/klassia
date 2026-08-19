@@ -112,6 +112,7 @@ export default function SignupPage() {
         {/* Logo */}
         <AuthBranding
           slogan="Créez votre espace pédagogique gratuit"
+          logoHeight={120}
           style={{ marginBottom: '28px' }}
         />
 

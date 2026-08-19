@@ -82,6 +82,7 @@ export default function LoginPage() {
         {/* Logo */}
         <AuthBranding
           slogan="Votre espace pédagogique intelligent"
+          logoHeight={120}
           style={{ marginBottom: '32px' }}
         />
 

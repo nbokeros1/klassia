@@ -509,8 +509,9 @@ export default function OnboardingPage() {
 
         {/* Logo */}
         <AuthBranding
-          theme="light"
+          theme="dark"
           slogan="Configurons votre profil"
+          logoHeight={120}
           style={{ marginBottom: 24 }}
         />
 
@@ -619,7 +620,8 @@ export default function OnboardingPage() {
         <style>{`@keyframes fadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } } .onb-fade { animation: fadeUp .28s ease-out; }`}</style>
 
         <AuthBranding
-          theme="light"
+          theme="dark"
+          logoHeight={120}
           style={{ marginBottom: 20 }}
         />
 

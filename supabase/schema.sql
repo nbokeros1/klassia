@@ -40,12 +40,25 @@ CREATE TABLE IF NOT EXISTS classes (
 );
 
 -- 3. PROGRAMME ANNUEL
+-- NOTE : la table en production a été créée depuis un script différent.
+-- Schéma réel production (colonnes d'origine) :
+--   curriculum_id UUID, nb_unites INT, nb_lecons_total INT,
+--   semaines_total INT, genere_par_ia BOOL, valide_par_prof BOOL
+-- Migration 036 a ajouté : teaching_pack_id, calendrier_json, syllabus_json
+-- Migration 037 a ajouté : modifie_par, version_numero, qualite_json
+-- Migration 039 a ajouté : titre, nb_semaines, contenu_json (colonnes manquantes)
 CREATE TABLE IF NOT EXISTS programme_annuel (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   classe_id       UUID REFERENCES classes(id) ON DELETE CASCADE NOT NULL,
+  curriculum_id   UUID,
   titre           TEXT,
   nb_semaines     INTEGER DEFAULT 36,
-  contenu_json    JSONB DEFAULT '{"unites": []}',
+  nb_unites       INTEGER,
+  nb_lecons_total INTEGER,
+  semaines_total  INTEGER,
+  genere_par_ia   BOOLEAN DEFAULT false,
+  valide_par_prof BOOLEAN DEFAULT false,
+  contenu_json    JSONB DEFAULT '{}',
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 

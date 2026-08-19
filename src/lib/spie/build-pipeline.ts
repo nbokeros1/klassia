@@ -142,7 +142,7 @@ export async function verifyTeachingPackCompleteness(
     if (!lc) missing.push('premiere_lecon')
   }
 
-  // 3. Quiz (si entitlement)
+  // 3. Quiz : facultatif depuis V2 — jamais bloquant pour la complétude
   if (entitlement.first_lesson_quiz) {
     const { count: qc } = await supabase
       .from('fichiers_dossier')
@@ -150,7 +150,6 @@ export async function verifyTeachingPackCompleteness(
       .eq('classe_id', classeId)
       .eq('type_fichier', 'quiz')
     counts.quiz = qc ?? 0
-    if (!qc) missing.push('quiz')
   }
 
   const complete = missing.length === 0

@@ -24,6 +24,7 @@ import { extractOutcomesFromText, formatOutcomesForPrompt } from '@/lib/spie/cur
 import type { NormalizedOutcome } from '@/lib/spie/curriculum/extraction/types'
 import { buildAydtePlanningBridge } from '@/lib/spie/curriculum/planning/aydte-planning-bridge'
 import { reconstructFromScaffold, validateV3Structure } from '@/lib/spie/validate-v3-structure'
+import { shadowWriteCanonicalPedagogicalStructure } from '@/lib/spie/canonical-shadow-write'
 
 export const maxDuration = 300
 
@@ -916,6 +917,30 @@ Retourne UNIQUEMENT ce JSON (concis, factuel, ancré dans le curriculum fourni) 
             progress: 100,
           })
           controller.close(); return
+        }
+
+        // ── SHADOW-WRITE V7.5.3 : JSON legacy + tables canoniques ───────────
+        // Non-bloquant tant que les lectures restent sur programme_annuel.contenu_json.
+        if (packId && progId) {
+          const canonicalResult = await shadowWriteCanonicalPedagogicalStructure({
+            supabase,
+            programme,
+            programmeAnnuelId: progId,
+            teachingPackId:    packId,
+            enseignantId:      profil.id,
+            classeId:          input.classe_id,
+          })
+
+          if (!canonicalResult.ok) {
+            console.warn('[SPIE_CANONICAL_SHADOW_WRITE_WARN]', {
+              packId,
+              progId,
+              classeId: input.classe_id,
+              expected: canonicalResult.expected,
+              actual:   canonicalResult.actual,
+              errors:   canonicalResult.errors,
+            })
+          }
         }
 
         // ── ÉTAPE 5 : Vérification plans de leçon (depuis DB) ─────────────────

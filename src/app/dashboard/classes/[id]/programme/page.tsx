@@ -7,7 +7,7 @@ import LoadingScreen from '@/components/LoadingScreen'
 import BuildMyYearWizard from '@/components/build-year/BuildMyYearWizard'
 import TeachingPackCard from '@/components/build-year/TeachingPackCard'
 import AnnualPlanTimeline from '@/components/build-year/AnnualPlanTimeline'
-import SyllabusEditor from '@/components/build-year/SyllabusEditor'
+import SyllabusViewer from '@/components/build-year/SyllabusViewer'
 import QualityReport from '@/components/build-year/QualityReport'
 import TemplateMapping from '@/components/build-year/TemplateMapping'
 import DetailedLessonView, { LessonEngineProgress } from '@/components/build-year/DetailedLessonView'
@@ -383,7 +383,7 @@ export default function ProgrammePage() {
         {/* ── Syllabus ───────────────────────────────────────────── */}
         {activeTab === 'syllabus' && (
           syllabus?.titre_cours ? (
-            <SyllabusEditor
+            <SyllabusViewer
               syllabus={syllabus}
               teachingPackId={pack!.id}
               programmeAnnuelId={programme!.id}
