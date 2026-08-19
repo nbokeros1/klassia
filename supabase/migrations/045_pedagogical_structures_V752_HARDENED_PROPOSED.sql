@@ -1,8 +1,15 @@
 -- ╔══════════════════════════════════════════════════════════════════════════════╗
--- ║  MIGRATION 045 — CANONICAL PEDAGOGICAL STRUCTURES (V7.5.2 HARDENED)        ║
--- ║  STATUS : PROPOSED — DO NOT EXECUTE WITHOUT PRODUCT OWNER APPROVAL         ║
+-- ║  MIGRATION 045 — V7.5.2 HARDENED                                           ║
+-- ║  *** SUPERSEDED BY 045_canonical_pedagogical_structures_V75_3_FINAL ***     ║
+-- ║  STATUS : DO NOT EXECUTE — REPLACED BY FINAL VERSION                        ║
 -- ║  Author  : ScorgIA V7.5.2 / 2026-08-18                                     ║
 -- ╚══════════════════════════════════════════════════════════════════════════════╝
+--
+-- THIS FILE IS SUPERSEDED. The only candidate for execution is:
+--   supabase/migrations/045_canonical_pedagogical_structures_V75_3_FINAL_PROPOSED.sql
+--
+-- Retained for architecture history only. Neither this file nor the final version
+-- has been remotely applied. Neither 044 nor 045 (any variant) has been applied.
 --
 -- Supersedes proposed migration 044; neither 044 nor 045 has been remotely applied.
 -- This file is architecture documentation only.
