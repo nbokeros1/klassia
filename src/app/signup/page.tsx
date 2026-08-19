@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import AuthBranding from '@/components/auth/AuthBranding'
@@ -15,7 +14,6 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
-  const supabase = createClient()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -26,49 +24,21 @@ export default function SignupPage() {
     setLoading(true)
     setError('')
 
-    // Pass metadata so the Supabase trigger can use them
-    const { data, error: authError } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: {
-        data: {
-          prenom: form.prenom,
-          nom: form.nom,
-          ecole: form.ecole,
-        },
-      },
+    const res = await fetch('/api/auth/beta-signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
     })
 
-    if (authError) {
-      setError(authError.message)
+    const data = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setError(data?.error ?? 'Inscription impossible pour le moment.')
       setLoading(false)
       return
     }
 
-    if (data.user) {
-      // Wait for the trigger to run first
-      await new Promise(r => setTimeout(r, 1200))
-
-      // Upsert with full profile data (overwrites trigger's minimal row)
-      const { error: upsertError } = await supabase.from('utilisateurs').upsert({
-        user_id: data.user.id,
-        prenom: form.prenom,
-        nom: form.nom,
-        email: form.email,
-        ecole: form.ecole,
-        type_compte: form.type_compte,
-        langue: form.langue,
-        onboarding_complete: false,
-      }, { onConflict: 'user_id' })
-
-      if (upsertError) {
-        // Non-blocking: still redirect to onboarding even if upsert fails
-        console.warn('Profil upsert warning:', upsertError.message)
-      }
-
-      router.push('/onboarding')
-    }
-
+    router.push('/onboarding')
     setLoading(false)
   }
 
@@ -130,7 +100,7 @@ export default function SignupPage() {
             <div>
               <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'white', marginBottom: '3px' }}>Créer un compte</h1>
               <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)' }}>
-                Étape {step}/2 · Gratuit · Aucune carte requise
+                Étape {step}/2 · Bêta privée · Invitation requise
               </p>
             </div>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -177,8 +147,8 @@ export default function SignupPage() {
 
                 {/* Avantages */}
                 <div style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.2)', borderRadius: '12px', padding: '14px 16px', marginBottom: '20px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#A78BFA', marginBottom: '10px', letterSpacing: '0.5px' }}>✦ CE QUE TU OBTIENS GRATUITEMENT</div>
-                  {['1 classe organisée automatiquement', '10 générations IA par mois', 'Plans de leçon AVANT/PENDANT/APRÈS', 'Export PDF de tes leçons'].map((f, i) => (
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#A78BFA', marginBottom: '10px', letterSpacing: '0.5px' }}>✦ ACCÈS BÊTA SCORGIA</div>
+                  {['Accès réservé aux enseignants invités', 'Génération SPIE et Mon Année', 'Retours bêta intégrés dans l’application', 'Aucune carte requise'].map((f, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'rgba(255,255,255,0.55)', marginBottom: i < 3 ? '6px' : 0 }}>
                       <span style={{ color: '#4ADE80', fontWeight: 700, fontSize: '13px' }}>✓</span> {f}
                     </div>
@@ -233,7 +203,7 @@ export default function SignupPage() {
                 </div>
 
                 <div style={{ marginBottom: '28px' }}>
-                  <label style={labelStyle}>LANGUE DE L'INTERFACE</label>
+                  <label style={labelStyle}>LANGUE DE L&apos;INTERFACE</label>
                   <div style={{ display: 'flex', gap: '10px' }}>
                     {[{ v: 'fr', l: '🇫🇷', label: 'Français' }, { v: 'en', l: '🇨🇦', label: 'English' }].map(lang => (
                       <button key={lang.v} type="button" onClick={() => setForm({ ...form, langue: lang.v })} style={{
@@ -288,7 +258,7 @@ export default function SignupPage() {
         </div>
 
         <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '11px', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.3px' }}>
-          🔒 Données protégées · Conformité LPRPDE · Aucune donnée nominative transmise à l'IA
+          🔒 Données protégées · Conformité LPRPDE · Aucune donnée nominative transmise à l&apos;IA
         </p>
       </div>
 
