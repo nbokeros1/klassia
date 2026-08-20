@@ -20,6 +20,8 @@ import {
   Shield,
   LogOut,
   Globe,
+  Menu,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -178,20 +180,38 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
   const badge   = FORFAIT_BADGE[forfait]
   const isFr    = profil?.langue !== 'en'
 
-  const [adminMode, setAdminMode] = useState(false)
-  const [compact, setCompact] = useState(false)
+  const [adminMode,   setAdminMode]   = useState(false)
+  const [compact,     setCompact]     = useState(false)
+  const [mobileOpen,  setMobileOpen]  = useState(false)
 
   useEffect(() => {
     if (isAdmin) setAdminMode(localStorage.getItem('klassia_admin_mode') === 'true')
   }, [isAdmin])
 
   useEffect(() => {
+    const isMobile = () => window.matchMedia('(max-width: 768px)').matches
     const stored = typeof window !== 'undefined' && localStorage.getItem('sidebar_compact') === 'true'
     setCompact(stored)
-    document.documentElement.style.setProperty('--sidebar-w', stored ? '64px' : '240px')
+    document.documentElement.style.setProperty(
+      '--sidebar-w',
+      isMobile() ? '0px' : stored ? '64px' : '240px',
+    )
+    const onResize = () => {
+      if (isMobile()) {
+        document.documentElement.style.setProperty('--sidebar-w', '0px')
+        setMobileOpen(false)
+      } else {
+        const c = localStorage.getItem('sidebar_compact') === 'true'
+        document.documentElement.style.setProperty('--sidebar-w', c ? '64px' : '240px')
+      }
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
   }, [])
 
   const toggleCompact = () => {
+    const isMobile = () => window.matchMedia('(max-width: 768px)').matches
+    if (isMobile()) return
     setCompact(prev => {
       const next = !prev
       localStorage.setItem('sidebar_compact', String(next))
@@ -213,9 +233,26 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
   }
 
   // ── Admin mode ─────────────────────────────────────────────────────────────
+  const mobileHeader = (
+    <div className="mobile-header">
+      <button
+        onClick={() => setMobileOpen(prev => !prev)}
+        aria-label={mobileOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', padding: 4, display: 'flex', alignItems: 'center', lineHeight: 1, flexShrink: 0 }}
+      >
+        {mobileOpen ? <X size={22} strokeWidth={2} /> : <Menu size={22} strokeWidth={2} />}
+      </button>
+      <ScorgiaLogo variant="icon" width={20} height={20} />
+      <span className="mobile-header-title">ScorgIA</span>
+    </div>
+  )
+
   if (adminMode) {
     return (
-      <aside className={`sidebar${compact ? ' sidebar--compact' : ''}`}>
+      <>
+        {mobileHeader}
+        {mobileOpen && <div className="mobile-drawer-overlay" onClick={() => setMobileOpen(false)} />}
+        <aside className={`sidebar${mobileOpen ? ' sidebar--mobile-open' : ''}${compact ? ' sidebar--compact' : ''}`}>
         <div className="sidebar-logo" onClick={() => router.push('/dashboard')} style={{ cursor: 'pointer' }}>
           {compact
             ? <ScorgiaLogo variant="icon" width={24} height={24} />
@@ -248,13 +285,17 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
             </button>
           </div>
         </div>
-      </aside>
+        </aside>
+      </>
     )
   }
 
   // ── Enseignant mode ────────────────────────────────────────────────────────
   return (
-    <aside className={`sidebar${compact ? ' sidebar--compact' : ''}`}>
+    <>
+      {mobileHeader}
+      {mobileOpen && <div className="mobile-drawer-overlay" onClick={() => setMobileOpen(false)} />}
+      <aside className={`sidebar${mobileOpen ? ' sidebar--mobile-open' : ''}${compact ? ' sidebar--compact' : ''}`}>
 
       {/* ── Logo ──────────────────────────────────────────────────────────── */}
       <div
@@ -343,7 +384,8 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
           </button>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }
 

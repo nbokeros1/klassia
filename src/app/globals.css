@@ -816,11 +816,79 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; tra
   .page-layout-col-secondaire { width: 100%; }
 }
 
+/* ── Mobile navigation header — visible only on mobile ── */
+.mobile-header { display: none; }
+.mobile-drawer-overlay { display: none; }
+
 @media (max-width: 768px) {
-  .sidebar { display: none; }
+  /* Sidebar → slide-in drawer. JS sets --sidebar-w: 0px on mobile. */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.26s cubic-bezier(.4,0,.2,1);
+    width: 280px !important;
+    z-index: 1001;
+  }
+  .sidebar--mobile-open { transform: translateX(0); }
+
+  /* Mobile navigation header bar */
+  .mobile-header {
+    display: flex;
+    position: fixed; top: 0; left: 0; right: 0; height: 52px; z-index: 30;
+    align-items: center; padding: 0 16px; gap: 12px;
+    background: var(--sidebar-bg, rgba(13,30,58,0.96));
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .mobile-header-title {
+    flex: 1; font-size: 13px; font-weight: 700; color: #fff;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Drawer backdrop */
+  .mobile-drawer-overlay {
+    display: block; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.48); z-index: 1000; cursor: pointer;
+  }
+
+  /* Root content: no sidebar offset (handled by JS) */
   .main-content { margin-left: 0; }
+
+  /* Grid layouts */
   .stats-grid { grid-template-columns: 1fr 1fr; }
+  .prep-suggestion-grid { grid-template-columns: 1fr; }
   .page-content { padding: 16px; }
+
+  /* Préparer: hide overflowing side panels */
+  .c13-copilot-wrap { display: none !important; }
+  .c14-explorer-col, .c14-copilot-col { display: none !important; }
+
+  /* Safe area for FAB */
+  body { padding-bottom: env(safe-area-inset-bottom, 0); }
+}
+
+/* Smallest phones: single column */
+@media (max-width: 480px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .page-content { padding: 12px; }
+}
+
+/* ── Mon Année workspace — mobile nav ── */
+.mon-annee-nav-toggle { display: none; }
+
+@media (max-width: 768px) {
+  .mon-annee-nav-toggle { display: flex !important; }
+
+  .mon-annee-left-nav {
+    position: fixed !important;
+    left: -240px !important;
+    top: 0 !important;
+    height: 100vh !important;
+    width: 240px !important;
+    z-index: 1002;
+    transition: left 0.24s cubic-bezier(.4,0,.2,1);
+    box-shadow: 4px 0 32px rgba(0,0,0,0.18);
+  }
+  .mon-annee-left-nav--open { left: 0 !important; }
 }
 
 @media print {

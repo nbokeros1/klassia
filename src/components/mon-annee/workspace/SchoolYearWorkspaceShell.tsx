@@ -389,6 +389,7 @@ export default function SchoolYearWorkspaceShell({ initialClasseId }: ShellProps
   const [activeTab,      setActiveTab]      = useState<WorkspaceTab>('apercu')
   const [classeId,       setClasseId]       = useState<string | null>(initialClasseId ?? null)
   const [matiereFilter,  setMatiereFilter]  = useState<string | null>(null)
+  const [navVisible,     setNavVisible]     = useState(false)
 
   // ── Class-specific state ─────────────────────────────────────────────────
   const [classData,    setClassData]    = useState<ClassSpecificData | null>(null)
@@ -617,6 +618,21 @@ export default function SchoolYearWorkspaceShell({ initialClasseId }: ShellProps
           </div>
         </div>
 
+        {/* Mobile nav toggle */}
+        <button
+          onClick={() => setNavVisible(v => !v)}
+          aria-label={navVisible ? 'Fermer la navigation' : 'Ouvrir la navigation'}
+          style={{
+            display: 'none', background: 'none', border: '1px solid var(--card-border)',
+            borderRadius: 8, cursor: 'pointer', color: 'var(--text-secondary)',
+            padding: '5px 8px', flexShrink: 0, fontSize: 12,
+            // shown via media query via inline class below — we use a workaround
+          }}
+          className="mon-annee-nav-toggle"
+        >
+          ☰
+        </button>
+
         {/* Context selectors */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <MatiereSelector
@@ -636,7 +652,7 @@ export default function SchoolYearWorkspaceShell({ initialClasseId }: ShellProps
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
-        {/* Left nav */}
+        {/* Left nav — hidden on mobile unless navVisible */}
         <div style={{
           width: 220, flexShrink: 0,
           borderRight: '1px solid var(--card-border)',
@@ -644,7 +660,10 @@ export default function SchoolYearWorkspaceShell({ initialClasseId }: ShellProps
           position: 'sticky', top: 56,
           height: 'calc(100vh - 56px)',
           overflowY: 'auto',
-        }}>
+          // mobile: overlay drawer behaviour
+        }}
+          className={`mon-annee-left-nav${navVisible ? ' mon-annee-left-nav--open' : ''}`}
+        >
           <WorkspaceNav
             activeTab={activeTab}
             classeId={classeId}

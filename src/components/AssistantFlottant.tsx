@@ -414,7 +414,7 @@ function AssistantFlottantInner({ pathname }: { pathname: string }) {
       {/* ── Panneau slide-in ─────────────────────────────────────────────── */}
       {open && (
         <div style={{
-          position: 'fixed', left: 0, top: 0, bottom: 0, width: 380,
+          position: 'fixed', left: 0, top: 0, bottom: 0, width: 'min(380px, 100dvw)',
           background: 'var(--color-bg-secondary)',
           borderRight: '1px solid var(--color-border)',
           zIndex: 1000, display: 'flex', flexDirection: 'column',
