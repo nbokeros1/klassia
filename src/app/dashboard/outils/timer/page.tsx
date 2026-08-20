@@ -104,7 +104,7 @@ export default function TimerPage() {
             {fmtTime(timerSecs)}
           </div>
           {timerTotal > 0 && (
-            <div style={{ width: 400, height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ width: 'min(400px, 90vw)', height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${progress * 100}%`, background: phaseColor, borderRadius: 3, transition: 'width 1s linear' }} />
             </div>
           )}

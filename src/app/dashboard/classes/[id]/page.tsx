@@ -1294,7 +1294,7 @@ export default function ClasseExplorateur() {
 
         {/* ── PANNEAU APERÇU ───────────────────────────────────────────── */}
         {previewItem && (
-          <div style={{ width: 300, flexShrink: 0, background: 'var(--color-bg-secondary)', borderLeft: '1.5px solid var(--color-border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="class-preview-panel" style={{ width: 300, flexShrink: 0, background: 'var(--color-bg-secondary)', borderLeft: '1.5px solid var(--color-border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-separator)', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -1394,7 +1394,7 @@ export default function ClasseExplorateur() {
       {showAddMatiere && (
         <>
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 699 }} onClick={() => setShowAddMatiere(false)} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'var(--color-bg-card)', border: '1.5px solid var(--color-border)', borderRadius: 14, padding: 28, width: 360, zIndex: 700, boxShadow: 'var(--shadow-modal)' }}>
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'var(--color-bg-card)', border: '1.5px solid var(--color-border)', borderRadius: 14, padding: 28, width: 'min(360px, calc(100vw - 32px))', zIndex: 700, boxShadow: 'var(--shadow-modal)' }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 20, margin: '0 0 20px' }}>➕ Ajouter une matière</h3>
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: 5 }}>Nom de la matière</label>

@@ -821,19 +821,22 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; tra
 .mobile-drawer-overlay { display: none; }
 
 @media (max-width: 768px) {
-  /* Sidebar → slide-in drawer. JS sets --sidebar-w: 0px on mobile. */
+  /* Sidebar → slide-in drawer. JS sets --sidebar-w: 0px on mobile.
+     top: 52px so drawer starts below mobile header; hamburger remains visible. */
   .sidebar {
     transform: translateX(-100%);
     transition: transform 0.26s cubic-bezier(.4,0,.2,1);
     width: 280px !important;
+    top: 52px !important;
+    height: calc(100vh - 52px) !important;
     z-index: 1001;
   }
   .sidebar--mobile-open { transform: translateX(0); }
 
-  /* Mobile navigation header bar */
+  /* Mobile navigation header bar — highest z-index so hamburger stays tappable above overlay */
   .mobile-header {
     display: flex;
-    position: fixed; top: 0; left: 0; right: 0; height: 52px; z-index: 30;
+    position: fixed; top: 0; left: 0; right: 0; height: 52px; z-index: 1002;
     align-items: center; padding: 0 16px; gap: 12px;
     background: var(--sidebar-bg, rgba(13,30,58,0.96));
     backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -870,6 +873,17 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; tra
 @media (max-width: 480px) {
   .stats-grid { grid-template-columns: 1fr; }
   .page-content { padding: 12px; }
+}
+
+/* ── Classes folder — preview panel overlay on mobile ── */
+@media (max-width: 768px) {
+  .class-preview-panel {
+    position: fixed !important;
+    right: 0; top: 52px; bottom: 0;
+    width: 100% !important;
+    z-index: 900;
+    box-shadow: -8px 0 40px rgba(0,0,0,0.2);
+  }
 }
 
 /* ── Mon Année workspace — mobile nav ── */

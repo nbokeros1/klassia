@@ -962,7 +962,7 @@ function StudioContent() {
       {showSaveModal && (
         <>
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 499 }} onClick={() => setShowSaveModal(false)} />
-          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'var(--color-bg-card)', border: '1.5px solid var(--color-border)', borderRadius: 16, zIndex: 500, width: 400, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,.5)' }}>
+          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'var(--color-bg-card)', border: '1.5px solid var(--color-border)', borderRadius: 16, zIndex: 500, width: 'min(400px, calc(100vw - 32px))', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,.5)' }}>
             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--color-separator)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>💾 Où sauvegarder ?</span>
               <button onClick={() => setShowSaveModal(false)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: 18, cursor: 'pointer' }}>×</button>
@@ -1023,7 +1023,7 @@ function StudioContent() {
       {showHistory && (
         <>
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 499 }} onClick={() => setShowHistory(false)} />
-          <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 380, background: 'var(--color-bg-card)', borderLeft: '1.5px solid var(--color-border)', zIndex: 500, display: 'flex', flexDirection: 'column', boxShadow: '-12px 0 40px rgba(0,0,0,.4)' }}>
+          <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 'min(380px, 100dvw)', background: 'var(--color-bg-card)', borderLeft: '1.5px solid var(--color-border)', zIndex: 500, display: 'flex', flexDirection: 'column', boxShadow: '-12px 0 40px rgba(0,0,0,.4)' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-separator)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>🕐 Historique</span>
               <button onClick={() => setShowHistory(false)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: 18, cursor: 'pointer' }}>×</button>

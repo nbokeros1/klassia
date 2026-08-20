@@ -623,10 +623,9 @@ export default function SchoolYearWorkspaceShell({ initialClasseId }: ShellProps
           onClick={() => setNavVisible(v => !v)}
           aria-label={navVisible ? 'Fermer la navigation' : 'Ouvrir la navigation'}
           style={{
-            display: 'none', background: 'none', border: '1px solid var(--card-border)',
+            background: 'none', border: '1px solid var(--card-border)',
             borderRadius: 8, cursor: 'pointer', color: 'var(--text-secondary)',
             padding: '5px 8px', flexShrink: 0, fontSize: 12,
-            // shown via media query via inline class below — we use a workaround
           }}
           className="mon-annee-nav-toggle"
         >
