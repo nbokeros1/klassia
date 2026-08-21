@@ -196,7 +196,7 @@ export default function LandingPage() {
       cta_sub: 'Rejoins des enseignants qui préparent mieux, plus vite, avec moins de stress.',
       cta_btn: 'Commencer gratuitement', cta_studio: 'Voir le Studio IA',
       cta_note: 'Gratuit pour commencer · Aucune carte requise · Données 100% protégées',
-      footer_note: '© 2026 ScorgIA · Fait pour les enseignants',
+      footer_note: '© 2026 Bodingo AI Tech Inc.',
       footer_links: ['Confidentialité', 'Conditions', 'Contact', 'Pour les écoles'],
     },
     en: {
@@ -245,7 +245,7 @@ export default function LandingPage() {
       cta_sub: 'Join teachers who prepare better, faster, with less stress.',
       cta_btn: 'Start for free', cta_studio: 'See AI Studio',
       cta_note: 'Free to start · No card required · 100% protected data',
-      footer_note: '© 2026 ScorgIA · Made for educators',
+      footer_note: '© 2026 Bodingo AI Tech Inc.',
       footer_links: ['Privacy', 'Terms', 'Contact', 'For schools'],
     },
   }[lang]
@@ -960,10 +960,12 @@ export default function LandingPage() {
           <ScorgiaLogo variant="dark" height={24} />
         </div>
         <div style={{ display: 'flex', gap: '28px' }}>
-          {t.footer_links.map((l, i) => (
-            <span key={i} style={{ fontSize: '13px', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', transition: 'color 0.15s' }}
+          {(['/privacy', '/terms', '#contact', '#'] as const).map((href, i) => (
+            <Link key={i} href={href} style={{ fontSize: '13px', color: 'rgba(255,255,255,0.2)', textDecoration: 'none', transition: 'color 0.15s' }}
               onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.2)')}>{l}</span>
+              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.2)')}>
+              {t.footer_links[i]}
+            </Link>
           ))}
         </div>
         <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.2)' }}>{t.footer_note}</div>

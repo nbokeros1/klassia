@@ -13,6 +13,7 @@ export default function SignupPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [legalAccepted, setLegalAccepted] = useState(false)
   const router = useRouter()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -27,7 +28,7 @@ export default function SignupPage() {
     const res = await fetch('/api/auth/beta-signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, legalAccepted }),
     })
 
     const data = await res.json().catch(() => null)
@@ -220,6 +221,24 @@ export default function SignupPage() {
                   </div>
                 </div>
 
+                {/* Consent checkbox */}
+                <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                  <input
+                    id="legal-consent"
+                    type="checkbox"
+                    checked={legalAccepted}
+                    onChange={e => setLegalAccepted(e.target.checked)}
+                    style={{ marginTop: '2px', accentColor: '#A78BFA', width: '15px', height: '15px', flexShrink: 0, cursor: 'pointer' }}
+                  />
+                  <label htmlFor="legal-consent" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', lineHeight: 1.6, cursor: 'pointer' }}>
+                    J&apos;ai lu et j&apos;accepte la{' '}
+                    <Link href="/privacy" target="_blank" style={{ color: '#A78BFA', textDecoration: 'none' }}>Politique de confidentialité</Link>
+                    {' '}et les{' '}
+                    <Link href="/terms" target="_blank" style={{ color: '#A78BFA', textDecoration: 'none' }}>Conditions d&apos;utilisation</Link>
+                    {' '}de ScorgIA.
+                  </label>
+                </div>
+
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="button" onClick={() => setStep(1)} style={{
                     flex: 1, padding: '14px', background: 'rgba(255,255,255,0.06)',
@@ -231,12 +250,12 @@ export default function SignupPage() {
                     onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}>
                     ← Retour
                   </button>
-                  <button type="submit" disabled={loading} style={{
+                  <button type="submit" disabled={loading || !legalAccepted} style={{
                     flex: 2, padding: '14px',
-                    background: loading ? 'rgba(45,95,160,0.5)' : 'linear-gradient(135deg, #2D5FA0, #7C3AED)',
+                    background: loading || !legalAccepted ? 'rgba(45,95,160,0.35)' : 'linear-gradient(135deg, #2D5FA0, #7C3AED)',
                     color: 'white', border: 'none', borderRadius: '11px',
-                    fontSize: '15px', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
-                    boxShadow: loading ? 'none' : '0 6px 24px rgba(124,58,237,0.4)', transition: 'all 0.2s',
+                    fontSize: '15px', fontWeight: 700, cursor: loading || !legalAccepted ? 'not-allowed' : 'pointer',
+                    boxShadow: loading || !legalAccepted ? 'none' : '0 6px 24px rgba(124,58,237,0.4)', transition: 'all 0.2s',
                   }}>
                     {loading ? (
                       <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>

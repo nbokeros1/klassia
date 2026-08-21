@@ -16,7 +16,7 @@ function buildSystemPrompt(ctx: CopilotTeachingContext): string {
     ? `\nMÉTHODES PRÉFÉRÉES DE L'ENSEIGNANT : ${ctx.preferred_methods.join(', ')}`
     : ''
 
-  return `Tu es KlassIA Copilot, un assistant pédagogique dédié aux enseignants en salle de classe.
+  return `Tu es ScorgIA Copilot, un assistant pédagogique dédié aux enseignants en salle de classe.
 
 CONTEXTE DU COURS EN COURS :
 • Leçon : ${ctx.lecon_titre}

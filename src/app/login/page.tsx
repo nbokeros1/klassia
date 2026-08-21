@@ -185,6 +185,16 @@ export default function LoginPage() {
           🔒 Données protégées · Conformité LPRPDE · Canada
         </p>
 
+        <div style={{ textAlign: 'center', marginTop: '16px', display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <Link href="/privacy" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.18)', textDecoration: 'none' }}>Confidentialité</Link>
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.1)' }}>·</span>
+          <Link href="/terms" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.18)', textDecoration: 'none' }}>Conditions</Link>
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.1)' }}>·</span>
+          <Link href="/trust" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.18)', textDecoration: 'none' }}>Confiance</Link>
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.1)' }}>·</span>
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.12)' }}>© 2026 Bodingo AI Tech Inc.</span>
+        </div>
+
         <details style={{ marginTop: 16 }}>
           <summary style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', cursor: 'pointer', userSelect: 'none', listStyle: 'none', textAlign: 'center' }}>
             Accès administrateur

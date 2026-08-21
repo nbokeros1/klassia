@@ -10,6 +10,7 @@ type SignupPayload = {
   ecole?: string
   type_compte?: string
   langue?: string
+  legalAccepted?: boolean
 }
 
 function serviceClient() {
@@ -27,6 +28,10 @@ export async function POST(req: NextRequest) {
 
     if (!email || !body.password || !body.prenom || !body.nom) {
       return NextResponse.json({ error: 'Informations requises manquantes.' }, { status: 400 })
+    }
+
+    if (!body.legalAccepted) {
+      return NextResponse.json({ error: 'L\'acceptation des conditions d\'utilisation est requise.' }, { status: 400 })
     }
 
     const admin = serviceClient()
