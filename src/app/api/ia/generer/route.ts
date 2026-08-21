@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/api-auth'
+import { sanitizeEleveDifferenciationContext } from '@/lib/pedagogy/privacy/student-ai-context'
 
 export const maxDuration = 120
 import { getMaxTokens } from '@/lib/ia/get-max-tokens'
@@ -10,6 +12,12 @@ import { peutGenererContenu, LIMITES_FORFAIT } from '@/lib/hooks/useForfait'
 import type { ForfaitType } from '@/lib/types/database'
 
 export async function POST(request: Request) {
+  // P0-01 — authentication required before any AI call
+  const { error: authError, user } = await requireAuth()
+  if (authError || !user) {
+    return authError ?? NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return NextResponse.json(
@@ -37,15 +45,12 @@ export async function POST(request: Request) {
   let profilQuota: any = null
   try {
     const supabaseQuota = await createClient()
-    const { data: { session: qSession } } = await supabaseQuota.auth.getSession()
-    if (qSession) {
-      const { data: qProfil } = await supabaseQuota
-        .from('utilisateurs')
-        .select('id, forfait, is_admin, generations_ia_total_a_vie, generations_ia_mois_courant, derniere_reinit_quota')
-        .eq('user_id', qSession.user.id)
-        .single()
-      profilQuota = qProfil
-    }
+    const { data: qProfil } = await supabaseQuota
+      .from('utilisateurs')
+      .select('id, forfait, is_admin, generations_ia_total_a_vie, generations_ia_mois_courant, derniere_reinit_quota')
+      .eq('user_id', user.id)
+      .single()
+    profilQuota = qProfil
   } catch { /* non-bloquant si erreur réseau */ }
 
   if (profilQuota) {
@@ -67,36 +72,36 @@ export async function POST(request: Request) {
     let provinceEnseignant: string | null = null
     try {
       const supabaseMem = await createClient()
-      const { data: { session: memSession } } = await supabaseMem.auth.getSession()
-      if (memSession) {
-        const { data: userProfilMem } = await supabaseMem
-          .from('utilisateurs').select('id, province').eq('user_id', memSession.user.id).single()
-        if (userProfilMem?.id) {
-          provinceEnseignant = (userProfilMem as any).province ?? null
-          const { data: memoires } = await supabaseMem
-            .from('studio_ia_memoire').select('cle,type')
-            .eq('enseignant_id', userProfilMem.id)
-            .order('updated_at', { ascending: false }).limit(8)
-          if (memoires && memoires.length > 0) {
-            const memo = memoires.map((m: any) => `[${m.type}] ${m.cle}`).join(' · ')
-            memoireSection = isFr
-              ? `\n\nContexte enseignant : ${memo}`
-              : `\n\nTeacher context: ${memo}`
-          }
+      const { data: userProfilMem } = await supabaseMem
+        .from('utilisateurs').select('id, province').eq('user_id', user.id).single()
+      if (userProfilMem?.id) {
+        provinceEnseignant = (userProfilMem as any).province ?? null
+        const { data: memoires } = await supabaseMem
+          .from('studio_ia_memoire').select('cle,type')
+          .eq('enseignant_id', userProfilMem.id)
+          .order('updated_at', { ascending: false }).limit(8)
+        if (memoires && memoires.length > 0) {
+          const memo = memoires.map((m: any) => `[${m.type}] ${m.cle}`).join(' · ')
+          memoireSection = isFr
+            ? `\n\nContexte enseignant : ${memo}`
+            : `\n\nTeacher context: ${memo}`
         }
       }
     } catch { /* non-bloquant */ }
 
-    // ── Différenciation ───────────────────────────────────────────────────────
-    const elevesABesoins = (profils_eleves || []).filter((e: any) => e.profil_type !== 'standard')
+    // ── Différenciation (P0-02 — sanitisé : sans notes_enseignant, sans termes médicaux) ──
+    const elevesABesoins: import('@/lib/pedagogy/privacy/student-ai-context').EleveProfilSanitise[] =
+      (profils_eleves || [])
+        .filter((e: any) => e.profil_type !== 'standard')
+        .map(sanitizeEleveDifferenciationContext)
     const differenciationSection = elevesABesoins.length > 0
       ? (isFr
           ? `\n\nÉlèves à besoins particuliers :\n${
-              elevesABesoins.map((e: any) =>
-                `- ${e.profil_type}${e.besoins?.length ? ': ' + e.besoins.join(', ') : ''}${e.notes_enseignant ? ' — ' + e.notes_enseignant : ''}`
+              elevesABesoins.map((e) =>
+                `- ${e.profil_type_safe}${e.besoins_safe.length ? ': ' + e.besoins_safe.join(', ') : ''}`
               ).join('\n')
             }\nGénère deux versions séparées par :\n=== VERSION DIFFÉRENCIÉE ===`
-          : `\n\nStudents with special needs:\n${elevesABesoins.map((e: any) => e.profil_type).join(', ')}\nGenerate two versions separated by:\n=== VERSION DIFFÉRENCIÉE ===`)
+          : `\n\nStudents with special needs:\n${elevesABesoins.map((e) => e.profil_type_safe).join(', ')}\nGenerate two versions separated by:\n=== VERSION DIFFÉRENCIÉE ===`)
       : ''
 
     // ── Intro langue ─────────────────────────────────────────────────────────
@@ -185,10 +190,8 @@ ABSOLUTE RULE: never generate cultural content specific to any particular nation
       if (texte.startsWith('⚠')) return
       try {
         const supabaseServer = await createClient()
-        const { data: { session } } = await supabaseServer.auth.getSession()
-        if (!session) return
         const { data: userProfil } = await supabaseServer
-          .from('utilisateurs').select('id').eq('user_id', session.user.id).single()
+          .from('utilisateurs').select('id').eq('user_id', user.id).single()
         if (!userProfil?.id) return
         const datePrevue = body.date_prevue as string | undefined
         const dateEcheance = datePrevue

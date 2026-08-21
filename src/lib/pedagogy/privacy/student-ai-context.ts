@@ -357,3 +357,34 @@ const CLASS_DISCLAIMER =
   'CONTEXTE DE CLASSE ScorgIA — Données agrégées anonymisées. '
   + 'Aucun élève nominatif inclus. '
   + 'Ces chiffres décrivent le niveau de soutien collectif, non des diagnostics individuels.'
+
+// ════════════════════════════════════════════════════════════════════════════
+// SANITISATION LÉGÈRE — différenciation dans /api/ia/generer
+// Pour le contexte de différenciation collective (profil simple, pas SupportPlanV71)
+// ════════════════════════════════════════════════════════════════════════════
+
+export type EleveProfilSimple = {
+  profil_type?:      string
+  besoins?:          string[]
+  notes_enseignant?: string   // jamais transmis à l'IA
+  [key: string]:     unknown
+}
+
+export type EleveProfilSanitise = {
+  profil_type_safe: string
+  besoins_safe:     string[]
+}
+
+/**
+ * Sanitise un profil élève simple pour la différenciation IA dans /api/ia/generer.
+ * - Supprime notes_enseignant (données brutes enseignant → jamais à l'IA)
+ * - Remplace les termes médicaux dans profil_type et besoins
+ * - Ne produit jamais d'identifiant réel
+ */
+export function sanitizeEleveDifferenciationContext(eleve: EleveProfilSimple): EleveProfilSanitise {
+  return {
+    profil_type_safe: stripMedicalLanguage(eleve.profil_type ?? 'besoins particuliers'),
+    besoins_safe:     (eleve.besoins ?? []).map(b => stripMedicalLanguage(b)),
+    // notes_enseignant intentionnellement omis
+  }
+}
