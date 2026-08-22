@@ -142,12 +142,12 @@ export async function POST(request: Request) {
 
   // ── Profil enseignant ─────────────────────────────────────────────────────
   const { data: profil } = await supabase
-    .from('utilisateurs').select('id, forfait, is_admin')
+    .from('utilisateurs').select('id, forfait, is_admin, role')
     .eq('user_id', user.id).single()
 
   if (!profil) return NextResponse.json({ error: 'Profil introuvable' }, { status: 403 })
 
-  const entitlement = getBetaEntitlement(profil.forfait ?? 'gratuit')
+  const entitlement = getBetaEntitlement(profil.forfait ?? 'gratuit', profil.role, profil.is_admin)
   if (!entitlement.build_year_access) {
     return NextResponse.json({ error: 'Accès non autorisé pour ce forfait' }, { status: 403 })
   }

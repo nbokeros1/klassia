@@ -60,6 +60,9 @@ export type Utilisateur = {
   // ── Champs migration 007 ──────────────────────────────────────────────────
   is_admin?: boolean
   role_admin?: 'super_admin' | 'support' | 'developpeur' | null
+  // ── Champs migration 032 ──────────────────────────────────────────────────
+  /** scorgia_roles.id — e.g. 'teacher', 'beta', 'admin', 'founder' */
+  role?: string
   onboarding_etape?: number
   onboarding_complete_v2?: boolean
   gabarit_lecon_url?: string

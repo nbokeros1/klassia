@@ -50,9 +50,10 @@ function datesPourJour(jour: string, anneeDebut: string, anneeFin: string): stri
   return dates
 }
 
-// Vérification quota inline (useForfait.ts a 'use client' — ne peut pas être importé ici)
+// Vérification quota inline — mirrors resolver.ts logic for server-route safety.
 function verifierQuota(profil: any): { autorise: boolean; raison?: string } {
   if (profil.is_admin) return { autorise: true }
+  if (profil.role === 'beta') return { autorise: true }
   const forfait = profil.forfait || 'gratuit'
   if (forfait === 'pro_plus' || forfait === 'institution') return { autorise: true }
   if (forfait === 'gratuit') {
@@ -99,7 +100,7 @@ export async function POST(request: Request) {
 
   const { data: profil } = await supabase!
     .from('utilisateurs')
-    .select('id, prenom, province, profil_ia, forfait, is_admin, generations_ia_total_a_vie, generations_ia_mois_courant, derniere_reinit_quota')
+    .select('id, prenom, province, profil_ia, forfait, is_admin, role, generations_ia_total_a_vie, generations_ia_mois_courant, derniere_reinit_quota')
     .eq('user_id', session!.user.id)
     .single()
 

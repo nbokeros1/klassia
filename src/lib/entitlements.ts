@@ -4,6 +4,7 @@
 // Modifier ici pour ajuster les limites sans toucher au reste de l'application.
 
 import type { ForfaitType } from '@/lib/types/database'
+import { resolveEffectiveForfait } from '@/lib/entitlement/resolver'
 
 // ─── Type d'entitlement ───────────────────────────────────────────────────────
 
@@ -93,8 +94,13 @@ export const BETA_ENTITLEMENTS: Record<ForfaitType, BetaEntitlement> = {
 
 // ─── Helper ────────────────────────────────────────────────────────────────────
 
-export function getBetaEntitlement(forfait: ForfaitType | undefined): BetaEntitlement {
-  return BETA_ENTITLEMENTS[forfait ?? 'gratuit']
+export function getBetaEntitlement(
+  forfait:   ForfaitType | undefined,
+  role?:     string | null,
+  is_admin?: boolean | null,
+): BetaEntitlement {
+  const effective = resolveEffectiveForfait({ role, forfait, is_admin }) as ForfaitType
+  return BETA_ENTITLEMENTS[effective] ?? BETA_ENTITLEMENTS.gratuit
 }
 
 // Messages d'explication pour les éléments verrouillés
@@ -106,11 +112,11 @@ export const LOCKED_MESSAGES: Partial<Record<keyof BetaEntitlement, string>> = {
 }
 
 // Résumé lisible de ce que reçoit l'utilisateur (pour l'étape 5 du wizard)
-export function getEntitlementSummary(forfait: ForfaitType | undefined): {
+export function getEntitlementSummary(forfait: ForfaitType | undefined, role?: string | null, is_admin?: boolean | null): {
   inclus: string[]
   verrouille: string[]
 } {
-  const e = getBetaEntitlement(forfait)
+  const e = getBetaEntitlement(forfait, role, is_admin)
   const inclus: string[] = []
   const verrouille: string[] = []
 

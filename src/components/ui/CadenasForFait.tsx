@@ -19,6 +19,8 @@ interface CadenasForFaitProps {
   forfait_actuel: ForfaitType
   children: React.ReactNode
   mode?: 'overlay' | 'banniere'
+  /** scorgia_roles.id of the current user — beta role bypasses all locks */
+  role?: string | null
   /** Force le cadenas indépendamment du feature flag (ex: quota numérique atteint) */
   bloque?: boolean
   /** Message personnalisé affiché en titre de la modal quand bloque=true */
@@ -197,11 +199,12 @@ export default function CadenasForFait({
   forfait_actuel,
   children,
   mode = 'overlay',
+  role,
   bloque,
   messageCustom,
   forfait_cible,
 }: CadenasForFaitProps) {
-  const { peutUtiliser, forfaitRequis } = useForfait(forfait_actuel)
+  const { peutUtiliser, forfaitRequis } = useForfait(forfait_actuel, undefined, role ?? undefined)
   const [modalOpen, setModalOpen]       = useState(false)
 
   // Déterminer si le cadenas doit s'activer

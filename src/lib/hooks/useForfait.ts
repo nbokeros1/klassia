@@ -1,6 +1,7 @@
 'use client'
 
 import type { ForfaitType, Utilisateur } from '@/lib/types/database'
+import { resolveEffectiveForfait, hasUnlimitedAI } from '@/lib/entitlement/resolver'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,13 +156,15 @@ export const LIMITES_FORFAIT: Record<ForfaitType, LimiteForfait> = {
 
 export function peutGenererContenu(
   profil: Pick<Utilisateur,
-    'forfait' | 'is_admin' | 'generations_ia_total_a_vie' |
+    'forfait' | 'is_admin' | 'role' | 'generations_ia_total_a_vie' |
     'generations_ia_mois_courant' | 'derniere_reinit_quota'
   >,
 ): { autorise: boolean; raison?: string } {
-  if (profil.is_admin) return { autorise: true }
+  if (hasUnlimitedAI({ role: profil.role, forfait: profil.forfait, is_admin: profil.is_admin })) {
+    return { autorise: true }
+  }
 
-  const forfait = profil.forfait || 'gratuit'
+  const forfait = resolveEffectiveForfait({ role: profil.role, forfait: profil.forfait, is_admin: profil.is_admin })
   const limites = LIMITES_FORFAIT[forfait]
 
   if (limites.generations_quota_type === 'illimite') return { autorise: true }
@@ -178,7 +181,6 @@ export function peutGenererContenu(
     return { autorise: true }
   }
 
-  // mensuel — vérifier si le cycle de 30 jours a expiré
   if (limites.generations_quota_type === 'mensuel') {
     const max             = limites.generations_quota_max!
     const derniereReinit  = profil.derniere_reinit_quota
@@ -203,11 +205,11 @@ export function peutGenererContenu(
 }
 
 export function peutCreerClasse(
-  profil: Pick<Utilisateur, 'forfait' | 'is_admin'>,
+  profil: Pick<Utilisateur, 'forfait' | 'is_admin' | 'role'>,
   nbClassesActuelles: number,
 ): boolean {
   if (profil.is_admin) return true
-  const forfait = profil.forfait || 'gratuit'
+  const forfait = resolveEffectiveForfait({ role: profil.role, forfait: profil.forfait, is_admin: profil.is_admin })
   const max     = LIMITES_FORFAIT[forfait].classes_max
   if (max === null) return true
   // Bloquer uniquement la création d'une nouvelle classe au-delà de la limite.
@@ -216,11 +218,11 @@ export function peutCreerClasse(
 }
 
 export function peutAjouterMatiere(
-  profil: Pick<Utilisateur, 'forfait' | 'is_admin' | 'palier_scolaire'>,
+  profil: Pick<Utilisateur, 'forfait' | 'is_admin' | 'role' | 'palier_scolaire'>,
   nbMatieresActuelles: number,
 ): boolean {
   if (profil.is_admin) return true
-  const forfait = profil.forfait || 'gratuit'
+  const forfait = resolveEffectiveForfait({ role: (profil as any).role, forfait: profil.forfait, is_admin: profil.is_admin })
   const palier  = profil.palier_scolaire
   const max     = LIMITES_FORFAIT[forfait].matieres_par_classe_max(palier)
   if (max === null) return true
@@ -229,10 +231,12 @@ export function peutAjouterMatiere(
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useForfait(forfait: ForfaitType = 'gratuit', is_admin?: boolean) {
+export function useForfait(forfait: ForfaitType = 'gratuit', is_admin?: boolean, role?: string) {
+  const effectiveForfait = resolveEffectiveForfait({ role, forfait, is_admin }) as ForfaitType
+
   const peutUtiliser = (f: FonctionnaliteForfait): boolean => {
     if (is_admin) return true
-    return FORFAIT_FONCTIONNALITES[forfait].includes(f)
+    return FORFAIT_FONCTIONNALITES[effectiveForfait].includes(f)
   }
 
   const forfaitRequis = (f: FonctionnaliteForfait): ForfaitType => {
@@ -241,5 +245,5 @@ export function useForfait(forfait: ForfaitType = 'gratuit', is_admin?: boolean)
     return 'institution'
   }
 
-  return { peutUtiliser, forfaitRequis, forfait }
+  return { peutUtiliser, forfaitRequis, forfait: effectiveForfait }
 }

@@ -10,6 +10,7 @@ import { buildSystemPrompt } from '@/lib/ia/build-system-prompt'
 import { construireSectionsSkills } from '@/lib/ia/skills-pedagogiques'
 import { peutGenererContenu, LIMITES_FORFAIT } from '@/lib/hooks/useForfait'
 import type { ForfaitType } from '@/lib/types/database'
+import { hasUnlimitedAI } from '@/lib/entitlement/resolver'
 
 export async function POST(request: Request) {
   // P0-01 — authentication required before any AI call
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     const supabaseQuota = await createClient()
     const { data: qProfil } = await supabaseQuota
       .from('utilisateurs')
-      .select('id, forfait, is_admin, generations_ia_total_a_vie, generations_ia_mois_courant, derniere_reinit_quota')
+      .select('id, forfait, is_admin, role, generations_ia_total_a_vie, generations_ia_mois_courant, derniere_reinit_quota')
       .eq('user_id', user.id)
       .single()
     profilQuota = qProfil

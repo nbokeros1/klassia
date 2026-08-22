@@ -11,9 +11,9 @@ import AuthBranding from '@/components/auth/AuthBranding'
 // ─── Données de référence ─────────────────────────────────────────────────────
 
 const PAYS_OPTIONS = [
-  { v: 'Canada',       l: '🇨🇦 Canada' },
-  { v: 'États-Unis',   l: '🇺🇸 États-Unis' },
-  { v: 'Autre',        l: '🌍 Autre pays' },
+  { v: 'Canada',     l: '🇨🇦 Canada' },
+  { v: 'États-Unis', l: '🇺🇸 États-Unis' },
+  { v: 'Autre',      l: '🌍 Autre pays' },
 ]
 
 const PROVINCES_CA = [
@@ -28,16 +28,6 @@ const STATES_US = [
   'Pennsylvania', 'Ohio', 'Georgia', 'Washington', 'Autre',
 ]
 
-const CURRICULA_OFFICIELS = [
-  { v: 'alberta',     l: '🇨🇦 Alberta (Programme d\'études)' },
-  { v: 'ontario',     l: '🇨🇦 Ontario (Curriculum de l\'Ontario)' },
-  { v: 'quebec',      l: '🇨🇦 Québec (Programme de formation MELS)' },
-  { v: 'bc',          l: '🇨🇦 Colombie-Britannique' },
-  { v: 'common_core', l: '🇺🇸 Common Core (USA)' },
-  { v: 'ib',          l: '🌍 Baccalauréat International (IB)' },
-  { v: 'autre',       l: '🌐 Autre / Programme local' },
-]
-
 const NIVEAUX_CLASSE = [
   'Maternelle', 'Préscolaire',
   '1re année', '2e année', '3e année', '4e année', '5e année', '6e année',
@@ -45,42 +35,25 @@ const NIVEAUX_CLASSE = [
   'Cégep', 'Université', 'Autre',
 ]
 
+// Non-beta only — beta users skip forfait selection entirely.
 const FORFAIT_CARTES = [
-  {
-    v:     'gratuit',
-    label: 'Commencer gratuitement',
-    price: 'Gratuit',
-    desc:  '1 classe · 5 générations IA',
-    color: '#64748B',
-    bg:    'rgba(100,116,139,0.08)',
-  },
-  {
-    v:     'pro',
-    label: 'Pro',
-    price: '14 $ CAD/mois',
-    desc:  '8 classes · 75 générations/mois',
-    color: '#6C5CE7',
-    bg:    'rgba(108,92,231,0.08)',
-  },
-  {
-    v:     'pro_plus',
-    label: 'Pro+',
-    price: '24 $ CAD/mois',
-    desc:  'Classes et générations illimitées',
-    color: '#A78BFA',
-    bg:    'rgba(167,139,250,0.1)',
-  },
-  {
-    v:     'institution',
-    label: 'Institution',
-    price: 'Sur devis',
-    desc:  'Multi-enseignants + dashboard admin',
-    color: '#10B981',
-    bg:    'rgba(16,185,129,0.08)',
-  },
+  { v: 'gratuit',     label: 'Commencer gratuitement', price: 'Gratuit',       desc: '1 classe · 5 générations IA', color: '#64748B', bg: 'rgba(100,116,139,0.08)' },
+  { v: 'pro',         label: 'Pro',                    price: '14 $ CAD/mois', desc: '8 classes · 75 générations/mois', color: '#6C5CE7', bg: 'rgba(108,92,231,0.08)' },
+  { v: 'pro_plus',    label: 'Pro+',                   price: '24 $ CAD/mois', desc: 'Classes et générations illimitées', color: '#A78BFA', bg: 'rgba(167,139,250,0.1)' },
+  { v: 'institution', label: 'Institution',            price: 'Sur devis',     desc: 'Multi-enseignants + dashboard admin', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
 ]
 
-// ─── Type pour les messages du chat (Chemin B) ────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Etape =
+  | 'bienvenue'
+  | 'profil'
+  | 'chemin'
+  | 'chemin_a'
+  | 'chemin_b_emploi'
+  | 'chemin_b_curriculum'
+  | 'generation'
+  | 'complete'
 
 interface ChatMsg {
   id:              string
@@ -98,18 +71,9 @@ interface ClasseDetectee {
   cours:     Array<{ jour: string; heure_debut: string; heure_fin: string; salle?: string }>
 }
 
-type Etape =
-  | 'profil'
-  | 'chemin'
-  | 'chemin_a'
-  | 'chemin_b_emploi'
-  | 'chemin_b_curriculum'
-  | 'generation'
-  | 'complete'
-
 function uid() { return Math.random().toString(36).substring(2, 10) }
 
-// ─── Composant barre de progression ──────────────────────────────────────────
+// ─── Barre de progression cascade ────────────────────────────────────────────
 
 function ProgressCard({ events }: { events: any[] }) {
   const last = events[events.length - 1]
@@ -147,91 +111,145 @@ export default function OnboardingPage() {
   const router   = useRouter()
   const supabase = createClient()
 
-  const [profil,  setProfil]  = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving,  setSaving]  = useState(false)
-  const [etape,   setEtape]   = useState<Etape>('profil')
+  const [profil,    setProfil]    = useState<any>(null)
+  const [isBeta,    setIsBeta]    = useState(false)
+  const [loading,   setLoading]   = useState(true)
+  const [saving,    setSaving]    = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [etape,     setEtape]     = useState<Etape>('profil')
 
-  // ── Champs étape profil (5 obligatoires) ─────────────────────────────────
-  const [pays,       setPays]       = useState('Canada')
-  const [province,   setProvince]   = useState('')
-  const [palier,     setPalier]     = useState<'primaire' | 'secondaire' | ''>('')
-  const [curriculum, setCurriculum] = useState('')
-  const [forfait,    setForfait]    = useState<string>('gratuit')
+  // ── Champs profil (tous optionnels pour beta, sauvegardés au fur et à mesure) ─
+  const [pays,     setPays]     = useState('Canada')
+  const [province, setProvince] = useState('')
+  const [palier,   setPalier]   = useState<'primaire' | 'secondaire' | ''>('')
+  const [forfait,  setForfait]  = useState<string>('gratuit')
 
-  // ── Chemin A : création manuelle ────────────────────────────────────────
-  const [nomClasse,   setNomClasse]   = useState('')
-  const [niveauA,     setNiveauA]     = useState('')
-  const [matiereA,    setMatiereA]    = useState('')
-  const [nbElevesA,   setNbElevesA]   = useState('25')
+  // ── Chemin A ─────────────────────────────────────────────────────────────────
+  const [nomClasse,        setNomClasse]        = useState('')
+  const [niveauA,          setNiveauA]          = useState('')
+  const [matiereA,         setMatiereA]         = useState('')
+  const [nbElevesA,        setNbElevesA]        = useState('25')
   const [premiereClasseId, setPremiereClasseId] = useState<string | null>(null)
 
-  // ── Chemin B : chat ──────────────────────────────────────────────────────
+  // ── Chemin B ─────────────────────────────────────────────────────────────────
   const [messages,         setMessages]         = useState<ChatMsg[]>([])
   const [classesDetectees, setClassesDetectees] = useState<ClasseDetectee[]>([])
   const [progressEvents,   setProgressEvents]   = useState<any[]>([])
   const [inputValue,       setInputValue]       = useState('')
   const [isStreaming,      setIsStreaming]       = useState(false)
-  const [isListening,      setIsListening]       = useState(false)
+  const [isListening,      setIsListening]      = useState(false)
   const [transcript,       setTranscript]       = useState('')
 
-  const endRef     = useRef<HTMLDivElement>(null)
-  const fileRef    = useRef<HTMLInputElement>(null)
-  const currRef    = useRef<HTMLInputElement>(null)
-  const taRef      = useRef<HTMLTextAreaElement>(null)
-  const abortRef   = useRef<AbortController | null>(null)
-  const recRef     = useRef<any>(null)
-  const progMsgId  = useRef<string | null>(null)
+  const endRef    = useRef<HTMLDivElement>(null)
+  const fileRef   = useRef<HTMLInputElement>(null)
+  const currRef   = useRef<HTMLInputElement>(null)
+  const taRef     = useRef<HTMLTextAreaElement>(null)
+  const abortRef  = useRef<AbortController | null>(null)
+  const recRef    = useRef<any>(null)
+  const progMsgId = useRef<string | null>(null)
 
-  // ── Auth + guard ──────────────────────────────────────────────────────────
+  // ── Auth + garde ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/login'); return }
-      const { data: p } = await supabase.from('utilisateurs').select('*').eq('user_id', session.user.id).single()
+
+      const { data: p } = await supabase
+        .from('utilisateurs').select('*').eq('user_id', session.user.id).single()
       if (!p) { router.push('/login'); return }
 
-      // Déjà complété → aller directement à la première classe
+      // Déjà terminé les deux étapes → dashboard
       if (p.onboarding_complete && p.onboarding_cascade_complete) {
-        router.push('/dashboard')
-        return
+        router.push('/dashboard'); return
       }
 
+      // onboarding_complete=true (teacher chose "Go to Dashboard") but not cascade
+      // → still redirect to dashboard (that's the intent of the new semantics)
+      if (p.onboarding_complete && !p.onboarding_cascade_complete) {
+        router.push('/dashboard'); return
+      }
+
+      const beta = p.role === 'beta'
+      setIsBeta(beta)
       setProfil(p)
-      // Pré-remplir si valeurs existantes
+
+      // Pré-remplir les champs déjà en base
       if (p.pays)            setPays(p.pays)
       if (p.province)        setProvince(p.province)
       if (p.palier_scolaire) setPalier(p.palier_scolaire)
       if (p.forfait)         setForfait(p.forfait)
+
+      // Choisir l'étape de départ
+      if (beta && !p.palier_scolaire) {
+        // Beta fraîchement inscrit ou sans config → bienvenue
+        setEtape('bienvenue')
+      } else {
+        // Beta avec config partielle OU non-beta → profil
+        setEtape('profil')
+      }
+
       setLoading(false)
     }
     init()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   const regionsList = pays === 'États-Unis' ? STATES_US : pays === 'Canada' ? PROVINCES_CA : []
 
-  // ── Validation étape profil ───────────────────────────────────────────────
-  const profilValide = pays && province && palier && curriculum && forfait
+  // ── Persistance partielle : ne jamais écraser avec des chaines vides ─────────
+  const buildProfileUpdates = useCallback((includesForfait: boolean) => {
+    const updates: Record<string, any> = {}
+    if (pays)   updates.pays = pays
+    if (province) updates.province = province
+    if (palier) updates.palier_scolaire = palier
+    if (includesForfait && !isBeta && forfait) updates.forfait = forfait
+    return updates
+  }, [pays, province, palier, forfait, isBeta])
 
-  const handleSaveProfil = async () => {
-    if (!profilValide || !profil?.id) return
+  // ── "Aller à mon tableau de bord" — sauvegarde partielle + onboarding_complete ─
+  const goToDashboard = useCallback(async () => {
+    if (!profil?.id) { router.push('/dashboard'); return }
     setSaving(true)
-    await supabase.from('utilisateurs').update({
-      pays,
-      province,
-      palier_scolaire: palier,
-      forfait,
-    }).eq('id', profil.id)
+    setSaveError(null)
+    const updates = { ...buildProfileUpdates(true), onboarding_complete: true }
+    const { error } = await supabase.from('utilisateurs').update(updates).eq('id', profil.id)
+    setSaving(false)
+    if (error) {
+      setSaveError('Erreur de sauvegarde. Vérifiez votre connexion et réessayez.')
+      return
+    }
+    router.push('/dashboard')
+  }, [profil, buildProfileUpdates, supabase, router])
+
+  // ── "Continuer" depuis l'étape profil ────────────────────────────────────────
+  const handleSaveProfil = useCallback(async () => {
+    if (!profil?.id) return
+    setSaving(true)
+    setSaveError(null)
+    const updates = buildProfileUpdates(true)
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabase.from('utilisateurs').update(updates).eq('id', profil.id)
+      if (error) {
+        setSaving(false)
+        setSaveError('Erreur de sauvegarde. Vérifiez votre connexion et réessayez.')
+        return
+      }
+    }
     setSaving(false)
     setEtape('chemin')
-  }
+  }, [profil, buildProfileUpdates, supabase])
 
-  // ── Chemin A : créer la classe et lancer la cascade ───────────────────────
-  const handleCheminA = async () => {
+  // ── Validation profil (non-beta uniquement — beta peut toujours continuer) ───
+  const profilValide = isBeta
+    ? true
+    : Boolean(pays && province && palier && forfait)
+
+  // ── Chemin A ─────────────────────────────────────────────────────────────────
+  const handleCheminA = useCallback(async () => {
     if (!nomClasse.trim() || !niveauA || !profil?.id) return
     setSaving(true)
+    setSaveError(null)
 
     const emploiDuTemps: ClasseDetectee[] = [{
       nom:       nomClasse.trim(),
@@ -245,16 +263,16 @@ export default function OnboardingPage() {
     progMsgId.current = msgId
     setProgressEvents([])
     setMessages([
-      { id: uid(), role: 'ia', content: `**Parfait !** Je prépare votre espace pour la classe **${nomClasse.trim()}**… ✨\n\nCela peut prendre 1-2 minutes.` },
+      { id: uid(), role: 'ia',       content: `**Parfait !** Je prépare votre espace pour la classe **${nomClasse.trim()}**… ✨\n\nCela peut prendre 1-2 minutes.` },
       { id: msgId, role: 'progress', content: '', progressEvents: [] },
     ])
     setEtape('generation')
     setSaving(false)
 
     await lancerCascade(emploiDuTemps, '')
-  }
+  }, [nomClasse, niveauA, matiereA, nbElevesA, profil])
 
-  // ── Chemin B : upload emploi du temps ─────────────────────────────────────
+  // ── Chemin B : upload emploi du temps ────────────────────────────────────────
   useEffect(() => {
     if (etape === 'chemin_b_emploi' && messages.length === 0) {
       setTimeout(() => {
@@ -285,8 +303,10 @@ export default function OnboardingPage() {
         fr.readAsDataURL(file)
       })
 
-      const payload = isImage ? { image_base64: b64, media_type: file.type } : { texte: await file.text() }
-      const resp    = await fetch('/api/ia/analyser-emploi-du-temps', {
+      const payload = isImage
+        ? { image_base64: b64, media_type: file.type }
+        : { texte: await file.text() }
+      const resp = await fetch('/api/ia/analyser-emploi-du-temps', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body:   JSON.stringify(payload),
       })
@@ -336,14 +356,14 @@ export default function OnboardingPage() {
     progMsgId.current = msgId
     setProgressEvents([])
     setMessages(prev => [...prev,
-      { id: uid(), role: 'ia',      content: '**Parfait ! Je prépare tout pour vous…** ✨\n\nCela peut prendre 1-2 minutes.' },
+      { id: uid(), role: 'ia',       content: '**Parfait ! Je prépare tout pour vous…** ✨\n\nCela peut prendre 1-2 minutes.' },
       { id: msgId, role: 'progress', content: '', progressEvents: [] },
     ])
     setEtape('generation')
     lancerCascade(classesDetectees, curriculumTexte)
   }
 
-  // ── Cascade commune A et B ────────────────────────────────────────────────
+  // ── Cascade commune A et B ────────────────────────────────────────────────────
   const lancerCascade = useCallback(async (emploiDuTemps: ClasseDetectee[], curriculumTexte: string) => {
     const res = await fetch('/api/ia/onboarding-auto', {
       method:  'POST',
@@ -376,13 +396,11 @@ export default function OnboardingPage() {
           setMessages(prev => prev.map(m =>
             m.id === progMsgId.current ? { ...m, progressEvents: [...evts] } : m
           ))
-
           if (ev.etape === 'complete') {
             const d = ev.details || {}
             const firstClassId = d.premiere_classe_id || null
             setPremiereClasseId(firstClassId)
-
-            const prenom = profil?.prenom || ''
+            const prenom  = profil?.prenom || ''
             const contenu = `🎉 Votre espace est prêt, **${prenom}** !\n\nJ'ai créé :\n✓ **${d.classes_creees || emploiDuTemps.length} classe(s)** avec leurs dossiers\n✓ **${d.evenements_crees || 0} cours** planifiés dans l'agenda\n✓ **${d.sequences_creees || 0} séquences** d'apprentissage\n✓ **${d.plans_lecons_crees || 0} plans de leçons** prêts à enseigner\n\nVotre première leçon vous attend !`
             setMessages(prev => [...prev, { id: uid(), role: 'ia', content: contenu }])
             setEtape('complete')
@@ -392,7 +410,7 @@ export default function OnboardingPage() {
     }
   }, [profil])
 
-  // ── Input libre Chemin B ──────────────────────────────────────────────────
+  // ── Input libre Chemin B ──────────────────────────────────────────────────────
   const handleSend = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? inputValue).trim()
     if (!text || isStreaming) return
@@ -415,8 +433,8 @@ export default function OnboardingPage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          message:   text,
-          contexte:  { page_courante: 'onboarding' },
+          message:    text,
+          contexte:   { page_courante: 'onboarding' },
           historique: messages.slice(-6).map(m => ({ role: m.role === 'ia' ? 'assistant' : 'user', content: m.content })),
         }),
         signal: abortRef.current.signal,
@@ -456,7 +474,7 @@ export default function OnboardingPage() {
     rec.start(); setIsListening(true)
   }
 
-  // ── Redirect final ────────────────────────────────────────────────────────
+  // ── Redirect final ────────────────────────────────────────────────────────────
   const handleEntrer = () => {
     if (premiereClasseId) {
       router.push(`/dashboard/classes/${premiereClasseId}`)
@@ -467,15 +485,15 @@ export default function OnboardingPage() {
 
   if (loading) return <LoadingScreen />
 
-  // ─── Styles communs ───────────────────────────────────────────────────────
+  // ─── Styles communs ───────────────────────────────────────────────────────────
   const cardStyle: React.CSSProperties = {
-    background: 'var(--color-bg-card)',
-    border: '1px solid var(--color-border)',
+    background:   'var(--color-bg-card)',
+    border:       '1px solid var(--color-border)',
     borderRadius: 16,
-    padding: '28px 32px',
-    width: '100%',
-    maxWidth: 560,
-    boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+    padding:      '28px 32px',
+    width:        '100%',
+    maxWidth:     560,
+    boxShadow:    '0 4px 24px rgba(0,0,0,0.06)',
   }
 
   const inputStyle: React.CSSProperties = {
@@ -491,7 +509,8 @@ export default function OnboardingPage() {
   const labelStyle: React.CSSProperties = {
     fontSize: 12, fontWeight: 700,
     color: 'var(--color-text-secondary)',
-    display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.4px',
+    display: 'block', marginBottom: 6,
+    textTransform: 'uppercase', letterSpacing: '.4px',
   }
 
   const btnPrimary: React.CSSProperties = {
@@ -501,37 +520,173 @@ export default function OnboardingPage() {
     cursor: 'pointer', fontFamily: 'inherit', width: '100%',
   }
 
-  // ─── ÉTAPE PROFIL ─────────────────────────────────────────────────────────
+  const btnSecondary: React.CSSProperties = {
+    padding: '11px 20px', borderRadius: 9,
+    border: '1.5px solid var(--color-border)',
+    background: 'var(--color-bg-card)',
+    color: 'var(--color-text-secondary)',
+    fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+  }
+
+  const btnGhost: React.CSSProperties = {
+    padding: '10px 16px', borderRadius: 9, border: 'none',
+    background: 'transparent', color: 'var(--color-text-muted)',
+    fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+    textDecoration: 'underline', textUnderlineOffset: 3,
+  }
+
+  // ── Bouton "Aller à mon tableau de bord" commun ───────────────────────────────
+  const GoToDashboardBtn = () => (
+    <button
+      type="button"
+      onClick={goToDashboard}
+      disabled={saving}
+      style={{ ...btnGhost, display: 'block', margin: '8px auto 0', width: '100%', textAlign: 'center' }}
+    >
+      {saving ? 'Enregistrement…' : 'Aller à mon tableau de bord →'}
+    </button>
+  )
+
+  // ── Message d'erreur de sauvegarde ───────────────────────────────────────────
+  const SaveErrorBanner = () => saveError ? (
+    <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#EF4444', marginTop: 12 }}>
+      ⚠️ {saveError}
+    </div>
+  ) : null
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ÉTAPE BIENVENUE (beta uniquement)
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (etape === 'bienvenue') {
+    return (
+      <div style={{
+        minHeight: '100vh', background: '#050D1A',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', padding: '24px 16px',
+        position: 'relative', overflow: 'hidden',
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+      }}>
+        {/* Aurora */}
+        <div style={{ position: 'absolute', top: '-200px', right: '-100px', width: '600px', height: '600px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,58,237,0.22) 0%, transparent 70%)', filter: 'blur(80px)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: '-180px', left: '-130px', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(27,63,110,0.28) 0%, transparent 70%)', filter: 'blur(80px)', pointerEvents: 'none' }} />
+
+        <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 480 }}>
+
+          <AuthBranding slogan="" logoHeight={110} style={{ marginBottom: 28 }} />
+
+          {/* Badge bêta */}
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <span style={{ display: 'inline-block', padding: '4px 16px', background: 'rgba(124,58,237,0.18)', border: '1px solid rgba(124,58,237,0.4)', borderRadius: 99, fontSize: 11, fontWeight: 700, color: '#A78BFA', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+              ✦ Accès Bêta Privé ScorgIA
+            </span>
+          </div>
+
+          <div style={{
+            background: 'rgba(13,21,37,0.88)', border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 22, padding: '32px 28px',
+            backdropFilter: 'blur(24px)',
+            boxShadow: '0 32px 80px rgba(0,0,0,0.5)',
+          }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: 'white', marginBottom: 10, lineHeight: 1.3, textAlign: 'center' }}>
+              Bienvenue dans la bêta privée ScorgIA{profil?.prenom ? `, ${profil.prenom}` : ''} !
+            </h1>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 1.7, marginBottom: 24 }}>
+              Vous faites partie des enseignants sélectionnés pour découvrir ScorgIA avant son lancement public.<br />
+              <strong style={{ color: 'rgba(255,255,255,0.7)' }}>Votre accès bêta est inclus. Aucun forfait n'est à choisir.</strong>
+            </p>
+
+            {/* Fonctionnalités bêta */}
+            <div style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.2)', borderRadius: 12, padding: '14px 16px', marginBottom: 24 }}>
+              {[
+                'Construire mon année scolaire avec l\'IA',
+                'Préparer et gérer mes classes',
+                'Générer des leçons, séquences et évaluations',
+                'Accéder aux exports Word & PowerPoint',
+              ].map((f, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: i < 3 ? 6 : 0 }}>
+                  <span style={{ color: '#4ADE80', fontWeight: 700 }}>✓</span> {f}
+                </div>
+              ))}
+            </div>
+
+            {/* CTA primaire */}
+            <button
+              type="button"
+              onClick={() => setEtape('profil')}
+              style={{
+                width: '100%', padding: '14px',
+                background: 'linear-gradient(135deg, #2D5FA0, #7C3AED)',
+                color: 'white', border: 'none', borderRadius: 11,
+                fontSize: 15, fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 6px 24px rgba(124,58,237,0.4)',
+                marginBottom: 10,
+              }}
+            >
+              Configurer rapidement →
+            </button>
+
+            {/* CTA secondaire */}
+            <button
+              type="button"
+              onClick={goToDashboard}
+              disabled={saving}
+              style={{
+                width: '100%', padding: '12px',
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 11, color: 'rgba(255,255,255,0.55)',
+                fontSize: 14, fontWeight: 500, cursor: 'pointer',
+              }}
+            >
+              {saving ? 'En cours…' : 'Aller directement à mon tableau de bord →'}
+            </button>
+
+            {saveError && (
+              <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(239,68,68,0.12)', borderRadius: 8, fontSize: 12, color: '#F87171', textAlign: 'center' }}>
+                ⚠️ {saveError}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ÉTAPE PROFIL
+  // ─────────────────────────────────────────────────────────────────────────────
   if (etape === 'profil') {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px' }}>
         <style>{`@keyframes fadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } } .onb-fade { animation: fadeUp .28s ease-out; }`}</style>
 
-        {/* Logo */}
-        <AuthBranding
-          theme="dark"
-          slogan="Configurons votre profil"
-          logoHeight={120}
-          style={{ marginBottom: 24 }}
-        />
+        <AuthBranding theme="dark" slogan="Configurons votre profil" logoHeight={110} style={{ marginBottom: 24 }} />
 
         <div className="onb-fade" style={cardStyle}>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--color-text-primary)', margin: '0 0 6px' }}>
             Votre profil d'enseignant
           </h2>
           <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 24, lineHeight: 1.6 }}>
-            Ces 5 informations sont nécessaires pour personnaliser votre IA. Aucun de ces champs n'est optionnel.
+            {isBeta
+              ? 'Ces informations personnalisent votre IA — vous pouvez les compléter plus tard.'
+              : 'Ces informations personnalisent votre expérience ScorgIA.'}
           </p>
+
+          {isBeta && (
+            <div style={{ background: 'rgba(124,58,237,0.07)', border: '1px solid rgba(124,58,237,0.18)', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#A78BFA' }}>
+              ✦ <strong>Accès bêta actif.</strong> Vous pouvez passer les champs pour l'instant — aucun forfait à choisir.
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
 
             {/* 1. Pays */}
             <div>
-              <label style={labelStyle}>1 — Pays</label>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <label style={labelStyle}>{isBeta ? 'Pays (optionnel)' : '1 — Pays *'}</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {PAYS_OPTIONS.map(o => (
                   <button key={o.v} type="button" onClick={() => { setPays(o.v); setProvince('') }}
-                    style={{ flex: 1, padding: '9px 8px', borderRadius: 8, border: `2px solid ${pays === o.v ? '#6C5CE7' : 'var(--color-border)'}`, background: pays === o.v ? 'rgba(108,92,231,0.08)' : 'var(--color-bg-card)', color: pays === o.v ? '#6C5CE7' : 'var(--color-text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    style={{ flex: '1 1 120px', padding: '9px 8px', borderRadius: 8, border: `2px solid ${pays === o.v ? '#6C5CE7' : 'var(--color-border)'}`, background: pays === o.v ? 'rgba(108,92,231,0.08)' : 'var(--color-bg-card)', color: pays === o.v ? '#6C5CE7' : 'var(--color-text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                     {o.l}
                   </button>
                 ))}
@@ -541,9 +696,9 @@ export default function OnboardingPage() {
             {/* 2. Province / État */}
             {regionsList.length > 0 && (
               <div>
-                <label style={labelStyle}>2 — {pays === 'États-Unis' ? 'État' : 'Province / Territoire'}</label>
+                <label style={labelStyle}>{pays === 'États-Unis' ? (isBeta ? 'État (optionnel)' : '2 — État *') : (isBeta ? 'Province (optionnel)' : '2 — Province / Territoire *')}</label>
                 <select value={province} onChange={e => setProvince(e.target.value)}
-                  style={{ ...inputStyle, appearance: 'none', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'%3E%3Cpath d=\'M0 0l5 6 5-6z\' fill=\'%23888\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}>
+                  style={{ ...inputStyle, appearance: 'none' }}>
                   <option value="">Sélectionner…</option>
                   {regionsList.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
@@ -551,7 +706,7 @@ export default function OnboardingPage() {
             )}
             {pays === 'Autre' && (
               <div>
-                <label style={labelStyle}>2 — Province / Région</label>
+                <label style={labelStyle}>{isBeta ? 'Province / Région (optionnel)' : '2 — Province / Région *'}</label>
                 <input type="text" value={province} onChange={e => setProvince(e.target.value)}
                   placeholder="Ex : Île-de-France, Genève…" style={inputStyle} />
               </div>
@@ -559,7 +714,7 @@ export default function OnboardingPage() {
 
             {/* 3. Palier scolaire */}
             <div>
-              <label style={labelStyle}>3 — Palier scolaire</label>
+              <label style={labelStyle}>{isBeta ? 'Palier scolaire (optionnel)' : '3 — Palier scolaire *'}</label>
               <div style={{ display: 'flex', gap: 12 }}>
                 {(['primaire', 'secondaire'] as const).map(p => (
                   <button key={p} type="button" onClick={() => setPalier(p)}
@@ -570,60 +725,70 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            {/* 4. Curriculum */}
-            <div>
-              <label style={labelStyle}>4 — Type de curriculum</label>
-              <select value={curriculum} onChange={e => setCurriculum(e.target.value)}
-                style={{ ...inputStyle, appearance: 'none', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'%3E%3Cpath d=\'M0 0l5 6 5-6z\' fill=\'%23888\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}>
-                <option value="">Sélectionner…</option>
-                {CURRICULA_OFFICIELS.map(c => <option key={c.v} value={c.v}>{c.l}</option>)}
-              </select>
-            </div>
-
-            {/* 5. Forfait */}
-            <div>
-              <label style={labelStyle}>5 — Forfait souhaité</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {FORFAIT_CARTES.map(f => (
-                  <button key={f.v} type="button" onClick={() => setForfait(f.v)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 10, border: `2px solid ${forfait === f.v ? f.color : 'var(--color-border)'}`, background: forfait === f.v ? f.bg : 'var(--color-bg-card)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
-                    <div>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: forfait === f.v ? f.color : 'var(--color-text-primary)' }}>{f.label}</span>
-                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'block', marginTop: 2 }}>{f.desc}</span>
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: forfait === f.v ? f.color : 'var(--color-text-muted)', flexShrink: 0 }}>{f.price}</span>
-                  </button>
-                ))}
+            {/* 4. Forfait — affiché uniquement pour les non-beta */}
+            {!isBeta && (
+              <div>
+                <label style={labelStyle}>4 — Forfait souhaité *</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {FORFAIT_CARTES.map(f => (
+                    <button key={f.v} type="button" onClick={() => setForfait(f.v)}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 10, border: `2px solid ${forfait === f.v ? f.color : 'var(--color-border)'}`, background: forfait === f.v ? f.bg : 'var(--color-bg-card)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                      <div>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: forfait === f.v ? f.color : 'var(--color-text-primary)' }}>{f.label}</span>
+                        <span style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'block', marginTop: 2 }}>{f.desc}</span>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: forfait === f.v ? f.color : 'var(--color-text-muted)', flexShrink: 0 }}>{f.price}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              {forfait !== 'gratuit' && (
-                <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 8, lineHeight: 1.5 }}>
-                  Votre choix sera enregistré. Vous gérerez la facturation depuis votre profil après la configuration.
-                </p>
-              )}
-            </div>
+            )}
           </div>
 
-          <button type="button" onClick={handleSaveProfil}
-            disabled={!profilValide || saving}
-            style={{ ...btnPrimary, marginTop: 24, opacity: profilValide ? 1 : 0.45, cursor: profilValide ? 'pointer' : 'not-allowed' }}>
-            {saving ? 'Enregistrement…' : 'Continuer →'}
-          </button>
+          <SaveErrorBanner />
+
+          {/* Boutons navigation */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 24, flexWrap: 'wrap' }}>
+            {/* Précédent — vers bienvenue (beta) ou n/a (non-beta) */}
+            {isBeta && (
+              <button type="button" onClick={() => setEtape('bienvenue')} style={btnSecondary}>
+                ← Précédent
+              </button>
+            )}
+
+            {/* Passer pour l'instant (beta) */}
+            {isBeta && (
+              <button type="button" onClick={() => setEtape('chemin')} style={{ ...btnSecondary, flex: 1 }}>
+                Passer pour l'instant
+              </button>
+            )}
+
+            {/* Continuer */}
+            <button
+              type="button"
+              onClick={handleSaveProfil}
+              disabled={!profilValide || saving}
+              style={{ ...btnPrimary, flex: 2, opacity: profilValide && !saving ? 1 : 0.45, cursor: profilValide && !saving ? 'pointer' : 'not-allowed' }}
+            >
+              {saving ? 'Enregistrement…' : 'Continuer →'}
+            </button>
+          </div>
+
+          <GoToDashboardBtn />
         </div>
       </div>
     )
   }
 
-  // ─── ÉTAPE CHOIX A/B ──────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ÉTAPE CHOIX A/B
+  // ─────────────────────────────────────────────────────────────────────────────
   if (etape === 'chemin') {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px' }}>
         <style>{`@keyframes fadeUp { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } } .onb-fade { animation: fadeUp .28s ease-out; }`}</style>
 
-        <AuthBranding
-          theme="dark"
-          logoHeight={120}
-          style={{ marginBottom: 20 }}
-        />
+        <AuthBranding theme="dark" logoHeight={110} style={{ marginBottom: 20 }} />
 
         <div className="onb-fade" style={{ ...cardStyle, maxWidth: 640 }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--color-text-primary)', margin: '0 0 6px', textAlign: 'center' }}>
@@ -633,8 +798,7 @@ export default function OnboardingPage() {
             Les deux chemins créent le même espace — seule la façon de démarrer diffère.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            {/* Chemin A */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
             <button type="button" onClick={() => setEtape('chemin_a')}
               style={{ padding: '24px 20px', borderRadius: 14, border: '2px solid var(--color-border)', background: 'var(--color-bg-card)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'border-color .15s' }}
               onMouseEnter={e => (e.currentTarget.style.borderColor = '#6C5CE7')}
@@ -647,13 +811,12 @@ export default function OnboardingPage() {
               <div style={{ marginTop: 16, fontSize: 12, fontWeight: 700, color: '#6C5CE7' }}>Choisir mes classes →</div>
             </button>
 
-            {/* Chemin B */}
             <button type="button" onClick={() => setEtape('chemin_b_emploi')}
               style={{ padding: '24px 20px', borderRadius: 14, border: '2px solid #6C5CE7', background: 'rgba(108,92,231,0.05)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
               <div style={{ fontSize: 28, marginBottom: 12 }}>⚡</div>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: 8 }}>Chemin B — Automatique</div>
               <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
-                J'uploade mon emploi du temps. ScorgIA crée tout automatiquement : classes, calendrier, plans de leçons.
+                J'uploade mon emploi du temps. ScorgIA crée tout automatiquement.
               </div>
               <div style={{ marginTop: 12 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: '#6C5CE7', background: 'rgba(108,92,231,0.12)', padding: '2px 8px', borderRadius: 99 }}>Recommandé</span>
@@ -661,12 +824,21 @@ export default function OnboardingPage() {
               <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#6C5CE7' }}>Uploader mes documents →</div>
             </button>
           </div>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 24, flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button type="button" onClick={() => setEtape('profil')} style={btnSecondary}>
+              ← Précédent
+            </button>
+            <GoToDashboardBtn />
+          </div>
         </div>
       </div>
     )
   }
 
-  // ─── CHEMIN A : formulaire manuel ─────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
+  // CHEMIN A : formulaire manuel
+  // ─────────────────────────────────────────────────────────────────────────────
   if (etape === 'chemin_a') {
     const canSubmit = nomClasse.trim().length >= 2 && niveauA && !saving
     return (
@@ -710,22 +882,27 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-            <button type="button" onClick={() => setEtape('chemin')}
-              style={{ padding: '11px 20px', borderRadius: 9, border: '1.5px solid var(--color-border)', background: 'var(--color-bg-card)', color: 'var(--color-text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-              ← Retour
+          <SaveErrorBanner />
+
+          <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => setEtape('chemin')} style={btnSecondary}>
+              ← Précédent
             </button>
             <button type="button" onClick={handleCheminA} disabled={!canSubmit}
               style={{ ...btnPrimary, flex: 1, opacity: canSubmit ? 1 : 0.45, cursor: canSubmit ? 'pointer' : 'not-allowed' }}>
               {saving ? 'Génération en cours…' : 'Créer et générer →'}
             </button>
           </div>
+
+          <GoToDashboardBtn />
         </div>
       </div>
     )
   }
 
-  // ─── CHEMIN B et GÉNÉRATION : interface chat ──────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
+  // CHEMIN B + GÉNÉRATION + COMPLETE : interface chat
+  // ─────────────────────────────────────────────────────────────────────────────
   const isChatEtape = ['chemin_b_emploi', 'chemin_b_curriculum', 'generation', 'complete'].includes(etape)
   if (isChatEtape) {
     return (
@@ -743,10 +920,37 @@ export default function OnboardingPage() {
         `}</style>
 
         {/* Header */}
-        <div style={{ height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)' }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #6C5CE7, #4F46E5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#FFF', fontWeight: 800, animation: 'glowPulse 3s ease-in-out infinite' }}>✦</div>
-          <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-text-primary)', letterSpacing: '-0.3px' }}>ScorgIA</span>
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)', borderRadius: 99, padding: '3px 9px' }}>Configuration initiale</span>
+        <div style={{ height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #6C5CE7, #4F46E5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: '#FFF', fontWeight: 800, animation: 'glowPulse 3s ease-in-out infinite' }}>✦</div>
+            <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--color-text-primary)', letterSpacing: '-0.3px' }}>ScorgIA</span>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)', borderRadius: 99, padding: '3px 9px' }}>Configuration initiale</span>
+          </div>
+
+          {/* Navigation depuis le chat */}
+          {['chemin_b_emploi'].includes(etape) && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setEtape('chemin')}
+                style={{ ...btnSecondary, padding: '7px 14px', fontSize: 12 }}>
+                ← Précédent
+              </button>
+              <button type="button" onClick={() => { setMessages([]); setEtape('chemin_a') }}
+                style={{ ...btnSecondary, padding: '7px 14px', fontSize: 12 }}>
+                Créer manuellement
+              </button>
+              <button type="button" onClick={goToDashboard}
+                style={{ ...btnGhost, padding: '7px 14px', fontSize: 12, textDecoration: 'none' }}>
+                Tableau de bord →
+              </button>
+            </div>
+          )}
+
+          {['chemin_b_curriculum'].includes(etape) && (
+            <button type="button" onClick={goToDashboard}
+              style={{ ...btnGhost, fontSize: 12, textDecoration: 'none' }}>
+              Tableau de bord →
+            </button>
+          )}
         </div>
 
         {/* Conversation */}
@@ -756,7 +960,6 @@ export default function OnboardingPage() {
               if (msg.role === 'progress') {
                 return <div key={msg.id} style={{ marginBottom: 20 }}><ProgressCard events={progressEvents} /></div>
               }
-
               if (msg.role === 'user') return (
                 <div key={msg.id} className="msg-ia" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
                   <div style={{ background: '#6C5CE7', color: '#FFF', borderRadius: '18px 18px 4px 18px', padding: '10px 16px', maxWidth: '72%', fontSize: 14, lineHeight: 1.55 }}>
@@ -764,7 +967,6 @@ export default function OnboardingPage() {
                   </div>
                 </div>
               )
-
               return (
                 <div key={msg.id} className="msg-ia" style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'flex-start' }}>
                   <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: 'linear-gradient(135deg, #6C5CE7, #4F46E5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#FFF', fontWeight: 800, marginTop: 2 }}>✦</div>
@@ -785,7 +987,7 @@ export default function OnboardingPage() {
 
                     {!msg.isStreaming && idx === messages.length - 1 && (
                       <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {(etape === 'chemin_b_emploi') && (
+                        {etape === 'chemin_b_emploi' && (
                           <>
                             <button className="onb-upload" onClick={() => fileRef.current?.click()} style={{ fontSize: 13 }}>
                               📅 Uploader mon emploi du temps
@@ -795,20 +997,14 @@ export default function OnboardingPage() {
                             </button>
                           </>
                         )}
-
                         {etape === 'chemin_b_curriculum' && classesDetectees.length > 0 && !msg.content.includes('curriculum') && (
                           <>
-                            <button className="onb-chip"
-                              style={{ background: '#6C5CE7', color: '#FFF', border: 'none', fontWeight: 700 }}
-                              onClick={confirmerClasses}>
+                            <button className="onb-chip" style={{ background: '#6C5CE7', color: '#FFF', border: 'none', fontWeight: 700 }} onClick={confirmerClasses}>
                               ✓ Oui, c'est parfait !
                             </button>
-                            <button className="onb-chip" onClick={() => setInputValue('Modifier : ')}>
-                              ✏️ Modifier
-                            </button>
+                            <button className="onb-chip" onClick={() => setInputValue('Modifier : ')}>✏️ Modifier</button>
                           </>
                         )}
-
                         {etape === 'chemin_b_curriculum' && msg.content.includes('curriculum') && (
                           <>
                             <button className="onb-upload" onClick={() => currRef.current?.click()} style={{ fontSize: 13 }}>
@@ -819,7 +1015,6 @@ export default function OnboardingPage() {
                             </button>
                           </>
                         )}
-
                         {etape === 'complete' && (
                           <button onClick={handleEntrer}
                             style={{ padding: '12px 28px', borderRadius: 12, background: 'linear-gradient(135deg, #6C5CE7, #4F46E5)', border: 'none', color: '#FFF', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 16px rgba(108,92,231,.4)' }}>
@@ -851,11 +1046,7 @@ export default function OnboardingPage() {
                   style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: isListening ? '#FEE2E2' : 'var(--color-bg-tertiary)', color: isListening ? '#F87171' : 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>
                   {isListening ? '⬛' : '🎤'}
                 </button>
-                <textarea
-                  ref={taRef}
-                  value={inputValue}
-                  onChange={e => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
+                <textarea ref={taRef} value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={handleKeyDown}
                   placeholder="Répondez à ScorgIA ou posez une question…"
                   rows={1}
                   style={{ flex: 1, resize: 'none', border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: 'var(--color-text-primary)', fontFamily: 'inherit', lineHeight: 1.5, minHeight: 24, maxHeight: 120, overflowY: 'auto', padding: '3px 0' }}

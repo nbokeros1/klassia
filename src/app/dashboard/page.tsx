@@ -413,6 +413,27 @@ export default function DashboardPage() {
               </div>
             </section>
 
+            {/* ═══ BANNIÈRE BÊTA ══════════════════════════════════════════════ */}
+            {(profil as any)?.role === 'beta' && !(profil as any)?.onboarding_cascade_complete && dataLoaded && (
+              <div style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 12, padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>✦</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#A78BFA', marginBottom: 4 }}>
+                    Bienvenue dans la bêta privée ScorgIA !
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    Votre accès bêta est actif — toutes les fonctionnalités Pro+ sont disponibles. Configurez vos classes pour commencer.
+                  </div>
+                </div>
+                <button
+                  onClick={() => router.push('/dashboard/classes/new')}
+                  style={{ flexShrink: 0, padding: '7px 14px', borderRadius: 8, border: '1.5px solid rgba(124,58,237,0.35)', background: 'rgba(124,58,237,0.1)', color: '#A78BFA', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' as const }}
+                >
+                  + Créer une classe
+                </button>
+              </div>
+            )}
+
             <div className="page-layout-2col">
 
               {/* ═══ COLONNE PRINCIPALE ═════════════════════════════════════════ */}
@@ -700,16 +721,16 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* Première classe — état vide enseignant sans classes */}
-                {!missionActive && !missionsLoading && !prochainCours && classes.length === 0 && (
+                {/* État vide — aucune classe */}
+                {classes.length === 0 && dataLoaded && (
                   <div className="glass-light" style={card}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', marginBottom: 6 }}>
-                      Commencez par créer une classe
+                      Vous n'avez pas encore créé de classe.
                     </div>
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 14px', lineHeight: 1.5 }}>
                       Créez vos classes pour commencer à préparer vos leçons avec ScorgIA.
                     </p>
-                    <button onClick={() => router.push('/dashboard/classes')} style={btnPrimary}>
+                    <button onClick={() => router.push('/dashboard/classes/new')} style={btnPrimary}>
                       + Créer une classe
                     </button>
                   </div>

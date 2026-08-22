@@ -161,6 +161,22 @@ export default function ForfaitsPage() {
             </div>
           )}
 
+          {/* Bannière bêta — accès gratuit, aucun changement nécessaire */}
+          {(profil as any)?.role === 'beta' && (
+            <div style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 12, padding: '16px 20px', marginBottom: 28, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <span style={{ fontSize: 22, flexShrink: 0 }}>✦</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#A78BFA', marginBottom: 6 }}>
+                  Votre accès bêta est actuellement actif.
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.7 }}>
+                  Vous participez au programme bêta privé ScorgIA — toutes les fonctionnalités Pro+ sont incluses.
+                  Aucun changement de forfait n'est nécessaire pendant la durée de votre accès bêta.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Contrôles devise + facturation */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 32 }}>
             {/* Toggle devise */}
