@@ -426,7 +426,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => router.push('/dashboard/classes/new')}
+                  onClick={() => router.push('/dashboard/classes')}
                   style={{ flexShrink: 0, padding: '7px 14px', borderRadius: 8, border: '1.5px solid rgba(124,58,237,0.35)', background: 'rgba(124,58,237,0.1)', color: '#A78BFA', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' as const }}
                 >
                   + Créer une classe
@@ -730,7 +730,7 @@ export default function DashboardPage() {
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 14px', lineHeight: 1.5 }}>
                       Créez vos classes pour commencer à préparer vos leçons avec ScorgIA.
                     </p>
-                    <button onClick={() => router.push('/dashboard/classes/new')} style={btnPrimary}>
+                    <button onClick={() => router.push('/dashboard/classes')} style={btnPrimary}>
                       + Créer une classe
                     </button>
                   </div>

@@ -158,14 +158,8 @@ export default function OnboardingPage() {
         .from('utilisateurs').select('*').eq('user_id', session.user.id).single()
       if (!p) { router.push('/login'); return }
 
-      // Déjà terminé les deux étapes → dashboard
-      if (p.onboarding_complete && p.onboarding_cascade_complete) {
-        router.push('/dashboard'); return
-      }
-
-      // onboarding_complete=true (teacher chose "Go to Dashboard") but not cascade
-      // → still redirect to dashboard (that's the intent of the new semantics)
-      if (p.onboarding_complete && !p.onboarding_cascade_complete) {
+      // onboarding_complete = "permitted to use ScorgIA" → dashboard
+      if (p.onboarding_complete) {
         router.push('/dashboard'); return
       }
 
