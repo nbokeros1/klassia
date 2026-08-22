@@ -11,9 +11,9 @@ type ScorgiaLogoProps = {
 }
 
 const logoSources = {
-  light: '/branding/scorgia-logo-light.png',
-  dark:  '/branding/scorgia-logo-dark.png',
-  icon:  '/branding/scorgia-icon.png',
+  light: '/brand/scorgia-logo-light.png',
+  dark:  '/brand/scorgia-logo-dark.png',
+  icon:  '/brand/scorgia-favicon.png',
 }
 
 export function ScorgiaLogo({

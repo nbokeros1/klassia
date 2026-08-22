@@ -6,9 +6,9 @@ export const BRANDING = {
   domain:      'scorgia.app',
   contactEmail: 'contact@scorgia.app',
   assets: {
-    logoLight: '/branding/scorgia-logo-light.png',
-    logoDark:  '/branding/scorgia-logo-dark.png',
-    icon:      '/branding/scorgia-icon.png',
-    favicon:   '/favicon.ico',
+    logoLight: '/brand/scorgia-logo-light.png',
+    logoDark:  '/brand/scorgia-logo-dark.png',
+    icon:      '/brand/scorgia-favicon.png',
+    favicon:   '/brand/scorgia-favicon.png',
   },
 } as const

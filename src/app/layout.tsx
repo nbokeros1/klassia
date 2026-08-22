@@ -10,11 +10,10 @@ export const metadata: Metadata = {
   applicationName: 'ScorgIA',
   icons: {
     icon:     [
-      { url: '/branding/scorgia-icon.png',   type: 'image/png'      },
-      { url: '/favicon.png',                 type: 'image/png'      },
+      { url: '/brand/scorgia-favicon.png', type: 'image/png' },
     ],
-    shortcut: '/branding/scorgia-icon.png',
-    apple:    '/branding/scorgia-icon.png',
+    shortcut: '/brand/scorgia-favicon.png',
+    apple:    '/brand/scorgia-favicon.png',
   },
 }
 

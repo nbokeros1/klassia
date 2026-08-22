@@ -20,8 +20,8 @@ export default function AuthBranding({
 }: AuthBrandingProps) {
   const logoSrc =
     theme === 'dark'
-      ? '/branding/scorgia-logo-dark.png'
-      : '/branding/scorgia-logo-light.png'
+      ? '/brand/scorgia-logo-dark.png'
+      : '/brand/scorgia-logo-light.png'
 
   return (
     <div style={{ textAlign: 'center', ...style }}>
