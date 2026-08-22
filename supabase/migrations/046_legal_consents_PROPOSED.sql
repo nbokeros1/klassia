@@ -1,6 +1,9 @@
 -- ============================================================
 -- MIGRATION 046 — Legal Consent Fields
--- STATUS : PROPOSED — DO NOT APPLY
+-- STATUS : SUPERSEDED — DO NOT APPLY
+-- Superseded by: 046_legal_consents_V11_FINAL_PROPOSED.sql
+-- Reason: Mutable fields on utilisateurs cannot provide an audit trail.
+--         See ADR: docs/Architecture/ADR_LEGAL_CONSENT_STORAGE.md
 -- Author  : ScorgIA Legal & Trust Layer V1
 -- Date    : 2026-08-21
 -- ============================================================

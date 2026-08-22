@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabase } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { writeConsentEvent } from '@/lib/legal/consent-status'
 
 type SignupPayload = {
   prenom?: string
@@ -107,6 +108,29 @@ export async function POST(req: NextRequest) {
         activated_at: new Date().toISOString(),
       })
       .eq('id', invitation.id)
+
+    // Write durable legal consent event.
+    // user_id  = data.user.id  — from Supabase Auth, never from request body.
+    // accepted_at = DEFAULT now() — set by the DB, not by this code.
+    // Requires migration 046_legal_consents_V11_FINAL_PROPOSED.sql.
+    // Before migration: ok=false with error='MIGRATION_NOT_APPLIED' — non-fatal.
+    // After migration: appends immutable event to legal_consents.
+    const consent = await writeConsentEvent(admin, {
+      userId:            data.user.id,
+      utilisateurId:     profil.id,
+      acceptanceContext: 'beta_signup',
+    })
+
+    if (!consent.ok && !consent.duplicate) {
+      // Non-fatal: account + profile created successfully; log for monitoring.
+      // User will be presented with a re-consent prompt on next login once
+      // the re-consent engine is activated (requiresAction = true when no record exists).
+      console.error('[LEGAL_CONSENT_WRITE_FAILED]', {
+        userId:  data.user.id,
+        error:   consent.error,
+        context: 'beta_signup',
+      })
+    }
 
     return NextResponse.json({ ok: true })
   } catch {
