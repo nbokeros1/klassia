@@ -542,6 +542,7 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; tra
   z-index: 20;
   overflow-y: auto;
   overflow-x: hidden;
+  transition: width 0.22s cubic-bezier(.4, 0, .2, 1);
 }
 
 .sidebar-logo {
@@ -1970,6 +1971,41 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; tra
   background: rgba(255,255,255,0.06);
   color: rgba(255,255,255,0.60);
   border-color: rgba(255,255,255,0.18);
+}
+
+/* ── Sidebar edge toggle tab ── */
+.sidebar-edge-tab {
+  position: fixed;
+  left: var(--sidebar-w);
+  top: 50%;
+  transform: translateY(-50%) translateX(-1px);
+  width: 16px;
+  height: 42px;
+  background: rgba(13, 30, 58, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.3);
+  z-index: 30;
+  transition:
+    left 0.22s cubic-bezier(.4, 0, .2, 1),
+    color 0.15s,
+    background 0.15s,
+    width 0.15s;
+}
+.sidebar-edge-tab:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(13, 30, 58, 1);
+  width: 20px;
+}
+@media (max-width: 768px) {
+  .sidebar-edge-tab { display: none; }
 }
 
 /* ── M4 — Activity Feed premium ── */

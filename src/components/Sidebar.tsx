@@ -22,6 +22,8 @@ import {
   Globe,
   Menu,
   X,
+  ChevronLeft,
+  ChevronRight,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -256,7 +258,7 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
         <div className="sidebar-logo" onClick={() => router.push('/dashboard')} style={{ cursor: 'pointer' }}>
           {compact
             ? <ScorgiaLogo variant="icon" width={24} height={24} />
-            : <ScorgiaLogo variant="dark" height={96} />
+            : <ScorgiaLogo variant="dark" style={{ maxWidth: '100%', height: 'auto', maxHeight: 52 }} />
           }
           {!compact && (
             <span style={{ fontSize: 8.5, fontWeight: 700, color: '#60A5FA', padding: '2px 7px', background: 'rgba(96,165,250,0.12)', borderRadius: 99, flexShrink: 0 }}>
@@ -286,6 +288,15 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
           </div>
         </div>
         </aside>
+        <div
+          className="sidebar-edge-tab"
+          onClick={toggleCompact}
+          title={compact ? (isFr ? 'Agrandir la barre' : 'Expand sidebar') : (isFr ? 'Réduire la barre' : 'Collapse sidebar')}
+          aria-label={compact ? 'Agrandir' : 'Réduire'}
+          role="button"
+        >
+          {compact ? <ChevronRight size={11} strokeWidth={2.5} /> : <ChevronLeft size={11} strokeWidth={2.5} />}
+        </div>
       </>
     )
   }
@@ -307,7 +318,7 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
       >
         {compact
           ? <ScorgiaLogo variant="icon" width={24} height={24} />
-          : <ScorgiaLogo variant="dark" height={96} />
+          : <ScorgiaLogo variant="dark" style={{ maxWidth: '100%', height: 'auto', maxHeight: 52 }} />
         }
         {!compact && (
           <span style={{
@@ -385,6 +396,15 @@ export default function Sidebar({ profil, activeHref, onLogout, notifCount = 0 }
         </div>
       </div>
       </aside>
+      <div
+        className="sidebar-edge-tab"
+        onClick={toggleCompact}
+        title={compact ? (isFr ? 'Agrandir la barre' : 'Expand sidebar') : (isFr ? 'Réduire la barre' : 'Collapse sidebar')}
+        aria-label={compact ? 'Agrandir' : 'Réduire'}
+        role="button"
+      >
+        {compact ? <ChevronRight size={11} strokeWidth={2.5} /> : <ChevronLeft size={11} strokeWidth={2.5} />}
+      </div>
     </>
   )
 }
