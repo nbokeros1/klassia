@@ -1,49 +1,28 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import FounderSidebar from '@/components/founder/FounderSidebar'
 import './founder.css'
 
-export default function FounderLayout({ children }: { children: React.ReactNode }) {
-  const router  = useRouter()
-  const [ok, setOk] = useState(false)
+const FOUNDER_ROLES = ['founder', 'super_admin'] as const
+type FounderRole = typeof FOUNDER_ROLES[number]
 
-  useEffect(() => {
-    const check = async () => {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.replace('/login'); return }
+export default async function FounderLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient()
 
-      const { data: profil } = await supabase
-        .from('utilisateurs')
-        .select('role, is_admin')
-        .eq('user_id', user.id)
-        .single()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-      const isAuthorized =
-        profil?.role === 'founder'     ||
-        profil?.role === 'super_admin' ||
-        profil?.is_admin === true
+  const { data: profil } = await supabase
+    .from('utilisateurs')
+    .select('role, is_admin')
+    .eq('user_id', user.id)
+    .single()
 
-      if (!isAuthorized) { router.replace('/dashboard'); return }
-      setOk(true)
-    }
-    check()
-  }, [router])
+  const isAuthorized =
+    profil?.is_admin === true ||
+    FOUNDER_ROLES.includes(profil?.role as FounderRole)
 
-  if (!ok) {
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        height: '100vh', background: '#0D1117', color: 'rgba(255,255,255,0.25)',
-        fontSize: 13, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-      }}>
-        Vérification des droits…
-      </div>
-    )
-  }
+  if (!isAuthorized) redirect('/dashboard')
 
   return (
     <div style={{

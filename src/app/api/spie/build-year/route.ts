@@ -19,6 +19,7 @@ import type {
 import type { ContenuProgramme } from '@/lib/types/database'
 import { bindProgrammeToClassFolder } from '@/lib/spie/class-folder-binding'
 import { buildAperçuCalendrier } from '@/lib/spie/syllabus-v3'
+import { recordBetaEvent } from '@/lib/analytics/beta-events'
 import { validatePedagogicalProgramme, summariseViolations } from '@/lib/spie/validate-pedagogical-programme'
 import { extractOutcomesFromText, formatOutcomesForPrompt } from '@/lib/spie/curriculum/extraction/curriculum-bridge'
 import type { NormalizedOutcome } from '@/lib/spie/curriculum/extraction/types'
@@ -239,6 +240,14 @@ export async function POST(request: Request) {
         packId = packRow.id
         buildState.pack = stepSuccess(packId ?? undefined)
         send({ step: 'validation', statut: 'termine', message: 'Configuration validée ✓', progress: 5 })
+
+        // Beta event: build year started
+        void recordBetaEvent({
+          utilisateur_id: profil.id,
+          event_type: 'build_year_started',
+          feature: 'build_year',
+          metadata: { pack_id: packId ?? undefined, pack_statut: 'generation_en_cours' },
+        })
 
         // ── ÉTAPE 2 : Curriculum / Plan annuel ───────────────────────────────
         const skipCurriculum = !!(input.reprendre
@@ -1175,6 +1184,13 @@ La leçon doit inclure TOUS ces éléments :
 
         // ── TERMINÉ ────────────────────────────────────────────────────────────
         if (completeness.complete) {
+          // Beta event: build year completed
+          void recordBetaEvent({
+            utilisateur_id: profil.id,
+            event_type: 'build_year_completed',
+            feature: 'build_year',
+            metadata: { pack_id: packId ?? undefined, pack_statut: 'pret' },
+          })
           send({
             step:                'termine',
             statut:              'termine',

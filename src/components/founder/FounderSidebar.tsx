@@ -11,6 +11,7 @@ const NAV = [
   { href: '/founder/contenu',       icon: '◫',  label: 'Contenu'        },
   { href: '/founder/ia',            icon: '✦',  label: 'IA'             },
   { href: '/founder/beta',          icon: '⟠',  label: 'Bêta'           },
+  { href: '/founder/beta-command',  icon: '⎔',  label: 'Command Center' },
   { href: '/founder/finances',      icon: '◈',  label: 'Finances'       },
   { href: '/founder/infrastructure',icon: '⊞',  label: 'Infrastructure' },
   { href: '/founder/parametres',    icon: '⚙',  label: 'Paramètres'    },
