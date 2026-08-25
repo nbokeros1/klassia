@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 
-type FeedbackType = 'bug' | 'blocked' | 'idea' | 'positive' | 'remark'
+type FeedbackType = 'bug' | 'blocked' | 'confused' | 'idea' | 'positive' | 'remark'
 
 const TYPES: { value: FeedbackType; label: string; emoji: string; color: string }[] = [
   { value: 'blocked',  label: 'Bloqué(e)',    emoji: '🚫', color: '#EF4444' },
   { value: 'bug',      label: 'Bug',          emoji: '🐛', color: '#F59E0B' },
+  { value: 'confused', label: 'Perdu(e)',     emoji: '😕', color: '#A78BFA' },
   { value: 'idea',     label: 'Suggestion',   emoji: '💡', color: '#6C5CE7' },
   { value: 'positive', label: 'Ça marche !',  emoji: '✨', color: '#22C55E' },
   { value: 'remark',   label: 'Commentaire',  emoji: '💬', color: '#64748B' },
@@ -140,7 +141,14 @@ export default function FeedbackWidget() {
                       }}
                       onMouseEnter={e => {
                         const el = e.currentTarget as HTMLButtonElement
-                        el.style.background = `rgba(${t.color === '#EF4444' ? '239,68,68' : t.color === '#F59E0B' ? '245,158,11' : t.color === '#6C5CE7' ? '108,92,231' : t.color === '#22C55E' ? '34,197,94' : '100,116,139'},0.12)`
+                        const rgb =
+                          t.color === '#EF4444' ? '239,68,68' :
+                          t.color === '#F59E0B' ? '245,158,11' :
+                          t.color === '#A78BFA' ? '167,139,250' :
+                          t.color === '#6C5CE7' ? '108,92,231' :
+                          t.color === '#22C55E' ? '34,197,94' :
+                          '100,116,139'
+                        el.style.background = `rgba(${rgb},0.12)`
                         el.style.borderColor = `${t.color}40`
                       }}
                       onMouseLeave={e => {
@@ -198,6 +206,7 @@ export default function FeedbackWidget() {
                   placeholder={
                     type === 'blocked'  ? 'Décrivez ce qui vous bloque…' :
                     type === 'bug'      ? 'Décrivez le bug et comment le reproduire…' :
+                    type === 'confused' ? 'Qu\'est-ce qui vous a semblé peu clair ?' :
                     type === 'idea'     ? 'Décrivez votre suggestion…' :
                     type === 'positive' ? 'Qu\'est-ce qui a bien fonctionné ?' :
                     'Votre commentaire…'

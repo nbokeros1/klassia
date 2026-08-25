@@ -1,5 +1,9 @@
 -- ─── MIGRATION 047 — Beta Operations V7.8B ────────────────────────────────────
--- STATUS: PROPOSED — DO NOT APPLY without PO approval
+-- STATUS: SUPERSEDED — DO NOT APPLY
+-- Superseded by: 047_beta_operations_V78B_FINAL_PROPOSED.sql
+-- Reason: INSERT forgery vulnerability (WITH CHECK(true) on authenticated INSERT),
+--         missing REVOKE, no schema qualification, no idempotent DROP POLICY IF EXISTS,
+--         incorrect utilisateurs drift documentation, missing DB-level bounds.
 -- Author: Eddy Nwaha
 -- Date: 2026-08-24
 --

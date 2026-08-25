@@ -16,6 +16,8 @@ export async function POST(request: Request) {
   try { body = await request.json() }
   catch { return NextResponse.json({ error: 'Corps de requête invalide' }, { status: 400 }) }
 
+  // Matches DB constraint in migration 047 FINAL + FeedbackWidget UI types
+  // rating: backward compat with original schema (migration 031); not shown in UI
   const ALLOWED_TYPES = ['bug', 'idea', 'remark', 'rating', 'blocked', 'confused', 'positive']
   if (!body.type || !ALLOWED_TYPES.includes(body.type)) {
     return NextResponse.json({ error: 'Type de feedback invalide' }, { status: 400 })
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
     type:           body.type,
     titre:          body.titre?.trim().substring(0, 120) || null,
     description:    body.description.trim().substring(0, 4000),
-    page_url:       body.page_url?.substring(0, 255) || null,
+    page_url:       body.page_url?.substring(0, 500) || null,
     statut:         'nouveau',
   })
 
