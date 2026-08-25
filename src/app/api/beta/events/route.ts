@@ -3,8 +3,18 @@ import { requireAuth } from '@/lib/api-auth'
 import { recordBetaEvent, type BetaEventType, type BetaFeature } from '@/lib/analytics/beta-events'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-// Client-side event endpoint — called from browser via fetch
-// Only records events for role='beta' users to avoid noise from admin/founder accounts
+// Mirrors migration 047 FINAL DB constraint — runtime validation before DB write
+const ALLOWED_EVENT_TYPES: readonly string[] = [
+  'dashboard_entered', 'build_year_started', 'build_year_completed',
+  'class_created', 'ai_generation_started', 'ai_generation_completed',
+  'mon_annee_opened', 'prepare_opened', 'return_visit',
+  'feedback_submitted', 'onboarding_step_completed', 'onboarding_completed',
+]
+
+const ALLOWED_FEATURES: readonly string[] = [
+  'dashboard', 'build_year', 'classes', 'ai_studio',
+  'mon_annee', 'prepare', 'onboarding', 'feedback',
+]
 
 export async function POST(request: Request) {
   const { error: authError, user } = await requireAuth()
@@ -14,8 +24,12 @@ export async function POST(request: Request) {
   try { body = await request.json() }
   catch { return NextResponse.json({ error: 'Corps de requête invalide' }, { status: 400 }) }
 
-  if (!body.event_type || !body.feature) {
-    return NextResponse.json({ error: 'event_type et feature sont requis' }, { status: 400 })
+  if (!body.event_type || !ALLOWED_EVENT_TYPES.includes(body.event_type)) {
+    return NextResponse.json({ error: 'event_type invalide ou non autorisé' }, { status: 400 })
+  }
+
+  if (!body.feature || !ALLOWED_FEATURES.includes(body.feature)) {
+    return NextResponse.json({ error: 'feature invalide ou non autorisée' }, { status: 400 })
   }
 
   // Resolve utilisateur_id
