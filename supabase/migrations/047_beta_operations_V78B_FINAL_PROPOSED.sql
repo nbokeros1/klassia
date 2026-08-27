@@ -1,8 +1,12 @@
 -- ─── MIGRATION 047 — Beta Operations V7.8B FINAL ─────────────────────────────
--- STATUS: PROPOSED — DO NOT APPLY without PO approval and Supabase staging test
+-- STATUS: APPLIED TO PRODUCTION — 2026-08-27
+--   Applied directly by Product Owner via Supabase SQL editor.
+--   Production migration verification passed. Production privilege hardening
+--   confirmed (see note below). Repository file updated to reflect canonical
+--   production state.
 -- Supersedes: 047_beta_operations_V78B_PROPOSED.sql (SUPERSEDED — do not apply)
 -- Author: Eddy Nwaha
--- Date: 2026-08-24
+-- Date: 2026-08-24 (applied 2026-08-27)
 --
 -- Covers:
 --   1. public.beta_events table — server-write-only, founder-read RLS
@@ -10,11 +14,14 @@
 --   3. public.activity_events founder-read policy (idempotent)
 --   4. public.beta_feedback type constraint update
 --
--- Security model for beta_events:
---   - INSERT/UPDATE/DELETE: service_role only (via POST /api/beta/events server route)
+-- Security model for beta_events (PRODUCTION-CONFIRMED 2026-08-27):
+--   - INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER: service_role only
+--     (via POST /api/beta/events server route)
 --   - SELECT: founder / super_admin / admin / is_admin=true only
---   - authenticated clients: REVOKED from INSERT, UPDATE, DELETE
---   - anon: REVOKED from all
+--   - authenticated clients: ALL PRIVILEGES REVOKED (post-apply hardening
+--     revealed PostgreSQL retains TRUNCATE, REFERENCES, TRIGGER on top of
+--     INSERT/UPDATE/DELETE; full REVOKE ALL applied to close these)
+--   - anon: ALL PRIVILEGES REVOKED
 --
 -- Feedback taxonomy (all three layers — UI, API, DB — agree):
 --   bug | blocked | confused | idea | positive | remark | rating*
@@ -81,11 +88,14 @@ CREATE INDEX IF NOT EXISTS beta_events_feature_idx
 
 ALTER TABLE public.beta_events ENABLE ROW LEVEL SECURITY;
 
--- Defensive: revoke any direct write access from client roles.
+-- Revoke ALL privileges from client roles before granting the minimum.
+-- REVOKE ALL covers INSERT, UPDATE, DELETE and the additional PostgreSQL
+-- table privileges TRUNCATE, REFERENCES, and TRIGGER — all of which
+-- production hardening confirmed must be removed from authenticated.
 -- All writes go through POST /api/beta/events which uses service_role.
 -- service_role bypasses RLS and remains the trusted writer by design.
-REVOKE ALL ON public.beta_events FROM anon;
-REVOKE INSERT, UPDATE, DELETE ON public.beta_events FROM authenticated;
+REVOKE ALL PRIVILEGES ON TABLE public.beta_events FROM anon;
+REVOKE ALL PRIVILEGES ON TABLE public.beta_events FROM authenticated;
 
 -- Drop any policies from a previous (superseded) migration attempt
 DROP POLICY IF EXISTS "beta_events_insert_auth"  ON public.beta_events;
@@ -109,8 +119,10 @@ CREATE POLICY "beta_events_select_admin"
     )
   );
 
--- Grant only SELECT to authenticated (founders use the SELECT policy above)
-GRANT SELECT ON public.beta_events TO authenticated;
+-- Grant SELECT only to authenticated.
+-- Production-confirmed final state: authenticated = SELECT only.
+-- INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER = denied to authenticated.
+GRANT SELECT ON TABLE public.beta_events TO authenticated;
 
 
 -- ── 2. public.utilisateurs schema formalization ───────────────────────────────
@@ -235,7 +247,9 @@ COMMIT;
 -- 4. Grants on beta_events:
 --    SELECT grantee, privilege_type FROM information_schema.role_table_grants
 --      WHERE table_name='beta_events' ORDER BY grantee, privilege_type;
---    Expected: authenticated | SELECT only (no INSERT, UPDATE, DELETE)
+--    Expected: authenticated | SELECT only
+--    (no INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER)
+--    Production-confirmed 2026-08-27.
 
 -- 5. utilisateurs new columns:
 --    SELECT column_name, data_type FROM information_schema.columns
@@ -262,3 +276,6 @@ COMMIT;
 --    Expected: 3 indexes (utilisateur_idx, type_idx, feature_idx) + primary key
 
 -- ─── END OF MIGRATION 047 FINAL ───────────────────────────────────────────────
+-- Production application confirmed: 2026-08-27
+-- Privilege hardening confirmed: 2026-08-27
+-- Repository file updated to match production canonical state: 2026-08-27
