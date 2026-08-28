@@ -594,7 +594,15 @@ ${isLecon ? `
     // Max 3 relances côté serveur si Claude s'arrête sur max_tokens.
     // Le client ne voit jamais de troncature : il reçoit le texte complet
     // en un seul flux continu.
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) {
+      console.error('[assistant] ANTHROPIC_API_KEY manquant — configurer dans Vercel > Environment Variables > Production')
+      const safeMsg = isFr
+        ? 'ScorgIA n\'a pas pu générer ce contenu pour le moment. Réessayez dans quelques instants. Si le problème persiste, utilisez le bouton Feedback.'
+        : 'ScorgIA could not generate content at this time. Please retry in a moment. If the issue persists, use the Feedback button.'
+      return new Response(safeMsg, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+    }
+    const client = new Anthropic({ apiKey })
 
     // Métadonnées à transmettre au client (fichiers utilisés / ignorés)
     const ctxMeta = {
@@ -642,9 +650,10 @@ ${isLecon ? `
                 }
               }
             } catch (err: any) {
+              console.error('[assistant] erreur génération IA (pass', pass, '):', err?.status, err?.message ?? err)
               const errMsg = isFr
-                ? `⚠️ Erreur lors de la génération (${err?.status ?? 'réseau'}) : ${err?.message ?? 'problème inconnu'}. Réessaie dans un instant.`
-                : `⚠️ Generation error (${err?.status ?? 'network'}): ${err?.message ?? 'unknown'}. Please retry.`
+                ? 'ScorgIA n\'a pas pu générer ce contenu pour le moment. Réessayez dans quelques instants. Si le problème persiste, utilisez le bouton Feedback.'
+                : 'ScorgIA could not generate content at this time. Please retry in a moment. If the issue persists, use the Feedback button.'
               controller.enqueue(enc.encode(errMsg))
               break
             }
