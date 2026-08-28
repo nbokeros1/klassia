@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { FeedbackDrawer } from '@/components/founder/FeedbackDrawer'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ interface CommandData {
   funnel: FunnelStage[]
   teachers: TeacherRow[]
   feedback: {
-    recent: { id: string; type: string; titre: string; page_url: string | null; statut: string; created_at: string; teacher_prenom: string | null }[]
+    recent: { id: string; type: string; titre: string; page_url: string | null; statut: string; created_at: string; teacher_prenom: string | null; teacher_nom: string | null }[]
     by_type: Record<string, number>
     unread_count: number
     blocking_count: number
@@ -180,6 +181,12 @@ export default function BetaCommandPage() {
   const [tab,     setTab]     = useState<Tab>('overview')
   const [weekly,  setWeekly]  = useState(false)
 
+  // Feedback drawer + filters
+  const [selectedFeedbackId, setSelectedFeedbackId] = useState<string | null>(null)
+  const [filterStatut,       setFilterStatut]        = useState<string>('')
+  const [filterType,         setFilterType]          = useState<string>('')
+  const [searchQuery,        setSearchQuery]         = useState<string>('')
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -214,6 +221,22 @@ export default function BetaCommandPage() {
   if (!data) return null
 
   const { overview, funnel, teachers, feedback, errors, usage, weekly: w } = data
+
+  const filteredFeedback = feedback.recent.filter(f => {
+    if (filterStatut && f.statut !== filterStatut) return false
+    if (filterType   && f.type   !== filterType)   return false
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      const inTitre  = f.titre.toLowerCase().includes(q)
+      const inPrenom = (f.teacher_prenom ?? '').toLowerCase().includes(q)
+      const inNom    = (f.teacher_nom    ?? '').toLowerCase().includes(q)
+      if (!inTitre && !inPrenom && !inNom) return false
+    }
+    return true
+  })
+
+  const statusCounts: Record<string, number> = {}
+  for (const f of feedback.recent) statusCounts[f.statut] = (statusCounts[f.statut] ?? 0) + 1
 
   const TABS: { id: Tab; label: string; badge?: number }[] = [
     { id: 'overview',  label: 'Vue d\'ensemble' },
@@ -385,18 +408,89 @@ export default function BetaCommandPage() {
       {/* Feedback tab */}
       {tab === 'feedback' && (
         <div>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+          {/* Type distribution + status counters */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
             {Object.entries(feedback.by_type).map(([type, count]) => (
-              <div key={type} style={{ ...S.kpi, flex: 1 }}>
+              <div
+                key={type}
+                onClick={() => setFilterType(filterType === type ? '' : type)}
+                style={{
+                  ...S.kpi, flex: '0 0 auto', cursor: 'pointer',
+                  border: filterType === type
+                    ? `1px solid ${FEEDBACK_COLORS[type] ?? '#64748B'}`
+                    : '1px solid rgba(255,255,255,0.07)',
+                }}
+              >
                 <div style={{ ...S.kpiLabel, color: FEEDBACK_COLORS[type] ?? '#64748B' }}>{type.toUpperCase()}</div>
-                <div style={{ ...S.kpiValue, color: FEEDBACK_COLORS[type] ?? '#64748B', fontSize: 22 }}>{count}</div>
+                <div style={{ ...S.kpiValue, color: FEEDBACK_COLORS[type] ?? '#64748B', fontSize: 20 }}>{count}</div>
               </div>
             ))}
             {Object.keys(feedback.by_type).length === 0 && (
-              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Aucun retour reçu. Le widget de feedback est en place.</p>
+              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Aucun retour reçu.</p>
             )}
           </div>
 
+          {/* Status counters */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            {[
+              { key: '',              label: 'Tous',     color: 'rgba(255,255,255,0.4)' },
+              { key: 'nouveau',       label: 'Nouveau',  color: '#F59E0B' },
+              { key: 'en_traitement', label: 'En cours', color: '#6C5CE7' },
+              { key: 'resolu',        label: 'Résolu',   color: '#22C55E' },
+              { key: 'ferme',         label: 'Ignoré',   color: '#64748B' },
+            ].map(opt => {
+              const cnt = opt.key ? (statusCounts[opt.key] ?? 0) : feedback.recent.length
+              const active = filterStatut === opt.key
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => setFilterStatut(opt.key)}
+                  style={{
+                    padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: active ? 700 : 500,
+                    cursor: 'pointer',
+                    border: `1px solid ${active ? opt.color : 'rgba(255,255,255,0.1)'}`,
+                    background: active ? `${opt.color}20` : 'rgba(255,255,255,0.03)',
+                    color: active ? opt.color : 'rgba(255,255,255,0.4)',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {opt.label} <span style={{ fontWeight: 700 }}>{cnt}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Search */}
+          <div style={{ marginBottom: 14 }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Rechercher par titre ou enseignant…"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 8, padding: '8px 14px',
+                color: '#F1F5F9', fontSize: 13, outline: 'none', fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          {/* Results count */}
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 10 }}>
+            {filteredFeedback.length} retour{filteredFeedback.length !== 1 ? 's' : ''}{' '}
+            {(filterStatut || filterType || searchQuery) ? '(filtrés)' : ''}
+            {(filterStatut || filterType || searchQuery) && (
+              <button
+                onClick={() => { setFilterStatut(''); setFilterType(''); setSearchQuery('') }}
+                style={{ marginLeft: 8, background: 'none', border: 'none', color: '#A78BFA', cursor: 'pointer', fontSize: 11, padding: 0 }}
+              >
+                Effacer les filtres
+              </button>
+            )}
+          </div>
+
+          {/* Table */}
           <div style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
             <table style={S.table}>
               <thead>
@@ -407,28 +501,55 @@ export default function BetaCommandPage() {
                 </tr>
               </thead>
               <tbody>
-                {feedback.recent.map(f => (
-                  <tr key={f.id}>
-                    <td style={S.td}>
-                      <span style={S.badge(FEEDBACK_COLORS[f.type] ?? '#64748B', `${FEEDBACK_COLORS[f.type] ?? '#64748B'}18`)}>
-                        {f.type}
-                      </span>
+                {filteredFeedback.map(f => {
+                  const statutColor =
+                    f.statut === 'nouveau'       ? '#F59E0B' :
+                    f.statut === 'en_traitement' ? '#6C5CE7' :
+                    f.statut === 'resolu'        ? '#22C55E' : '#64748B'
+                  const statutLabel =
+                    f.statut === 'nouveau'       ? 'Nouveau'  :
+                    f.statut === 'en_traitement' ? 'En cours' :
+                    f.statut === 'resolu'        ? 'Résolu'   : 'Ignoré'
+                  const teacherName = [f.teacher_prenom, f.teacher_nom].filter(Boolean).join(' ') || '—'
+                  return (
+                    <tr
+                      key={f.id}
+                      onClick={() => setSelectedFeedbackId(f.id)}
+                      style={{ cursor: 'pointer', transition: 'background 0.1s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,0.03)' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = '' }}
+                    >
+                      <td style={S.td}>
+                        <span style={S.badge(FEEDBACK_COLORS[f.type] ?? '#64748B', `${FEEDBACK_COLORS[f.type] ?? '#64748B'}18`)}>
+                          {f.type}
+                        </span>
+                      </td>
+                      <td style={{ ...S.td, maxWidth: 220 }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {f.titre}
+                        </div>
+                      </td>
+                      <td style={{ ...S.td, fontSize: 11, color: 'rgba(255,255,255,0.4)', maxWidth: 160 }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {f.page_url ? f.page_url.substring(0, 40) : '—'}
+                        </div>
+                      </td>
+                      <td style={S.td}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: statutColor }}>
+                          {statutLabel}
+                        </span>
+                      </td>
+                      <td style={{ ...S.td, fontSize: 12 }}>{teacherName}</td>
+                      <td style={{ ...S.td, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{timeAgo(f.created_at)}</td>
+                    </tr>
+                  )
+                })}
+                {filteredFeedback.length === 0 && (
+                  <tr>
+                    <td colSpan={6} style={{ ...S.td, textAlign: 'center', color: 'rgba(255,255,255,0.25)', padding: 32 }}>
+                      {feedback.recent.length === 0 ? 'Aucun retour pour l\'instant.' : 'Aucun résultat pour ces filtres.'}
                     </td>
-                    <td style={S.td}>{f.titre}</td>
-                    <td style={{ ...S.td, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-                      {f.page_url ? f.page_url.substring(0, 40) : '—'}
-                    </td>
-                    <td style={S.td}>
-                      <span style={{ fontSize: 11, color: f.statut === 'nouveau' ? '#F59E0B' : 'rgba(255,255,255,0.3)' }}>
-                        {f.statut}
-                      </span>
-                    </td>
-                    <td style={S.td}>{f.teacher_prenom ?? '—'}</td>
-                    <td style={{ ...S.td, fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{timeAgo(f.created_at)}</td>
                   </tr>
-                ))}
-                {feedback.recent.length === 0 && (
-                  <tr><td colSpan={6} style={{ ...S.td, textAlign: 'center', color: 'rgba(255,255,255,0.25)', padding: 32 }}>Aucun retour pour l&apos;instant.</td></tr>
                 )}
               </tbody>
             </table>
@@ -532,6 +653,13 @@ export default function BetaCommandPage() {
           </div>
         </div>
       )}
+
+      {/* Feedback drawer */}
+      <FeedbackDrawer
+        feedbackId={selectedFeedbackId}
+        onClose={() => setSelectedFeedbackId(null)}
+        onMutation={() => void load()}
+      />
 
       {/* Weekly tab */}
       {tab === 'weekly' && (

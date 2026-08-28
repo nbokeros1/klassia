@@ -303,7 +303,7 @@ export async function GET() {
   ]
 
   // ── 12. Recent feedback (list — descriptions excluded for privacy) ─────────
-  const recentFeedback = (feedbacks ?? []).slice(0, 30).map(f => {
+  const recentFeedback = (feedbacks ?? []).slice(0, 50).map(f => {
     const teacher = (betaUsers ?? []).find(u => u.id === f.utilisateur_id)
     return {
       id: f.id,
@@ -313,6 +313,7 @@ export async function GET() {
       statut: f.statut,
       created_at: f.created_at,
       teacher_prenom: teacher?.prenom ?? null,
+      teacher_nom:    teacher?.nom    ?? null,
     }
   })
 
