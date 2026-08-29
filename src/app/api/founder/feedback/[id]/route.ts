@@ -58,8 +58,14 @@ export async function GET(
     console.warn('[feedback/detail] beta_feedback_notes not available yet:', notesErr.message)
   }
 
-  // Resolve note author names
-  const auteurIds = [...new Set((notesRaw ?? []).map(n => n.auteur_id as string))]
+  // Resolve note author names — auteur_id is nullable (SET NULL on author deletion)
+  const auteurIds = [
+    ...new Set(
+      (notesRaw ?? [])
+        .map(n => n.auteur_id as string | null)
+        .filter((id): id is string => id !== null),
+    ),
+  ]
   const { data: auteurs } = auteurIds.length
     ? await db.from('utilisateurs').select('id, prenom, nom').in('id', auteurIds)
     : { data: [] }
@@ -68,9 +74,11 @@ export async function GET(
   )
 
   const notes = (notesRaw ?? []).map(n => ({
-    id:        n.id as string,
-    contenu:   n.contenu as string,
-    auteur:    auteurMap[n.auteur_id as string] ?? 'Founder',
+    id:         n.id as string,
+    contenu:    n.contenu as string,
+    auteur:     n.auteur_id
+                  ? (auteurMap[n.auteur_id as string] ?? 'Founder')
+                  : 'Founder (compte supprimé)',
     created_at: n.created_at as string,
   }))
 

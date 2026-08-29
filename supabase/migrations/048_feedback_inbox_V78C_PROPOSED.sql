@@ -1,7 +1,9 @@
 -- ─── MIGRATION 048 — Beta Feedback Inbox: Internal Notes + Founder Responses ──
--- STATUS: PROPOSED — DO NOT APPLY without PO approval (V7.8C)
+-- STATUS: APPROVED — APPLY VIA SUPABASE SQL EDITOR
 -- Author: Eddy Nwaha
 -- Date: 2026-08-28
+-- Amendment: 2026-08-28 — auteur_id changed to nullable ON DELETE SET NULL
+--   (operational/audit history must survive administrator account deletion)
 -- Prerequisite: migration 031 (beta_feedback table), migration 047 (type constraint)
 --
 -- Adds:
@@ -13,6 +15,12 @@
 --   - SELECT: founder / super_admin / admin / is_admin=true only
 --   - Teachers: denied SELECT, INSERT, UPDATE, DELETE on both tables
 --   - No teacher-facing RLS policy is created on either table
+--
+-- Foreign key behavior (PO-approved 2026-08-28):
+--   feedback_id → beta_feedback(id)   ON DELETE CASCADE  (note/response dies with parent feedback)
+--   auteur_id   → utilisateurs(id)    ON DELETE SET NULL (record survives; author becomes NULL)
+--   Rationale: notes and responses are audit/operational history.
+--   Deleting an administrator account must NOT silently delete historical records.
 --
 -- No change to beta_feedback.statut constraint.
 -- Existing statut values: nouveau | en_traitement | resolu | ferme
@@ -26,7 +34,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS public.beta_feedback_notes (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   feedback_id UUID        NOT NULL REFERENCES public.beta_feedback(id) ON DELETE CASCADE,
-  auteur_id   UUID        NOT NULL REFERENCES public.utilisateurs(id) ON DELETE CASCADE,
+  auteur_id   UUID        REFERENCES public.utilisateurs(id) ON DELETE SET NULL,
   contenu     TEXT        NOT NULL CHECK (LENGTH(contenu) BETWEEN 1 AND 2000),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -60,7 +68,7 @@ GRANT SELECT ON TABLE public.beta_feedback_notes TO authenticated;
 CREATE TABLE IF NOT EXISTS public.beta_feedback_responses (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   feedback_id UUID        NOT NULL REFERENCES public.beta_feedback(id) ON DELETE CASCADE,
-  auteur_id   UUID        NOT NULL REFERENCES public.utilisateurs(id) ON DELETE CASCADE,
+  auteur_id   UUID        REFERENCES public.utilisateurs(id) ON DELETE SET NULL,
   contenu     TEXT        NOT NULL CHECK (LENGTH(contenu) BETWEEN 1 AND 3000),
   delivered   BOOLEAN     NOT NULL DEFAULT false,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -98,11 +106,13 @@ COMMIT;
 -- NB-C  teacher     INSERT beta_feedback_notes             → DENY  (REVOKE ALL)
 -- NB-D  founder     SELECT beta_feedback_notes             → ALLOW
 -- NB-E  service_role INSERT beta_feedback_notes            → ALLOW (bypasses RLS)
+-- NB-F  utilisateurs row deleted (auteur)                  → auteur_id SET NULL, row preserved
 -- RB-A  anon        SELECT beta_feedback_responses         → DENY
 -- RB-B  teacher     SELECT beta_feedback_responses         → DENY  (policy check fails)
 -- RB-C  teacher     INSERT beta_feedback_responses         → DENY  (REVOKE ALL)
 -- RB-D  founder     SELECT beta_feedback_responses         → ALLOW
 -- RB-E  service_role INSERT beta_feedback_responses        → ALLOW (bypasses RLS)
+-- RB-F  utilisateurs row deleted (auteur)                  → auteur_id SET NULL, row preserved
 
 -- ─── POST-APPLY VERIFICATION ──────────────────────────────────────────────────
 -- 1. Tables exist:
@@ -126,4 +136,24 @@ COMMIT;
 --      AND grantee='authenticated';
 --    Expected: SELECT only (no INSERT, UPDATE, DELETE)
 
--- ─── END OF MIGRATION 048 PROPOSED ───────────────────────────────────────────
+-- 5. Foreign key delete-behavior for auteur_id:
+--    SELECT tc.table_name, kcu.column_name, rc.delete_rule
+--    FROM information_schema.table_constraints tc
+--    JOIN information_schema.key_column_usage kcu
+--      ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+--    JOIN information_schema.referential_constraints rc
+--      ON tc.constraint_name = rc.constraint_name
+--    WHERE tc.constraint_type = 'FOREIGN KEY'
+--      AND tc.table_name IN ('beta_feedback_notes','beta_feedback_responses')
+--      AND kcu.column_name = 'auteur_id';
+--    Expected: delete_rule = 'SET NULL' for both tables
+
+-- 6. auteur_id is nullable:
+--    SELECT table_name, column_name, is_nullable
+--    FROM information_schema.columns
+--    WHERE table_schema='public'
+--      AND table_name IN ('beta_feedback_notes','beta_feedback_responses')
+--      AND column_name = 'auteur_id';
+--    Expected: is_nullable = 'YES' for both tables
+
+-- ─── END OF MIGRATION 048 APPROVED ───────────────────────────────────────────
